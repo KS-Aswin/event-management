@@ -18,3 +18,58 @@ CREATE TABLE IF NOT EXISTS users (
 );
 
 CREATE INDEX IF NOT EXISTS idx_users_email ON users (email);
+
+-- Notification preferences, added for the Settings page.
+ALTER TABLE users ADD COLUMN IF NOT EXISTS email_notifications BOOLEAN NOT NULL DEFAULT true;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS sms_notifications BOOLEAN NOT NULL DEFAULT false;
+
+-- Vendors. `owner_id` links a listing to the user account that manages it
+-- (nullable for now, since we seed sample vendors that don't have a real
+-- owner account yet — a vendor claiming/creating their own listing is a
+-- later feature).
+CREATE TABLE IF NOT EXISTS vendors (
+  id SERIAL PRIMARY KEY,
+  owner_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
+  name TEXT NOT NULL,
+  category TEXT NOT NULL,
+  location TEXT NOT NULL,
+  price INTEGER NOT NULL,
+  price_label TEXT NOT NULL,
+  rating NUMERIC(2,1) NOT NULL DEFAULT 0,
+  reviews_count INTEGER NOT NULL DEFAULT 0,
+  experience TEXT NOT NULL,
+  tags TEXT[] NOT NULL DEFAULT '{}',
+  about TEXT NOT NULL,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE INDEX IF NOT EXISTS idx_vendors_category ON vendors (category);
+CREATE INDEX IF NOT EXISTS idx_vendors_location ON vendors (location);
+
+CREATE TABLE IF NOT EXISTS vendor_reviews (
+  id SERIAL PRIMARY KEY,
+  vendor_id INTEGER NOT NULL REFERENCES vendors(id) ON DELETE CASCADE,
+  reviewer_name TEXT NOT NULL,
+  rating INTEGER NOT NULL CHECK (rating BETWEEN 1 AND 5),
+  body TEXT NOT NULL,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE INDEX IF NOT EXISTS idx_vendor_reviews_vendor ON vendor_reviews (vendor_id);
+
+CREATE TABLE IF NOT EXISTS quote_requests (
+  id SERIAL PRIMARY KEY,
+  vendor_id INTEGER NOT NULL REFERENCES vendors(id) ON DELETE CASCADE,
+  customer_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
+  name TEXT NOT NULL,
+  phone TEXT NOT NULL,
+  event_date DATE,
+  budget TEXT,
+  message TEXT,
+  status TEXT NOT NULL DEFAULT 'pending',
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE INDEX IF NOT EXISTS idx_quote_requests_vendor ON quote_requests (vendor_id);
+CREATE INDEX IF NOT EXISTS idx_quote_requests_customer ON quote_requests (customer_id);
+
