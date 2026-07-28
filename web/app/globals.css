@@ -1,0 +1,31 @@
+@import url('https://fonts.googleapis.com/css2?family=Poppins:wght@500;600&family=Inter:wght@400;500;600&display=swap');
+@import "tailwindcss";
+
+:root {
+  --background: #ffffff;
+  --foreground: #202124;
+  --color-accent: #0f6d52;
+  --color-accent-hover: #0b5940;
+  --color-accent-tint: #e6f2ee;
+  --color-gold: #c9a227;
+  --color-ink-soft: #5f6368;
+  --color-line: #e8eaed;
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-accent: var(--color-accent);
+  --color-accent-hover: var(--color-accent-hover);
+  --color-accent-tint: var(--color-accent-tint);
+  --color-gold: var(--color-gold);
+  --color-ink-soft: var(--color-ink-soft);
+  --color-line: var(--color-line);
+  --font-sans: "Inter", -apple-system, BlinkMacSystemFont, sans-serif;
+  --font-display: "Poppins", -apple-system, sans-serif;
+}
+
+body {
+  background: var(--background);
+  color: var(--foreground);
+}
