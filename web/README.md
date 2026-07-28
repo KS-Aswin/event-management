@@ -46,26 +46,26 @@ Prisma needs to download a native query-engine binary from `binaries.prisma.sh` 
 
 ## What's built so far
 
-- `/` — placeholder landing page with links to sign in / sign up
-- `/signup` — real signup form (customer or vendor role), creates a user in Postgres, hashes the password, signs the person in
+- `/` — real Google-style home page with animated search placeholder and category chips, ported from the demo
+- `/search` — real vendor search: category/location/rating filters and sort, all driving real Postgres queries via URL params (shareable/bookmarkable search URLs)
+- `/vendors/[id]` — real vendor profile page: about, packages, real reviews from the database, and a working "Request quote" modal that saves to the database
+- `/signup` — real signup form (customer or vendor role), creates a user in Postgres, hashes the password, signs the person in. Accepts `?role=vendor` to preset the role (used by the "For Vendors" page's CTA)
 - `/login` — real login form, verifies against the stored password hash
-- `/dashboard` — protected page (redirects to `/login` if not signed in) — currently just a placeholder proving the session loop works; the real dashboard UI from the mockup isn't built here yet
-- `POST /api/auth/register`, `POST /api/auth/login`, `POST /api/auth/logout` — the underlying API routes
+- `/dashboard` — protected page (redirects to `/login` if not signed in), role-specific content (vendor stats vs. customer event checklist — currently sample content, not yet tied to real quote-request data)
+- `/settings` — real profile editing (name/email) and notification preference toggles, all persisted to Postgres; logout
+- `/about`, `/help`, `/privacy`, `/for-vendors` — static informational pages
+- A single shared `<Header>` component (in `app/header.tsx`), rendered once in the root layout — handles back navigation, the logo, the search box (on `/search`), and signed-in/signed-out state consistently across every page
+- `POST /api/auth/register`, `POST /api/auth/login`, `POST /api/auth/logout` — auth
+- `GET /api/vendors`, `GET /api/vendors/[id]`, `POST /api/vendors/[id]/quotes` — vendor data + quote requests
+- `PATCH /api/account` — update profile/preferences
 
-**Not wired yet:** Google OAuth (the button is present but disabled — needs a real Google Cloud OAuth client, which only the project owner can create), the full dashboard/settings/vendor-search UI from the mockup, and the vendor listing/booking data model.
+**Not wired yet:** Google OAuth (button present but disabled — needs a real Google Cloud OAuth client), vendor accounts actually managing/editing their own listing (vendors are currently seed data — see `db/seed.mjs` — not linked to real vendor user accounts), dashboard stats tied to real quote-request data instead of sample numbers, "my events" tracking for customers.
 
 ## Database schema
 
-See `db/schema.sql`. Currently just a `users` table (id, name, email, password_hash, role, created_at). More tables (vendors, listings, quote requests, etc.) will be added as those features get built — each addition should get its own reviewed `ALTER TABLE` / `CREATE TABLE` statement appended to that file, with a note here.
+See `db/schema.sql`. Tables: `users`, `vendors`, `vendor_reviews`, `quote_requests`. Run `node db/seed.mjs` after migrating to populate sample vendors (the same 9 used in the `/demo` mockup, so both stay consistent) — safe to re-run, it clears and re-inserts rather than duplicating.
 
 ## Testing
 
-No automated test suite for this app yet (unlike the `demo/` folder, which has a jsdom click-through suite). Manual testing so far has covered, via `curl` against a running dev server:
-- Register → duplicate email rejected (409) → weak password rejected (400)
-- Dashboard blocked without a session, redirects to `/login`
-- Dashboard accessible with a valid session, shows correct name/role
-- Login with correct password succeeds, wrong password rejected (401) with a generic error (doesn't reveal whether the email exists)
-- Vendor role registers and displays correctly, separate from customer role
-- Logout clears the session
+No automated test suite yet (unlike `/demo`, which has a jsdom click-through suite) — see `PROJECT_LOG.md` backlog. So far, testing has been manual `curl`/`psql`-based, run against a live dev server and real database before every commit — covering: registration validation, session/auth flows, vendor search filters (category, location, rating, text search), vendor detail lookup (including 404 for missing vendors), quote request submission (including validation failures), and settings updates (including the auth-required check). See the Session Log in `PROJECT_LOG.md` for the full list run each session.
 
-Adding a real automated test suite (e.g. Playwright for the UI, or a lighter API-level test script) is on the backlog — see `PROJECT_LOG.md`.
