@@ -1,14 +1,15 @@
 "use client";
 
 import { useState } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 
 type Role = "customer" | "vendor";
 
 export default function SignupPage() {
   const router = useRouter();
-  const [role, setRole] = useState<Role>("customer");
+  const searchParams = useSearchParams();
+  const [role, setRole] = useState<Role>(searchParams.get("role") === "vendor" ? "vendor" : "customer");
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
