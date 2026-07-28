@@ -23,22 +23,27 @@
 ### `/web` (the real app) — where things stand
 
 **Working (built and tested against a real database):**
-- Next.js 16 (App Router, TypeScript) + Tailwind v4 scaffolded in `/web`
-- PostgreSQL schema (`web/db/schema.sql`) with a `users` table (id, name, email, password_hash, role, created_at)
-- `POST /api/auth/register` — validates input, rejects duplicate emails (409) and weak passwords (400), hashes password with bcrypt, creates user, signs them in
-- `POST /api/auth/login` — verifies against the stored hash, generic error on failure (doesn't reveal whether the email exists — deliberate, prevents email enumeration)
-- `POST /api/auth/logout` — clears the session cookie
-- Session handling: JWT (via `jose`) in an httpOnly cookie, 7-day expiry, verified in `web/lib/session.ts`
-- `/signup` and `/login` pages — real forms styled to match the `/demo` mockup's visual design (green `#0f6d52` / gold `#c9a227`, same layout), wired to the real API routes above. Google sign-in button is present but disabled (needs a real Google OAuth client — see backlog)
-- `/dashboard` — protected route (redirects to `/login` if no valid session); currently just a placeholder proving the auth loop works, **not** the real dashboard UI from the mockup yet
-- All of the above was tested end-to-end with real `curl` requests against a running dev server + a real local Postgres instance — see Session 4 log entry for the full test list. Not covered by an automated test suite yet (see backlog).
+- Next.js 16 (App Router, TypeScript) + Tailwind v4
+- PostgreSQL schema (`web/db/schema.sql`): `users`, `vendors`, `vendor_reviews`, `quote_requests` — see file for exact columns
+- Full auth: `POST /api/auth/register` (validates, rejects duplicate emails/weak passwords), `POST /api/auth/login` (generic error on failure, no email enumeration), `POST /api/auth/logout`. JWT session cookie via `jose`, httpOnly, 7-day expiry.
+- **A single shared `<Header>`** (`app/header.tsx`), rendered once from the root layout — not duplicated per page. Handles back nav, logo, the search box (on `/search` only), and signed-in/out state everywhere consistently.
+- `/` — real home page (search + category chips, links into `/search`)
+- `/search` — real vendor search/filter/sort, backed by Postgres, filter state lives in the URL (shareable links, real browser back button works correctly)
+- `/vendors/[id]` — real vendor profile: about, packages, real reviews, working "Request quote" modal (persists to `quote_requests`)
+- `/signup`, `/login` — match the `/demo` mockup's visual design, wired to real API routes. Google button present but disabled (no OAuth client yet)
+- `/dashboard` — protected, role-specific content — **stats/checklist are still sample data**, not yet tied to real quote-request rows (labeled honestly in the UI as such)
+- `/settings` — real profile edit (name/email) + notification toggles, persisted to Postgres
+- `/about`, `/help`, `/privacy`, `/for-vendors` — static pages with real written copy
+- `web/db/seed.mjs` — seeds 9 sample vendors + reviews matching `/demo`'s data, so both versions are consistent
+- Tested via `npm run build` (must pass — TypeScript + compile check) plus manual `curl`/`psql` runs against a live dev server + real Postgres before every commit. See Session 4 and 5 log entries for the full list of what's been checked. **Still no automated test script** (top of the backlog).
 
 **Known limitations / deliberate decisions:**
-- **Not using Prisma.** Prisma requires downloading a native engine binary from `binaries.prisma.sh`, which was unreachable from the sandbox this was built in. Switched to the plain `pg` driver + hand-written SQL in `web/db/schema.sql`, applied via `web/db/migrate.mjs`. If you're developing somewhere with normal unrestricted network access, reintroducing Prisma is a reasonable option to reconsider — but the current approach works fine and has no such dependency risk.
-- **Not using `next/font/google`.** Same class of problem — it fetches font files at build time, which failed in the sandbox for the same reason. Fonts are loaded via a plain CSS `@import` in `web/app/globals.css` instead (fetched by the browser at runtime, not at build time — so this one's arguably more robust anyway, not just a workaround).
-- **No NextAuth/Auth.js.** Given the above two surprises with newer/beta dependencies in this environment, auth was hand-rolled (bcrypt + jose + httpOnly cookies) to avoid a third dependency-compatibility risk. This is a legitimate, common pattern, not a hack — but if the project later wants OAuth providers beyond Google, or magic links, etc., Auth.js is worth revisiting then.
-- **This Next.js version (16.2.12) is newer than what's likely in Claude's training data** — it ships its own docs in `node_modules/next/dist/docs/`, and explicitly warns about this in `web/AGENTS.md`. Read the actual docs there before assuming an API (e.g. `cookies()` is `async` in this version).
-- No automated tests for `/web` yet (unlike `/demo`, which has a jsdom suite) — manual `curl`-based testing only so far.
+- **Not using Prisma.** Its query-engine binary is hosted on `binaries.prisma.sh`, unreachable from this sandbox's network. Using the plain `pg` driver + hand-written SQL instead (`web/db/schema.sql` + `web/db/migrate.mjs`). Worth reconsidering if developing somewhere with normal network access.
+- **Not using `next/font/google`.** Same class of problem (fetches at build time). Using a plain CSS `@import` in `globals.css` instead — arguably more robust anyway, not just a workaround.
+- **No NextAuth/Auth.js.** Hand-rolled auth (bcrypt + jose + httpOnly cookies) to avoid a third dependency-compatibility risk after the above two surprises. Legitimate common pattern, not a hack — revisit if the project wants more OAuth providers later.
+- **This Next.js version (16.2.12) is newer than what's likely in Claude's training data** — read `node_modules/next/dist/docs/` before assuming an API. Confirmed so far: `cookies()`, page `params`, and `searchParams` are all `Promise`s that need `await`.
+- **Background processes (dev server, Postgres) don't survive between separate tool calls in this sandbox** — always start them together with whatever you're about to test, in one shell invocation, or they'll be gone by the next command.
+- Vendors are static seed data — no real vendor account owns/edits a listing yet (see backlog).
 
 ### `/demo` (the mockup) — unchanged, see the detailed feature list further down this file from earlier sessions.
 
@@ -75,23 +80,36 @@
 /web/                             ← the REAL app — Next.js + PostgreSQL, active development
   README.md                       ← setup instructions (env vars, DB, running locally)
   app/                            ← Next.js App Router pages + API routes
-    page.tsx                      ← placeholder landing page
+    page.tsx                      ← real home page (search + category chips)
+    header.tsx                    ← the ONE shared header, rendered from layout.tsx — don't duplicate this per-page
+    layout.tsx                    ← root layout — fetches session once, renders Header + children
+    globals.css                   ← Tailwind v4 theme + brand colors + font import
     login/page.tsx                ← real login form (client component)
-    signup/page.tsx               ← real signup form (client component)
-    dashboard/page.tsx            ← protected placeholder dashboard (server component)
-    dashboard/logout-button.tsx   ← client component (logout needs onClick)
+    signup/page.tsx               ← real signup form (client component, reads ?role= from URL)
+    dashboard/page.tsx            ← protected dashboard, role-specific content (server component)
+    settings/page.tsx             ← protected settings (server component, fetches user record)
+    settings/settings-form.tsx    ← client component: profile fields, notification toggles, logout
+    search/page.tsx               ← vendor search results (server component, reads searchParams)
+    search/search-filters.tsx     ← client component: chip filters, updates URL query string
+    vendors/[id]/page.tsx         ← vendor profile (server component)
+    vendors/[id]/quote-button.tsx ← client component: quote request modal
+    about/page.tsx, help/page.tsx, privacy/page.tsx, for-vendors/page.tsx  ← static pages
     api/auth/register/route.ts    ← POST — create user, hash password, start session
     api/auth/login/route.ts       ← POST — verify password, start session
     api/auth/logout/route.ts      ← POST — clear session
-    globals.css                   ← Tailwind v4 theme + brand colors + font import
-    layout.tsx                    ← root layout
+    api/account/route.ts          ← PATCH — update name/email/notification prefs
+    api/vendors/route.ts          ← GET — search/filter/sort vendors
+    api/vendors/[id]/route.ts     ← GET — single vendor + reviews
+    api/vendors/[id]/quotes/route.ts ← POST — submit a quote request
   lib/
-    db.ts                         ← pg Pool singleton + user queries
+    db.ts                         ← pg Pool singleton + all query functions (users, vendors, reviews, quotes)
     password.ts                   ← bcrypt hash/verify
     session.ts                    ← JWT session cookie create/read/destroy
+    vendorVisuals.tsx              ← category → gradient+icon mapping, <VendorTile> component
   db/
-    schema.sql                    ← the actual DB schema (source of truth)
+    schema.sql                    ← the actual DB schema (source of truth) — users, vendors, vendor_reviews, quote_requests
     migrate.mjs                   ← applies schema.sql to $DATABASE_URL — node db/migrate.mjs
+    seed.mjs                      ← populates sample vendors/reviews — node db/seed.mjs (idempotent)
   .env.example                    ← template for required env vars (DATABASE_URL, SESSION_SECRET)
 ```
 
@@ -99,16 +117,15 @@
 
 Roughly in priority order — pick up wherever makes sense:
 
-- [ ] **Build out the real dashboard UI** in `/web` (currently a placeholder) — port the customer/vendor dashboard design from `/demo`'s `renderDashboard()` function.
-- [ ] **Build the vendor search/results/profile pages** in `/web`, backed by a real `vendors` table (doesn't exist yet — only `users` exists so far). Use `/demo`'s vendor data shape as the reference for what fields a vendor needs.
-- [ ] **Settings page** in `/web` (profile edit, notification prefs) — port from `/demo`.
-- [ ] **Add an automated test suite for `/web`** — the manual curl-based testing from Session 4 should become a real script (options: a lightweight Node script hitting the API routes directly like the curl tests did, or Playwright for full browser-level testing including the UI).
+- [ ] **Add an automated test suite for `/web`** — manual curl/psql testing has been thorough so far (see Session 4 and 5 logs) but there's still no real script; it should exist before this grows much further. Options: a lightweight Node script hitting the API routes directly (closest to what's been done manually), or Playwright for full browser-level UI testing.
+- [ ] **Tie the dashboard to real data.** Vendor stats and the customer event checklist are still sample content (honestly labeled as such in the UI). Once there's a concept of "my events" for customers and real aggregated stats for vendors (based on `quote_requests`), replace the placeholders.
+- [ ] **Let vendors manage their own listing.** Right now `vendors` rows are static seed data with no real connection to vendor user accounts (`owner_id` column exists and is nullable, but nothing sets it yet). A vendor signing up should be able to create/edit their own listing.
 - [ ] **Google OAuth** — needs a real Google Cloud OAuth client (client ID + secret), which only the project owner can create in Google Cloud Console. The button is present but disabled until then.
 - [ ] Decide on hosting for the real app (Vercel is the natural fit for Next.js) and a real production Postgres (Neon, Supabase, Railway, etc. all have free tiers) — nothing is deployed anywhere yet, everything so far only runs locally / in the dev sandbox.
-- [ ] Enable GitHub Pages for the `/demo` folder specifically, so there's a live shareable link for the mockup (not done yet — was asked about, no answer received yet).
-- [ ] Test whether `/demo`'s real `<img>` photo idea would work outside the Claude sandbox (e.g. on GitHub Pages) — if so, could reintroduce real vendor photos there; not relevant to `/web` since that runs on a normal server anyway (not sandboxed), so real images should just work there once vendor profiles are built — worth confirming when that point is reached.
+- [ ] Enable GitHub Pages for the `/demo` folder specifically, so there's a live shareable link for the mockup (asked about twice now, no answer received yet — low priority, just noting it's still pending).
 - [ ] Revisit the original bigger product brief (AI planner, full vendor CRM, admin panel, etc.) if/when ready to scope further — that content isn't in this repo, it was discussed in chat only.
 - [ ] No mobile-specific manual testing has been done on `/web` yet.
+- [ ] "My events"/booking history for customers, and a proper multi-vendor "quotes received" inbox for vendors — currently a quote request just gets written to the DB with no UI to view/respond to it yet.
 
 ## 5. How to verify changes before committing
 
@@ -134,6 +151,20 @@ There's no automated suite for `/web` yet (see backlog) — until there is, at m
 ## 6. Session Log
 
 > Add a new dated entry each session, newest at the top. Keep entries short — a few lines of what changed and why, not a full diff.
+
+### 2026-07-28 — Session 5 (vendor search, profiles, quotes, settings)
+- Extended the schema: `vendors`, `vendor_reviews`, `quote_requests` tables, plus `email_notifications`/`sms_notifications` columns on `users` (see `web/db/schema.sql`).
+- Wrote `web/db/seed.mjs` — seeds the same 9 sample vendors + reviews used in `/demo`, so both versions show consistent data. Idempotent (clears and re-inserts).
+- Added DB query functions in `lib/db.ts`: `findVendors` (with query/category/location/minRating/sort filters), `findVendorById`, `findAllLocations`, `findReviewsByVendor`, `createQuoteRequest`, `updateUser`.
+- Built `lib/vendorVisuals.tsx` — React port of the demo's illustrated category tiles (gradient + SVG icon per category), so vendor "photos" render consistently without depending on external images.
+- **Centralized navigation properly this time**: built a single `<Header>` client component, rendered once in the root layout (`app/layout.tsx`), which fetches the session server-side and passes it down. This was a deliberate response to the exact bug class that caused problems in `/demo` (duplicated per-page headers drifting out of sync) — here it's structurally impossible to duplicate since there's only one `Header` instantiation in the whole app.
+- Built real pages, each backed by the database: `/` (home/search entry), `/search` (filters + results, filter state lives in the URL query string — shareable, uses the browser's real back button correctly, no hand-rolled view-stack needed since these are real routes), `/vendors/[id]` (profile + real reviews + working quote-request modal), `/settings` (real profile edit + notification toggles, persisted), `/about`, `/help`, `/privacy`, `/for-vendors`.
+- Added API routes: `GET /api/vendors`, `GET /api/vendors/[id]`, `POST /api/vendors/[id]/quotes`, `PATCH /api/account`.
+- Rewrote `/dashboard` with real role-specific content (still sample stats/checklist data, honestly labeled as such in the UI — not yet tied to real quote-request data).
+- Confirmed `params` and `searchParams` are `Promise`s in this Next.js version for both pages and route handlers (`await params`) — checked the bundled docs first rather than assuming, per the `AGENTS.md` warning.
+- **Tested for real again**: ran `npm run build` (clean, 18 routes, no errors), then ran the dev server against a real Postgres database and hit it with 15 `curl`/`psql` checks covering vendor search filters (category, location, rating, text search on tags), vendor detail lookup + 404 handling, quote request submission + validation, and settings updates + the auth-required check. 14/14 real behaviors correct (one reported "failure" was a bug in the test script's own assertion, not the app — logged so it's not mistaken for a real issue later).
+- Updated `web/README.md` and this file.
+- **Known gap carried forward:** background processes (the dev server, Postgres) do not persist between separate tool calls in this sandbox — every testing session needs `service postgresql start` + `npm run dev` re-run together in one shell invocation. Not a project bug, just a sandbox quirk worth remembering next session so time isn't wasted rediscovering it.
 
 ### 2026-07-28 — Session 4 (real app started)
 - User decided on stack for the real app: Next.js (App Router, TypeScript) + Tailwind v4 + PostgreSQL, with a real backend from day one (not mocked) — see chat for the decision process.
