@@ -35,7 +35,8 @@
 - `/settings` — real profile edit (name/email) + notification toggles, persisted to Postgres
 - `/about`, `/help`, `/privacy`, `/for-vendors` — static pages with real written copy
 - `web/db/seed.mjs` — seeds 9 sample vendors + reviews matching `/demo`'s data, so both versions are consistent
-- Tested via `npm run build` (must pass — TypeScript + compile check) plus manual `curl`/`psql` runs against a live dev server + real Postgres before every commit. See Session 4 and 5 log entries for the full list of what's been checked. **Still no automated test script** (top of the backlog).
+- **`web/tests/api.test.mjs`** — real automated test suite, 37 checks, run with `npm run test:api` against a live dev server. See Session 6 log entry.
+- Tested via `npm run build` (must pass — TypeScript + compile check) plus the automated suite above before every commit.
 
 **Known limitations / deliberate decisions:**
 - **Not using Prisma.** Its query-engine binary is hosted on `binaries.prisma.sh`, unreachable from this sandbox's network. Using the plain `pg` driver + hand-written SQL instead (`web/db/schema.sql` + `web/db/migrate.mjs`). Worth reconsidering if developing somewhere with normal network access.
@@ -117,15 +118,15 @@
 
 Roughly in priority order — pick up wherever makes sense:
 
-- [ ] **Add an automated test suite for `/web`** — manual curl/psql testing has been thorough so far (see Session 4 and 5 logs) but there's still no real script; it should exist before this grows much further. Options: a lightweight Node script hitting the API routes directly (closest to what's been done manually), or Playwright for full browser-level UI testing.
 - [ ] **Tie the dashboard to real data.** Vendor stats and the customer event checklist are still sample content (honestly labeled as such in the UI). Once there's a concept of "my events" for customers and real aggregated stats for vendors (based on `quote_requests`), replace the placeholders.
 - [ ] **Let vendors manage their own listing.** Right now `vendors` rows are static seed data with no real connection to vendor user accounts (`owner_id` column exists and is nullable, but nothing sets it yet). A vendor signing up should be able to create/edit their own listing.
 - [ ] **Google OAuth** — needs a real Google Cloud OAuth client (client ID + secret), which only the project owner can create in Google Cloud Console. The button is present but disabled until then.
 - [ ] Decide on hosting for the real app (Vercel is the natural fit for Next.js) and a real production Postgres (Neon, Supabase, Railway, etc. all have free tiers) — nothing is deployed anywhere yet, everything so far only runs locally / in the dev sandbox.
-- [ ] Enable GitHub Pages for the `/demo` folder specifically, so there's a live shareable link for the mockup (asked about twice now, no answer received yet — low priority, just noting it's still pending).
+- [ ] Enable GitHub Pages for the `/demo` folder specifically, so there's a live shareable link for the mockup (asked about a few times now, no answer received yet — low priority, just noting it's still pending).
 - [ ] Revisit the original bigger product brief (AI planner, full vendor CRM, admin panel, etc.) if/when ready to scope further — that content isn't in this repo, it was discussed in chat only.
 - [ ] No mobile-specific manual testing has been done on `/web` yet.
 - [ ] "My events"/booking history for customers, and a proper multi-vendor "quotes received" inbox for vendors — currently a quote request just gets written to the DB with no UI to view/respond to it yet.
+- [ ] The API test suite (`web/tests/api.test.mjs`) covers backend behavior well but not UI rendering/interaction — consider Playwright later if UI regressions become a concern.
 
 ## 5. How to verify changes before committing
 
@@ -142,15 +143,26 @@ Should print `0 failed / 43 checks` (the check count may grow over time — that
 cd web
 npm install
 cp .env.example .env.local   # fill in DATABASE_URL and SESSION_SECRET
-node db/migrate.mjs          # apply schema to your database
+npm run db:migrate           # apply schema
+npm run db:seed              # populate sample vendors
 npm run build                # catches TypeScript errors — must succeed
-npm run dev                  # then manually test, or hit the API routes with curl
+npm run dev                  # in one terminal, leave running
+npm run test:api             # in another terminal — should print "N passed, 0 failed"
 ```
-There's no automated suite for `/web` yet (see backlog) — until there is, at minimum run `npm run build` and manually verify signup/login/logout work against a real database before committing.
+Both `npm run build` and `npm run test:api` should pass with zero failures before committing anything in `/web`. If you add a new API route or behavior, add a corresponding check to `web/tests/api.test.mjs` in the same commit — don't let the suite fall behind the code.
 
 ## 6. Session Log
 
 > Add a new dated entry each session, newest at the top. Keep entries short — a few lines of what changed and why, not a full diff.
+
+### 2026-07-28 — Session 6 (automated API test suite)
+- Built `web/tests/api.test.mjs` — a real, repeatable automated test suite (37 checks) replacing the manual curl/psql testing from Sessions 4–5. Covers: registration validation (duplicate email, weak password, invalid role), login (correct/wrong password, confirms no email enumeration on failure), protected-route redirects, vendor search (every filter type + sort-order correctness, not just count), vendor detail 404/400 handling, quote request submission + validation, settings updates (including the auth-required check and an email-conflict check), logout, and — importantly — actually checks that the *customer* vs *vendor* dashboard render different, role-correct content (not just that both return 200).
+- Design choice: uses a timestamp-based unique email per run (`test-customer-${RUN_ID}@example.com`) for anything that creates a user, so the suite is safe to re-run repeatedly without needing to reset the database between runs.
+- Added `npm run db:migrate`, `npm run db:seed`, `npm run test:api` convenience scripts to `package.json`.
+- Caught and fixed a bug in my own first draft of the test script (a check that only verified a response *wasn't* JSON, rather than actually checking dashboard content) before it was ever committed — see the `text` field added to the `request()` helper so assertions can check rendered HTML, not just JSON responses.
+- Ran the full suite against a real, freshly-seeded database: **37 passed, 0 failed**, exit code 0.
+- Updated `web/README.md` (Testing section) and this file. Removed "add automated tests" from the backlog since it's now done.
+- Reconfirmed the sandbox quirk from Session 5: Postgres + the dev server must be started together with the test run in one shell invocation, or they get killed between tool calls. Added a proper readiness poll (`curl` retry loop) instead of a fixed `sleep`, since route count has grown enough that a fixed sleep occasionally wasn't long enough.
 
 ### 2026-07-28 — Session 5 (vendor search, profiles, quotes, settings)
 - Extended the schema: `vendors`, `vendor_reviews`, `quote_requests` tables, plus `email_notifications`/`sms_notifications` columns on `users` (see `web/db/schema.sql`).
