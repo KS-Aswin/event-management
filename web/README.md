@@ -67,5 +67,15 @@ See `db/schema.sql`. Tables: `users`, `vendors`, `vendor_reviews`, `quote_reques
 
 ## Testing
 
-No automated test suite yet (unlike `/demo`, which has a jsdom click-through suite) — see `PROJECT_LOG.md` backlog. So far, testing has been manual `curl`/`psql`-based, run against a live dev server and real database before every commit — covering: registration validation, session/auth flows, vendor search filters (category, location, rating, text search), vendor detail lookup (including 404 for missing vendors), quote request submission (including validation failures), and settings updates (including the auth-required check). See the Session Log in `PROJECT_LOG.md` for the full list run each session.
+There's a real automated test suite now: `web/tests/api.test.mjs` — 37 checks covering registration validation (duplicate email, weak password, invalid role), login (correct/wrong password, no email enumeration on either failure), protected-route redirects, vendor search (category/location/rating/text-search filters, sort ordering), vendor detail lookup (including 404/400 handling), quote request submission (including validation and 404-vendor handling), settings updates (including the auth-required check and email-conflict check), logout, and role-specific dashboard content.
+
+To run it:
+```bash
+npm run db:migrate   # if you haven't already
+npm run db:seed      # ensures the 9 sample vendors exist
+npm run dev           # in one terminal, leave running
+npm run test:api      # in another terminal
+```
+
+It's safe to re-run repeatedly — anything that creates a user uses a timestamp-based unique email each run, so it won't collide with previous runs' data.
 
