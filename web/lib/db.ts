@@ -197,3 +197,90 @@ export async function createQuoteRequest(params: {
   );
   return result.rows[0];
 }
+
+export async function findVendorByOwner(ownerId: number): Promise<VendorRecord | null> {
+  const result = await pool.query<VendorRecord>(
+    "SELECT * FROM vendors WHERE owner_id = $1 LIMIT 1",
+    [ownerId]
+  );
+  return result.rows[0] ?? null;
+}
+
+export async function createVendorListing(params: {
+  ownerId: number;
+  name: string;
+  category: string;
+  location: string;
+  price: number;
+  priceLabel: string;
+  experience: string;
+  tags: string[];
+  about: string;
+}): Promise<VendorRecord> {
+  const result = await pool.query<VendorRecord>(
+    `INSERT INTO vendors (owner_id, name, category, location, price, price_label, experience, tags, about, rating, reviews_count)
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,0,0)
+     RETURNING *`,
+    [
+      params.ownerId,
+      params.name,
+      params.category,
+      params.location,
+      params.price,
+      params.priceLabel,
+      params.experience,
+      params.tags,
+      params.about,
+    ]
+  );
+  return result.rows[0];
+}
+
+export interface QuoteRequestWithVendor {
+  id: number;
+  vendor_id: number;
+  vendor_name: string;
+  vendor_category: string;
+  name: string;
+  phone: string;
+  event_date: string | null;
+  budget: string | null;
+  message: string | null;
+  status: string;
+  created_at: string;
+}
+
+export async function findQuoteRequestsByCustomer(customerId: number): Promise<QuoteRequestWithVendor[]> {
+  const result = await pool.query<QuoteRequestWithVendor>(
+    `SELECT q.id, q.vendor_id, v.name AS vendor_name, v.category AS vendor_category,
+            q.name, q.phone, q.event_date, q.budget, q.message, q.status, q.created_at
+     FROM quote_requests q
+     JOIN vendors v ON v.id = q.vendor_id
+     WHERE q.customer_id = $1
+     ORDER BY q.created_at DESC`,
+    [customerId]
+  );
+  return result.rows;
+}
+
+export interface LeadRecord {
+  id: number;
+  name: string;
+  phone: string;
+  event_date: string | null;
+  budget: string | null;
+  message: string | null;
+  status: string;
+  created_at: string;
+}
+
+export async function findQuoteRequestsByVendor(vendorId: number): Promise<LeadRecord[]> {
+  const result = await pool.query<LeadRecord>(
+    `SELECT id, name, phone, event_date, budget, message, status, created_at
+     FROM quote_requests
+     WHERE vendor_id = $1
+     ORDER BY created_at DESC`,
+    [vendorId]
+  );
+  return result.rows;
+}
