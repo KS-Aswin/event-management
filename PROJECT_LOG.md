@@ -31,11 +31,12 @@
 - `/search` — real vendor search/filter/sort, backed by Postgres, filter state lives in the URL (shareable links, real browser back button works correctly)
 - `/vendors/[id]` — real vendor profile: about, packages, real reviews, working "Request quote" modal (persists to `quote_requests`)
 - `/signup`, `/login` — match the `/demo` mockup's visual design, wired to real API routes. Google button present but disabled (no OAuth client yet)
-- `/dashboard` — protected, role-specific content — **stats/checklist are still sample data**, not yet tied to real quote-request rows (labeled honestly in the UI as such)
+- `/dashboard` — protected, role-specific, **now real data**: vendors see real lead counts/list from `quote_requests` (or a prompt to create a listing if they don't have one), customers see their actual submitted quote requests linked to the vendor
+- `/dashboard/create-listing` — a vendor account creates their own listing, which then makes them findable in `/search` and gives them real dashboard stats
 - `/settings` — real profile edit (name/email) + notification toggles, persisted to Postgres
 - `/about`, `/help`, `/privacy`, `/for-vendors` — static pages with real written copy
 - `web/db/seed.mjs` — seeds 9 sample vendors + reviews matching `/demo`'s data, so both versions are consistent
-- **`web/tests/api.test.mjs`** — real automated test suite, 37 checks, run with `npm run test:api` against a live dev server. See Session 6 log entry.
+- **`web/tests/api.test.mjs`** — real automated test suite, 46 checks, run with `npm run test:api` against a live dev server. See Session 6 and 7 log entries.
 - Tested via `npm run build` (must pass — TypeScript + compile check) plus the automated suite above before every commit.
 
 **Known limitations / deliberate decisions:**
@@ -118,15 +119,15 @@
 
 Roughly in priority order — pick up wherever makes sense:
 
-- [ ] **Tie the dashboard to real data.** Vendor stats and the customer event checklist are still sample content (honestly labeled as such in the UI). Once there's a concept of "my events" for customers and real aggregated stats for vendors (based on `quote_requests`), replace the placeholders.
-- [ ] **Let vendors manage their own listing.** Right now `vendors` rows are static seed data with no real connection to vendor user accounts (`owner_id` column exists and is nullable, but nothing sets it yet). A vendor signing up should be able to create/edit their own listing.
+- [ ] **Vendor stats are still incomplete on purpose.** "Profile visitors" and "conversion rate" are gone from the vendor dashboard now (rather than being fake) since there's no page-view tracking — only real countable things (total leads, pending count, review count) are shown. Adding page-view tracking would let those come back as real numbers.
+- [ ] **No way to respond to a lead yet.** A vendor can see their quote requests but there's no UI to mark one as responded/booked, or to message the customer back. `quote_requests.status` exists in the schema and defaults to `'pending'` but nothing ever changes it.
+- [ ] **Vendors can create a listing but not edit it.** Once created, there's no edit form yet.
 - [ ] **Google OAuth** — needs a real Google Cloud OAuth client (client ID + secret), which only the project owner can create in Google Cloud Console. The button is present but disabled until then.
 - [ ] Decide on hosting for the real app (Vercel is the natural fit for Next.js) and a real production Postgres (Neon, Supabase, Railway, etc. all have free tiers) — nothing is deployed anywhere yet, everything so far only runs locally / in the dev sandbox.
 - [ ] Enable GitHub Pages for the `/demo` folder specifically, so there's a live shareable link for the mockup (asked about a few times now, no answer received yet — low priority, just noting it's still pending).
 - [ ] Revisit the original bigger product brief (AI planner, full vendor CRM, admin panel, etc.) if/when ready to scope further — that content isn't in this repo, it was discussed in chat only.
 - [ ] No mobile-specific manual testing has been done on `/web` yet.
-- [ ] "My events"/booking history for customers, and a proper multi-vendor "quotes received" inbox for vendors — currently a quote request just gets written to the DB with no UI to view/respond to it yet.
-- [ ] The API test suite (`web/tests/api.test.mjs`) covers backend behavior well but not UI rendering/interaction — consider Playwright later if UI regressions become a concern.
+- [ ] The API test suite covers backend behavior well but not UI rendering/interaction — consider Playwright later if UI regressions become a concern.
 
 ## 5. How to verify changes before committing
 
@@ -154,6 +155,18 @@ Both `npm run build` and `npm run test:api` should pass with zero failures befor
 ## 6. Session Log
 
 > Add a new dated entry each session, newest at the top. Keep entries short — a few lines of what changed and why, not a full diff.
+
+### 2026-07-28 — Session 7 (dashboard now shows real data, vendors can create listings)
+- **Removed the last remaining fake data from the app.** The dashboard used to show honestly-labeled sample stats/checklists — now it shows real data, which required solving vendor ownership first (a vendor account had no way to actually own a listing before this):
+  - Added `POST /api/vendors` — a vendor account creates their own listing (name, category, location, price, experience, tags, about). Rejects: not signed in (401), signed in as customer (403), invalid category (400), already has a listing (409).
+  - Added `/dashboard/create-listing` — the form for the above, only reachable by a vendor without an existing listing (redirects away otherwise).
+  - Rewrote `/dashboard`: vendor view now shows real counts (total leads, pending leads, review count) and a real recent-enquiries list from `quote_requests`, or a "create your listing" prompt if they don't have one yet. Customer view now shows their actual submitted quote requests (vendor name/category, event date, status), linked to the vendor's profile, or an empty state pointing to `/search` if they haven't requested any yet.
+  - Added DB functions: `findVendorByOwner`, `createVendorListing`, `findQuoteRequestsByCustomer` (joined with vendor name/category), `findQuoteRequestsByVendor`.
+  - Deliberately did **not** fake "profile visitors" or "conversion rate" for vendors since there's no page-view tracking to back those numbers — removed them rather than keep showing sample numbers next to now-real ones, which would have been misleading in a different way (mixing real and fake data on the same screen).
+- Extended `web/tests/api.test.mjs` to 46 checks (from 37): listing creation (success + all 4 rejection cases), vendor dashboard reflecting the new listing's real stats, customer dashboard reflecting a real submitted quote.
+- **Caught a real bug in the test suite itself** (not the app) while doing this: an old assertion checked the dashboard HTML for `"Venue" + "booked"`, which was leftover hardcoded sample text from *before* this session's rewrite — it broke correctly once the fake data was removed, which is exactly what a good test should do, but the assertion needed updating to check for real content instead of being deleted. Worth remembering: when replacing fake/sample data with real data, always re-check existing test assertions for hardcoded strings tied to the old fake data, don't just add new tests and assume old ones still make sense.
+- Full suite run against a freshly-seeded database: **46 passed, 0 failed**. Clean `npm run build` (19 routes).
+- Updated `web/README.md` and this file.
 
 ### 2026-07-28 — Session 6 (automated API test suite)
 - Built `web/tests/api.test.mjs` — a real, repeatable automated test suite (37 checks) replacing the manual curl/psql testing from Sessions 4–5. Covers: registration validation (duplicate email, weak password, invalid role), login (correct/wrong password, confirms no email enumeration on failure), protected-route redirects, vendor search (every filter type + sort-order correctness, not just count), vendor detail 404/400 handling, quote request submission + validation, settings updates (including the auth-required check and an email-conflict check), logout, and — importantly — actually checks that the *customer* vs *vendor* dashboard render different, role-correct content (not just that both return 200).
