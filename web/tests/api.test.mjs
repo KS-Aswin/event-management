@@ -14,6 +14,16 @@
 //
 // Each run uses randomized emails for anything that creates a user, so
 // it's safe to run repeatedly without manual cleanup between runs.
+//
+// IMPORTANT: this suite also creates a real vendor listing (via
+// POST /api/vendors) as part of testing that flow, and that listing is
+// NOT cleaned up afterward. The vendor-count/category-count assertions
+// near the top assume exactly the 9 seeded vendors exist and run BEFORE
+// the listing-creation section for that reason. If you run this suite
+// twice in a row without re-running `npm run db:seed` in between, the
+// count-based assertions will fail (correctly — the counts really did
+// change) even though nothing is actually broken. Re-seed before each
+// run to get a clean comparison.
 
 const BASE_URL = process.env.BASE_URL ?? "http://localhost:3000";
 const RUN_ID = Date.now();
@@ -191,6 +201,85 @@ async function main() {
   });
   check("quote: nonexistent vendor returns 404", quoteBadVendor.status, 404);
 
+  // ---------- Vendor listing creation ----------
+  const listingNoAuth = await request("/api/vendors", {
+    method: "POST",
+    body: { name: "x", category: "Venue", location: "x", price: 1000, experience: "1 yr", about: "test about" },
+  });
+  check("create listing: rejected without auth (401)", listingNoAuth.status, 401);
+
+  const listingAsCustomer = await request("/api/vendors", {
+    method: "POST",
+    body: { name: "x", category: "Venue", location: "x", price: 1000, experience: "1 yr", about: "test about" },
+    cookie: customerCookie,
+  });
+  check("create listing: rejected for customer role (403)", listingAsCustomer.status, 403);
+
+  const listingBadCategory = await request("/api/vendors", {
+    method: "POST",
+    body: {
+      name: "Test Biz",
+      category: "NotARealCategory",
+      location: "Kochi",
+      price: 5000,
+      experience: "2 yrs",
+      about: "A test business for the automated suite.",
+    },
+    cookie: vendorCookie,
+  });
+  check("create listing: invalid category rejected (400)", listingBadCategory.status, 400);
+
+  const listingOk = await request("/api/vendors", {
+    method: "POST",
+    body: {
+      name: `Automated Test Studio ${RUN_ID}`,
+      category: "Photography",
+      location: "Kochi",
+      price: 30000,
+      experience: "3 yrs",
+      tags: ["Test", "Automated"],
+      about: "A test business created by the automated suite.",
+    },
+    cookie: vendorCookie,
+  });
+  check("create listing: valid submission accepted (201)", listingOk.status, 201);
+  const createdVendorId = listingOk.data?.vendor?.id;
+  checkTrue("create listing: response includes new vendor id", typeof createdVendorId === "number");
+
+  const listingDuplicate = await request("/api/vendors", {
+    method: "POST",
+    body: {
+      name: "Second Listing Attempt",
+      category: "Venue",
+      location: "Kochi",
+      price: 5000,
+      experience: "1 yr",
+      about: "Trying to create a second listing for the same account.",
+    },
+    cookie: vendorCookie,
+  });
+  check("create listing: second listing for same owner rejected (409)", listingDuplicate.status, 409);
+
+  const vendorDashAfterListing = await request("/dashboard", { cookie: vendorCookie });
+  checkTrue(
+    "vendor dashboard: shows the new listing's stats after creating it",
+    vendorDashAfterListing.text.includes("Total leads")
+  );
+
+  // ---------- Customer dashboard reflects a real quote request ----------
+  const customerQuote = await request(`/api/vendors/${createdVendorId}/quotes`, {
+    method: "POST",
+    body: { name: "Dashboard Test", phone: "9999911111", message: "checking dashboard reflects this" },
+    cookie: customerCookie,
+  });
+  check("quote: logged-in customer's quote accepted (201)", customerQuote.status, 201);
+
+  const customerDashAfterQuote = await request("/dashboard", { cookie: customerCookie });
+  checkTrue(
+    "customer dashboard: shows the vendor just requested a quote from",
+    customerDashAfterQuote.text.includes(`Automated Test Studio ${RUN_ID}`)
+  );
+
   // ---------- Settings ----------
   const settingsNoAuth = await request("/api/account", {
     method: "PATCH",
@@ -221,8 +310,8 @@ async function main() {
   // ---------- Role-specific dashboard content ----------
   const customerDashHtml = await request("/dashboard", { cookie: customerCookie });
   checkTrue(
-    "customer dashboard: shows customer-specific content (event checklist)",
-    customerDashHtml.text.includes("Venue") && customerDashHtml.text.includes("booked")
+    "customer dashboard: shows customer-specific content (quote requests section)",
+    customerDashHtml.text.includes("quote request")
   );
 
   const vendorDashHtml = await request("/dashboard", { cookie: vendorCookie });
