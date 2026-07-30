@@ -1,12 +1,11 @@
 import { redirect } from "next/navigation";
 import Link from "next/link";
 import { getSession } from "@/lib/session";
+import { findVendorByOwner, findQuoteRequestsByVendor, findQuoteRequestsByCustomer } from "@/lib/db";
 
 export default async function DashboardPage() {
   const session = await getSession();
-  if (!session) {
-    redirect("/login");
-  }
+  if (!session) redirect("/login");
 
   const firstName = session.name.split(" ")[0];
 
@@ -15,56 +14,135 @@ export default async function DashboardPage() {
       <h1 className="text-2xl font-semibold">Welcome back, {firstName}</h1>
 
       {session.role === "vendor" ? (
-        <>
-          <p className="text-ink-soft text-sm mt-1 mb-6">
-            Here&apos;s how your listing is performing this month.
-          </p>
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3.5 mb-4">
-            <Stat num="1,204" label="Profile visitors" />
-            <Stat num="37" label="Leads received" />
-            <Stat num="24%" label="Conversion rate" />
-            <Stat num="4.8" label="Average rating" />
-          </div>
-          <div className="border border-line rounded-xl p-5.5 mb-4">
-            <h3 className="text-[15px] font-semibold mb-2.5">Recent enquiries</h3>
-            <EnquiryRow dot="pending" text="Aiswarya M. — Wedding, 600 guests, Kochi — awaiting your reply" />
-            <EnquiryRow dot="done" text="Nikhil R. — Reception, 300 guests — quote sent" />
-            <EnquiryRow dot="done" text="Priya S. — Engagement, 150 guests — booking confirmed" last />
-          </div>
-          <p className="text-xs text-ink-soft mb-4">
-            These sample stats are placeholder content — real vendor analytics (tied to actual quote
-            requests in the database) haven&apos;t been built yet.
-          </p>
-        </>
+        <VendorDashboard userId={session.userId} />
       ) : (
-        <>
-          <p className="text-ink-soft text-sm mt-1 mb-6">Here&apos;s what&apos;s happening with your event.</p>
-          <div className="border border-line rounded-xl p-5.5 mb-4">
-            <h3 className="text-[15px] font-semibold mb-2.5">
-              Sample event — 14 March 2027, Kochi
-            </h3>
-            <EnquiryRow dot="done" text="Venue — booked (Backwater Grand Palace)" />
-            <EnquiryRow dot="done" text="Photography — booked (Studio Frames by Arun)" />
-            <EnquiryRow dot="pending" text="Catering — quote requested, awaiting reply" />
-            <EnquiryRow dot="pending" text="Decoration — not started" />
-            <EnquiryRow dot="pending" text="DJ & Music — not started" last />
-          </div>
-          <p className="text-xs text-ink-soft mb-4">
-            This checklist is sample content — once quote requests are tied to a real
-            &quot;my events&quot; feature, this will reflect your actual bookings.
+        <CustomerDashboard userId={session.userId} />
+      )}
+    </main>
+  );
+}
+
+async function VendorDashboard({ userId }: { userId: number }) {
+  const vendor = await findVendorByOwner(userId);
+
+  if (!vendor) {
+    return (
+      <>
+        <p className="text-ink-soft text-sm mt-1 mb-6">
+          You don&apos;t have a business listing yet — customers can&apos;t find you until you create one.
+        </p>
+        <Link
+          href="/dashboard/create-listing"
+          className="inline-block px-4.5 py-2.5 rounded-md bg-accent hover:bg-accent-hover text-white text-sm font-medium"
+        >
+          Create your listing
+        </Link>
+      </>
+    );
+  }
+
+  const leads = await findQuoteRequestsByVendor(vendor.id);
+  const pendingCount = leads.filter((l) => l.status === "pending").length;
+
+  return (
+    <>
+      <p className="text-ink-soft text-sm mt-1 mb-6">
+        Real stats for <span className="font-medium text-accent">{vendor.name}</span>.
+      </p>
+      <div className="grid grid-cols-2 sm:grid-cols-3 gap-3.5 mb-4">
+        <Stat num={String(leads.length)} label="Total leads" />
+        <Stat num={String(pendingCount)} label="Awaiting reply" />
+        <Stat num={String(vendor.reviews_count)} label="Reviews" />
+      </div>
+
+      <div className="border border-line rounded-xl p-5.5 mb-4">
+        <h3 className="text-[15px] font-semibold mb-2.5">Recent enquiries</h3>
+        {leads.length === 0 ? (
+          <p className="text-sm text-ink-soft">
+            No quote requests yet. Once your listing is live, customer enquiries will show up here.
           </p>
-        </>
+        ) : (
+          leads.slice(0, 8).map((l, i) => (
+            <div
+              key={l.id}
+              className={`flex items-start gap-2.5 py-2 text-sm ${
+                i < Math.min(leads.length, 8) - 1 ? "border-b border-line" : ""
+              }`}
+            >
+              <span
+                className={`w-2 h-2 rounded-full shrink-0 mt-1.5 ${
+                  l.status === "pending" ? "bg-gold" : "bg-accent"
+                }`}
+              />
+              <div>
+                <span className="font-medium">{l.name}</span>
+                {l.event_date ? ` — event on ${new Date(l.event_date).toLocaleDateString("en-IN")}` : ""}
+                {l.budget ? ` — budget ₹${l.budget}` : ""}
+                <div className="text-ink-soft text-xs mt-0.5">
+                  {l.phone} · {new Date(l.created_at).toLocaleDateString("en-IN")}
+                </div>
+              </div>
+            </div>
+          ))
+        )}
+      </div>
+      <p className="text-xs text-ink-soft mb-4">
+        &quot;Profile visitors&quot; and &quot;conversion rate&quot; aren&apos;t shown because there&apos;s no
+        page-view tracking built yet — these numbers are real counts from actual quote requests, not
+        sample data.
+      </p>
+    </>
+  );
+}
+
+async function CustomerDashboard({ userId }: { userId: number }) {
+  const quotes = await findQuoteRequestsByCustomer(userId);
+
+  return (
+    <>
+      <p className="text-ink-soft text-sm mt-1 mb-6">Your quote requests.</p>
+
+      {quotes.length === 0 ? (
+        <div className="border border-line rounded-xl p-5.5 mb-4 text-sm text-ink-soft">
+          You haven&apos;t requested any quotes yet.{" "}
+          <Link href="/search" className="text-accent hover:underline">
+            Browse vendors
+          </Link>{" "}
+          to get started.
+        </div>
+      ) : (
+        <div className="border border-line rounded-xl p-5.5 mb-4">
+          {quotes.map((q, i) => (
+            <div
+              key={q.id}
+              className={`flex items-start gap-2.5 py-2.5 text-sm ${
+                i < quotes.length - 1 ? "border-b border-line" : ""
+              }`}
+            >
+              <span
+                className={`w-2 h-2 rounded-full shrink-0 mt-1.5 ${
+                  q.status === "pending" ? "bg-gold" : "bg-accent"
+                }`}
+              />
+              <div>
+                <Link href={`/vendors/${q.vendor_id}`} className="font-medium hover:underline">
+                  {q.vendor_name}
+                </Link>{" "}
+                <span className="text-ink-soft">({q.vendor_category})</span>
+                {q.event_date ? ` — event on ${new Date(q.event_date).toLocaleDateString("en-IN")}` : ""}
+                <div className="text-ink-soft text-xs mt-0.5">
+                  Requested {new Date(q.created_at).toLocaleDateString("en-IN")} · status: {q.status}
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
       )}
 
-      <div className="flex gap-3">
-        <Link href="/search" className="px-4.5 py-2.5 rounded-md bg-accent hover:bg-accent-hover text-white text-sm">
-          Browse vendors
-        </Link>
-        <Link href="/settings" className="px-4.5 py-2.5 rounded-md bg-gray-100 hover:bg-gray-200 text-sm">
-          Settings
-        </Link>
-      </div>
-    </main>
+      <Link href="/search" className="px-4.5 py-2.5 rounded-md bg-accent hover:bg-accent-hover text-white text-sm inline-block">
+        Browse vendors
+      </Link>
+    </>
   );
 }
 
@@ -73,17 +151,6 @@ function Stat({ num, label }: { num: string; label: string }) {
     <div className="border border-line rounded-lg p-4">
       <div className="text-[22px] font-semibold text-accent">{num}</div>
       <div className="text-[12.5px] text-ink-soft mt-0.5">{label}</div>
-    </div>
-  );
-}
-
-function EnquiryRow({ dot, text, last }: { dot: "done" | "pending"; text: string; last?: boolean }) {
-  return (
-    <div className={`flex items-center gap-2.5 py-2 text-sm ${!last ? "border-b border-line" : ""}`}>
-      <span
-        className={`w-2 h-2 rounded-full shrink-0 ${dot === "done" ? "bg-accent" : "bg-gold"}`}
-      />
-      {text}
     </div>
   );
 }
