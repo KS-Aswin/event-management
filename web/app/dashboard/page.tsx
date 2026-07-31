@@ -2,6 +2,7 @@ import { redirect } from "next/navigation";
 import Link from "next/link";
 import { getSession } from "@/lib/session";
 import { findVendorByOwner, findQuoteRequestsByVendor, findQuoteRequestsByCustomer } from "@/lib/db";
+import LeadStatusControl from "./lead-status-control";
 
 export default async function DashboardPage() {
   const session = await getSession();
@@ -47,7 +48,10 @@ async function VendorDashboard({ userId }: { userId: number }) {
   return (
     <>
       <p className="text-ink-soft text-sm mt-1 mb-6">
-        Real stats for <span className="font-medium text-accent">{vendor.name}</span>.
+        Real stats for <span className="font-medium text-accent">{vendor.name}</span>.{" "}
+        <Link href="/dashboard/edit-listing" className="text-accent hover:underline">
+          Edit listing
+        </Link>
       </p>
       <div className="grid grid-cols-2 sm:grid-cols-3 gap-3.5 mb-4">
         <Stat num={String(leads.length)} label="Total leads" />
@@ -65,23 +69,26 @@ async function VendorDashboard({ userId }: { userId: number }) {
           leads.slice(0, 8).map((l, i) => (
             <div
               key={l.id}
-              className={`flex items-start gap-2.5 py-2 text-sm ${
+              className={`flex items-start justify-between gap-2.5 py-2 text-sm ${
                 i < Math.min(leads.length, 8) - 1 ? "border-b border-line" : ""
               }`}
             >
-              <span
-                className={`w-2 h-2 rounded-full shrink-0 mt-1.5 ${
-                  l.status === "pending" ? "bg-gold" : "bg-accent"
-                }`}
-              />
-              <div>
-                <span className="font-medium">{l.name}</span>
-                {l.event_date ? ` — event on ${new Date(l.event_date).toLocaleDateString("en-IN")}` : ""}
-                {l.budget ? ` — budget ₹${l.budget}` : ""}
-                <div className="text-ink-soft text-xs mt-0.5">
-                  {l.phone} · {new Date(l.created_at).toLocaleDateString("en-IN")}
+              <div className="flex items-start gap-2.5 min-w-0">
+                <span
+                  className={`w-2 h-2 rounded-full shrink-0 mt-1.5 ${
+                    l.status === "pending" ? "bg-gold" : "bg-accent"
+                  }`}
+                />
+                <div className="min-w-0">
+                  <span className="font-medium">{l.name}</span>
+                  {l.event_date ? ` — event on ${new Date(l.event_date).toLocaleDateString("en-IN")}` : ""}
+                  {l.budget ? ` — budget ₹${l.budget}` : ""}
+                  <div className="text-ink-soft text-xs mt-0.5">
+                    {l.phone} · {new Date(l.created_at).toLocaleDateString("en-IN")}
+                  </div>
                 </div>
               </div>
+              <LeadStatusControl quoteId={l.id} status={l.status} />
             </div>
           ))
         )}
