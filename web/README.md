@@ -52,15 +52,17 @@ Prisma needs to download a native query-engine binary from `binaries.prisma.sh` 
 - `/signup` — real signup form (customer or vendor role), creates a user in Postgres, hashes the password, signs the person in. Accepts `?role=vendor` to preset the role (used by the "For Vendors" page's CTA)
 - `/login` — real login form, verifies against the stored password hash
 - `/dashboard` — protected page (redirects to `/login` if not signed in), role-specific content: vendors see real leads/stats from `quote_requests` (or a prompt to create a listing), customers see their real submitted quote requests
-- `/dashboard/create-listing` — a vendor account creates their own business listing, making them findable in `/search`
+- `/dashboard/create-listing` — a vendor account creates their own listing, making them findable in `/search`
+- `/dashboard/edit-listing` — edit an existing listing (shares the same form component as create, via a `mode` prop)
 - `/settings` — real profile editing (name/email) and notification preference toggles, all persisted to Postgres; logout
 - `/about`, `/help`, `/privacy`, `/for-vendors` — static informational pages
 - A single shared `<Header>` component (in `app/header.tsx`), rendered once in the root layout — handles back navigation, the logo, the search box (on `/search`), and signed-in/signed-out state consistently across every page
 - `POST /api/auth/register`, `POST /api/auth/login`, `POST /api/auth/logout` — auth
-- `GET /api/vendors`, `POST /api/vendors` (create a listing), `GET /api/vendors/[id]`, `POST /api/vendors/[id]/quotes` — vendor data, listing creation, and quote requests
+- `GET /api/vendors`, `POST /api/vendors` (create a listing), `GET /api/vendors/[id]`, `PATCH /api/vendors/[id]` (edit a listing), `POST /api/vendors/[id]/quotes` — vendor data, listing management, and quote requests
+- `PATCH /api/quotes/[id]` — a vendor updates a lead's status (pending/responded/booked/declined), shown as a dropdown on the dashboard
 - `PATCH /api/account` — update profile/preferences
 
-**Not wired yet:** Google OAuth (button present but disabled — needs a real Google Cloud OAuth client), editing an existing vendor listing (creation only, no edit form yet), responding to a lead / marking its status (the `status` column exists but nothing changes it), page-view tracking (so "profile visitors" isn't shown — only real countable stats are).
+**Not wired yet:** Google OAuth (button present but disabled — needs a real Google Cloud OAuth client), customer-submitted reviews (reviews are still seed data only), page-view tracking (so "profile visitors" isn't shown — only real countable stats are).
 
 ## Database schema
 
@@ -68,7 +70,7 @@ See `db/schema.sql`. Tables: `users`, `vendors`, `vendor_reviews`, `quote_reques
 
 ## Testing
 
-There's a real automated test suite now: `web/tests/api.test.mjs` — 46 checks covering registration validation (duplicate email, weak password, invalid role), login (correct/wrong password, no email enumeration on either failure), protected-route redirects, vendor search (category/location/rating/text-search filters, sort ordering), vendor detail lookup (including 404/400 handling), quote request submission (including validation and 404-vendor handling), vendor listing creation (including all 4 rejection cases: no auth, wrong role, bad category, duplicate listing), settings updates (including the auth-required check and email-conflict check), logout, and role-specific dashboard content (including that it reflects real data, not just that it renders).
+There's a real automated test suite now: `web/tests/api.test.mjs` — 59 checks covering registration validation, login (correct/wrong password, no email enumeration), protected-route redirects, vendor search (all filter types + sort ordering), vendor detail lookup (404/400 handling), quote request submission, vendor listing creation (all 4 rejection cases), **editing a listing** (success, no-auth, wrong-owner returns 404 not 403, nonexistent id, confirms unedited fields stay unchanged), **quote status updates** (success, no-auth, invalid status, wrong-owner, dashboard reflects the change), settings updates (auth-required + email-conflict checks), logout, and role-specific dashboard content reflecting real data.
 
 To run it:
 ```bash

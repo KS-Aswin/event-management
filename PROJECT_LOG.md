@@ -33,10 +33,12 @@
 - `/signup`, `/login` — match the `/demo` mockup's visual design, wired to real API routes. Google button present but disabled (no OAuth client yet)
 - `/dashboard` — protected, role-specific, **now real data**: vendors see real lead counts/list from `quote_requests` (or a prompt to create a listing if they don't have one), customers see their actual submitted quote requests linked to the vendor
 - `/dashboard/create-listing` — a vendor account creates their own listing, which then makes them findable in `/search` and gives them real dashboard stats
+- `/dashboard/edit-listing` — edit an existing listing (shares the `ListingForm` component with create, via a `mode` prop)
+- Vendor dashboard leads now have a **status dropdown** (`pending`/`responded`/`booked`/`declined`), backed by `PATCH /api/quotes/[id]`
 - `/settings` — real profile edit (name/email) + notification toggles, persisted to Postgres
 - `/about`, `/help`, `/privacy`, `/for-vendors` — static pages with real written copy
 - `web/db/seed.mjs` — seeds 9 sample vendors + reviews matching `/demo`'s data, so both versions are consistent
-- **`web/tests/api.test.mjs`** — real automated test suite, 46 checks, run with `npm run test:api` against a live dev server. See Session 6 and 7 log entries.
+- **`web/tests/api.test.mjs`** — real automated test suite, 59 checks, run with `npm run test:api` against a live dev server. See Session 6–8 log entries.
 - Tested via `npm run build` (must pass — TypeScript + compile check) plus the automated suite above before every commit.
 
 **Known limitations / deliberate decisions:**
@@ -119,9 +121,9 @@
 
 Roughly in priority order — pick up wherever makes sense:
 
-- [ ] **Vendor stats are still incomplete on purpose.** "Profile visitors" and "conversion rate" are gone from the vendor dashboard now (rather than being fake) since there's no page-view tracking — only real countable things (total leads, pending count, review count) are shown. Adding page-view tracking would let those come back as real numbers.
-- [ ] **No way to respond to a lead yet.** A vendor can see their quote requests but there's no UI to mark one as responded/booked, or to message the customer back. `quote_requests.status` exists in the schema and defaults to `'pending'` but nothing ever changes it.
-- [ ] **Vendors can create a listing but not edit it.** Once created, there's no edit form yet.
+- [ ] **Vendor stats are still incomplete on purpose.** "Profile visitors" and "conversion rate" aren't shown since there's no page-view tracking — only real countable things (total leads, pending count, review count) are shown. Adding page-view tracking would let those come back as real numbers.
+- [ ] **No customer-facing view of a quote's status.** A vendor can mark a quote as responded/booked/declined now, but the customer dashboard shows the raw status text rather than anything more polished (e.g. no notification when it changes).
+- [ ] **Reviews can't be submitted by customers yet** — `vendor_reviews` only has seed data, no UI or API route to create one.
 - [ ] **Google OAuth** — needs a real Google Cloud OAuth client (client ID + secret), which only the project owner can create in Google Cloud Console. The button is present but disabled until then.
 - [ ] Decide on hosting for the real app (Vercel is the natural fit for Next.js) and a real production Postgres (Neon, Supabase, Railway, etc. all have free tiers) — nothing is deployed anywhere yet, everything so far only runs locally / in the dev sandbox.
 - [ ] Enable GitHub Pages for the `/demo` folder specifically, so there's a live shareable link for the mockup (asked about a few times now, no answer received yet — low priority, just noting it's still pending).
@@ -155,6 +157,14 @@ Both `npm run build` and `npm run test:api` should pass with zero failures befor
 ## 6. Session Log
 
 > Add a new dated entry each session, newest at the top. Keep entries short — a few lines of what changed and why, not a full diff.
+
+### 2026-07-28 — Session 8 (edit listing, respond to leads)
+- Added `PATCH /api/vendors/[id]` — a vendor can now edit their own listing (name, category, location, price, experience, tags, about). Refactored `create-listing-form.tsx` into a shared `ListingForm` component with `mode="create" | "edit"`, used by both `/dashboard/create-listing` (unchanged) and the new `/dashboard/edit-listing`.
+- Added `PATCH /api/quotes/[id]` — a vendor can change a lead's status (`pending` → `responded`/`booked`/`declined`) via a dropdown on the dashboard (`lead-status-control.tsx`, optimistic update with rollback on failure).
+- **Security detail worth remembering:** both new PATCH routes check ownership *inside* the SQL `WHERE` clause (`WHERE id = $1 AND owner_id = $2`) rather than as a separate "fetch then check" step. This means there's no window for a race condition, and — just as importantly — a caller editing someone else's listing/quote gets the same 404 whether the id doesn't exist at all or exists but isn't theirs. Returning 403 instead would leak "this id is real, you just can't touch it," which is a minor but real information leak. Test suite explicitly checks for 404, not 403, in both cases.
+- Extended `web/tests/api.test.mjs` to 59 checks (from 46): edit-listing (success, no-auth, wrong-owner, nonexistent-id, confirms unedited fields stay unchanged), quote status updates (success, no-auth, invalid status value, wrong-owner, dashboard reflects the change).
+- Full suite run against a freshly-seeded database: **59 passed, 0 failed**. Clean `npm run build` (20 routes).
+- Updated `web/README.md` and this file.
 
 ### 2026-07-28 — Session 7 (dashboard now shows real data, vendors can create listings)
 - **Removed the last remaining fake data from the app.** The dashboard used to show honestly-labeled sample stats/checklists — now it shows real data, which required solving vendor ownership first (a vendor account had no way to actually own a listing before this):
