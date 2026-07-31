@@ -280,6 +280,79 @@ async function main() {
     customerDashAfterQuote.text.includes(`Automated Test Studio ${RUN_ID}`)
   );
 
+  // ---------- Edit listing ----------
+  const editNoAuth = await request(`/api/vendors/${createdVendorId}`, {
+    method: "PATCH",
+    body: { name: "Hacked Name" },
+  });
+  check("edit listing: rejected without auth (401)", editNoAuth.status, 401);
+
+  const editByOtherUser = await request(`/api/vendors/${createdVendorId}`, {
+    method: "PATCH",
+    body: { name: "Wrong Owner Edit" },
+    cookie: customerCookie, // not the owner of this listing
+  });
+  check("edit listing: rejected when not the owner (404, not leaked as 403)", editByOtherUser.status, 404);
+
+  const editOk = await request(`/api/vendors/${createdVendorId}`, {
+    method: "PATCH",
+    body: { name: `Renamed Studio ${RUN_ID}`, price: 45000 },
+    cookie: vendorCookie,
+  });
+  check("edit listing: owner can update their own listing (200)", editOk.status, 200);
+  check("edit listing: name actually changed", editOk.data?.vendor?.name, `Renamed Studio ${RUN_ID}`);
+  check("edit listing: unset fields left unchanged (category still Photography)", editOk.data?.vendor?.category, "Photography");
+
+  const editBadVendorId = await request(`/api/vendors/999999999`, {
+    method: "PATCH",
+    body: { name: "Doesn't matter" },
+    cookie: vendorCookie,
+  });
+  check("edit listing: nonexistent vendor id returns 404", editBadVendorId.status, 404);
+
+  // ---------- Quote status updates ----------
+  // Submit a fresh quote against createdVendorId specifically for this section.
+  const freshQuote = await request(`/api/vendors/${createdVendorId}/quotes`, {
+    method: "POST",
+    body: { name: "Status Test Customer", phone: "9999955555" },
+  });
+  const quoteIdForStatusTest = freshQuote.data?.quote?.id;
+  checkTrue("quote status setup: got a quote id to test with", typeof quoteIdForStatusTest === "number");
+
+  const statusNoAuth = await request(`/api/quotes/${quoteIdForStatusTest}`, {
+    method: "PATCH",
+    body: { status: "booked" },
+  });
+  check("quote status: rejected without auth (401)", statusNoAuth.status, 401);
+
+  const statusInvalid = await request(`/api/quotes/${quoteIdForStatusTest}`, {
+    method: "PATCH",
+    body: { status: "not_a_real_status" },
+    cookie: vendorCookie,
+  });
+  check("quote status: invalid status value rejected (400)", statusInvalid.status, 400);
+
+  const statusByWrongVendor = await request(`/api/quotes/${quoteIdForStatusTest}`, {
+    method: "PATCH",
+    body: { status: "booked" },
+    cookie: customerCookie, // has no vendor listing at all
+  });
+  check("quote status: rejected when caller doesn't own the vendor listing (404)", statusByWrongVendor.status, 404);
+
+  const statusOk = await request(`/api/quotes/${quoteIdForStatusTest}`, {
+    method: "PATCH",
+    body: { status: "responded" },
+    cookie: vendorCookie,
+  });
+  check("quote status: owner can update status (200)", statusOk.status, 200);
+  check("quote status: status actually changed", statusOk.data?.quote?.status, "responded");
+
+  const vendorDashAfterStatusChange = await request("/dashboard", { cookie: vendorCookie });
+  checkTrue(
+    "vendor dashboard: status dropdown reflects the update",
+    vendorDashAfterStatusChange.text.includes("responded")
+  );
+
   // ---------- Settings ----------
   const settingsNoAuth = await request("/api/account", {
     method: "PATCH",
