@@ -284,3 +284,74 @@ export async function findQuoteRequestsByVendor(vendorId: number): Promise<LeadR
   );
   return result.rows;
 }
+
+export async function updateVendorListing(
+  vendorId: number,
+  ownerId: number,
+  fields: {
+    name?: string;
+    category?: string;
+    location?: string;
+    price?: number;
+    priceLabel?: string;
+    experience?: string;
+    tags?: string[];
+    about?: string;
+  }
+): Promise<VendorRecord | null> {
+  // The ownerId check is done in the same query (WHERE owner_id = $X) rather
+  // than as a separate lookup, so there's no window where a caller could
+  // race between "check ownership" and "perform update" — the update simply
+  // can't match a row that isn't theirs.
+  const result = await pool.query<VendorRecord>(
+    `UPDATE vendors SET
+       name = COALESCE($3, name),
+       category = COALESCE($4, category),
+       location = COALESCE($5, location),
+       price = COALESCE($6, price),
+       price_label = COALESCE($7, price_label),
+       experience = COALESCE($8, experience),
+       tags = COALESCE($9, tags),
+       about = COALESCE($10, about)
+     WHERE id = $1 AND owner_id = $2
+     RETURNING *`,
+    [
+      vendorId,
+      ownerId,
+      fields.name ?? null,
+      fields.category ?? null,
+      fields.location ?? null,
+      fields.price ?? null,
+      fields.priceLabel ?? null,
+      fields.experience ?? null,
+      fields.tags ?? null,
+      fields.about ?? null,
+    ]
+  );
+  return result.rows[0] ?? null;
+}
+
+export const QUOTE_STATUSES = ["pending", "responded", "booked", "declined"] as const;
+export type QuoteStatus = (typeof QUOTE_STATUSES)[number];
+
+export async function updateQuoteStatus(
+  quoteId: number,
+  ownerId: number,
+  status: QuoteStatus
+): Promise<LeadRecord | null> {
+  // Same pattern as updateVendorListing: the ownership check is baked into
+  // the WHERE clause (via a join back to vendors.owner_id) instead of done
+  // as a separate query, so a vendor can only ever update the status of a
+  // quote request that was actually sent to their own listing.
+  const result = await pool.query<LeadRecord>(
+    `UPDATE quote_requests q
+     SET status = $3
+     FROM vendors v
+     WHERE q.id = $1
+       AND q.vendor_id = v.id
+       AND v.owner_id = $2
+     RETURNING q.id, q.name, q.phone, q.event_date, q.budget, q.message, q.status, q.created_at`,
+    [quoteId, ownerId, status]
+  );
+  return result.rows[0] ?? null;
+}

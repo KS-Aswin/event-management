@@ -4,15 +4,32 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { CATEGORIES } from "@/lib/vendorVisuals";
 
-export default function CreateListingForm() {
+interface InitialValues {
+  vendorId: number;
+  name: string;
+  category: string;
+  location: string;
+  price: number;
+  experience: string;
+  tags: string[];
+  about: string;
+}
+
+export default function ListingForm({
+  mode,
+  initialValues,
+}: {
+  mode: "create" | "edit";
+  initialValues?: InitialValues;
+}) {
   const router = useRouter();
-  const [name, setName] = useState("");
-  const [category, setCategory] = useState<string>(CATEGORIES[0]);
-  const [location, setLocation] = useState("");
-  const [price, setPrice] = useState("");
-  const [experience, setExperience] = useState("");
-  const [tags, setTags] = useState("");
-  const [about, setAbout] = useState("");
+  const [name, setName] = useState(initialValues?.name ?? "");
+  const [category, setCategory] = useState<string>(initialValues?.category ?? CATEGORIES[0]);
+  const [location, setLocation] = useState(initialValues?.location ?? "");
+  const [price, setPrice] = useState(initialValues ? String(initialValues.price) : "");
+  const [experience, setExperience] = useState(initialValues?.experience ?? "");
+  const [tags, setTags] = useState(initialValues?.tags.join(", ") ?? "");
+  const [about, setAbout] = useState(initialValues?.about ?? "");
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
 
@@ -20,8 +37,12 @@ export default function CreateListingForm() {
     e.preventDefault();
     setError(null);
     setLoading(true);
-    const res = await fetch("/api/vendors", {
-      method: "POST",
+
+    const url = mode === "edit" ? `/api/vendors/${initialValues!.vendorId}` : "/api/vendors";
+    const method = mode === "edit" ? "PATCH" : "POST";
+
+    const res = await fetch(url, {
+      method,
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         name,
@@ -91,7 +112,7 @@ export default function CreateListingForm() {
         disabled={loading}
         className="px-4.5 py-2.5 rounded-md bg-accent hover:bg-accent-hover text-white text-sm font-medium disabled:opacity-70"
       >
-        {loading ? "Creating…" : "Create listing"}
+        {loading ? (mode === "edit" ? "Saving…" : "Creating…") : mode === "edit" ? "Save changes" : "Create listing"}
       </button>
     </form>
   );
