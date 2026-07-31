@@ -1,7 +1,7 @@
 import { redirect } from "next/navigation";
 import { getSession } from "@/lib/session";
 import { findVendorByOwner } from "@/lib/db";
-import CreateListingForm from "./create-listing-form";
+import ListingForm from "./create-listing-form";
 
 export default async function CreateListingPage() {
   const session = await getSession();
@@ -17,7 +17,7 @@ export default async function CreateListingPage() {
       <p className="text-ink-soft text-sm mb-6">
         This is what customers will see when they search for vendors like you.
       </p>
-      <CreateListingForm />
+      <ListingForm mode="create" />
     </main>
   );
 }
