@@ -353,6 +353,76 @@ async function main() {
     vendorDashAfterStatusChange.text.includes("responded")
   );
 
+  // ---------- Reviews ----------
+  const vendorBeforeReview = await request(`/api/vendors/${createdVendorId}`);
+  const reviewsCountBefore = vendorBeforeReview.data?.vendor?.reviews_count;
+
+  const reviewNoAuth = await request(`/api/vendors/${createdVendorId}/reviews`, {
+    method: "POST",
+    body: { rating: 5, body: "Great service overall" },
+  });
+  check("review: rejected without auth (401)", reviewNoAuth.status, 401);
+
+  const reviewBadRating = await request(`/api/vendors/${createdVendorId}/reviews`, {
+    method: "POST",
+    body: { rating: 7, body: "Rating out of range" },
+    cookie: customerCookie,
+  });
+  check("review: out-of-range rating rejected (400)", reviewBadRating.status, 400);
+
+  const reviewTooShort = await request(`/api/vendors/${createdVendorId}/reviews`, {
+    method: "POST",
+    body: { rating: 4, body: "ok" },
+    cookie: customerCookie,
+  });
+  check("review: body too short rejected (400)", reviewTooShort.status, 400);
+
+  const reviewOwnListing = await request(`/api/vendors/${createdVendorId}/reviews`, {
+    method: "POST",
+    body: { rating: 5, body: "Reviewing my own business, shouldn't be allowed" },
+    cookie: vendorCookie, // vendorCookie owns createdVendorId
+  });
+  check("review: rejected when reviewing your own listing (403)", reviewOwnListing.status, 403);
+
+  const reviewOk = await request(`/api/vendors/${createdVendorId}/reviews`, {
+    method: "POST",
+    body: { rating: 5, body: "Excellent to work with, highly recommend for weddings." },
+    cookie: customerCookie,
+  });
+  check("review: valid submission accepted (201)", reviewOk.status, 201);
+
+  const reviewDuplicate = await request(`/api/vendors/${createdVendorId}/reviews`, {
+    method: "POST",
+    body: { rating: 3, body: "Trying to review the same vendor twice" },
+    cookie: customerCookie,
+  });
+  check("review: duplicate review by same customer rejected (409)", reviewDuplicate.status, 409);
+
+  const vendorAfterReview = await request(`/api/vendors/${createdVendorId}`);
+  check(
+    "review: vendor's reviews_count incremented",
+    vendorAfterReview.data?.vendor?.reviews_count,
+    reviewsCountBefore + 1
+  );
+  check(
+    "review: vendor's rating recalculated to the new review's rating",
+    Number(vendorAfterReview.data?.vendor?.rating),
+    5
+  );
+
+  const reviewBadVendor = await request(`/api/vendors/999999999/reviews`, {
+    method: "POST",
+    body: { rating: 4, body: "Reviewing a vendor that doesn't exist" },
+    cookie: customerCookie,
+  });
+  check("review: nonexistent vendor returns 404", reviewBadVendor.status, 404);
+
+  const profilePageAfterReview = await request(`/vendors/${createdVendorId}`);
+  checkTrue(
+    "vendor profile page: shows the newly submitted review text",
+    profilePageAfterReview.text.includes("Excellent to work with")
+  );
+
   // ---------- Settings ----------
   const settingsNoAuth = await request("/api/account", {
     method: "PATCH",
