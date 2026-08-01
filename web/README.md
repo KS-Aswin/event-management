@@ -61,8 +61,9 @@ Prisma needs to download a native query-engine binary from `binaries.prisma.sh` 
 - `GET /api/vendors`, `POST /api/vendors` (create a listing), `GET /api/vendors/[id]`, `PATCH /api/vendors/[id]` (edit a listing), `POST /api/vendors/[id]/quotes` — vendor data, listing management, and quote requests
 - `PATCH /api/quotes/[id]` — a vendor updates a lead's status (pending/responded/booked/declined), shown as a dropdown on the dashboard
 - `PATCH /api/account` — update profile/preferences
+- `POST /api/vendors/[id]/reviews` — a logged-in customer submits a star rating + review, shown on the vendor's profile page. One review per customer per vendor; the vendor's aggregate rating and review count are recalculated in the same transaction as the insert.
 
-**Not wired yet:** Google OAuth (button present but disabled — needs a real Google Cloud OAuth client), customer-submitted reviews (reviews are still seed data only), page-view tracking (so "profile visitors" isn't shown — only real countable stats are).
+**Not wired yet:** Google OAuth (button present but disabled — needs a real Google Cloud OAuth client), page-view tracking (so "profile visitors" isn't shown — only real countable stats are), customer notifications when a quote's status changes.
 
 ## Database schema
 
@@ -70,7 +71,7 @@ See `db/schema.sql`. Tables: `users`, `vendors`, `vendor_reviews`, `quote_reques
 
 ## Testing
 
-There's a real automated test suite now: `web/tests/api.test.mjs` — 59 checks covering registration validation, login (correct/wrong password, no email enumeration), protected-route redirects, vendor search (all filter types + sort ordering), vendor detail lookup (404/400 handling), quote request submission, vendor listing creation (all 4 rejection cases), **editing a listing** (success, no-auth, wrong-owner returns 404 not 403, nonexistent id, confirms unedited fields stay unchanged), **quote status updates** (success, no-auth, invalid status, wrong-owner, dashboard reflects the change), settings updates (auth-required + email-conflict checks), logout, and role-specific dashboard content reflecting real data.
+There's a real automated test suite now: `web/tests/api.test.mjs` — 69 checks covering registration validation, login (correct/wrong password, no email enumeration), protected-route redirects, vendor search (all filter types + sort ordering), vendor detail lookup (404/400 handling), quote request submission, vendor listing creation (all 4 rejection cases), editing a listing (success, no-auth, wrong-owner returns 404 not 403, nonexistent id, unedited fields unchanged), quote status updates (success, no-auth, invalid status, wrong-owner, dashboard reflects the change), **review submission** (success + all rejection cases: no auth, bad rating, short body, own-listing, duplicate, nonexistent vendor — plus confirms the vendor's rating/count actually recalculate and the review text actually renders), settings updates (auth-required + email-conflict checks), logout, and role-specific dashboard content reflecting real data.
 
 To run it:
 ```bash

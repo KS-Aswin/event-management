@@ -35,11 +35,13 @@
 - `/dashboard/create-listing` — a vendor account creates their own listing, which then makes them findable in `/search` and gives them real dashboard stats
 - `/dashboard/edit-listing` — edit an existing listing (shares the `ListingForm` component with create, via a `mode` prop)
 - Vendor dashboard leads now have a **status dropdown** (`pending`/`responded`/`booked`/`declined`), backed by `PATCH /api/quotes/[id]`
+- **Customers can submit real reviews** — star rating + text, one per customer per vendor, vendor's aggregate rating/count recalculated transactionally. Blocks self-review and duplicate review, both tested.
 - `/settings` — real profile edit (name/email) + notification toggles, persisted to Postgres
 - `/about`, `/help`, `/privacy`, `/for-vendors` — static pages with real written copy
 - `web/db/seed.mjs` — seeds 9 sample vendors + reviews matching `/demo`'s data, so both versions are consistent
-- **`web/tests/api.test.mjs`** — real automated test suite, 59 checks, run with `npm run test:api` against a live dev server. See Session 6–8 log entries.
+- **`web/tests/api.test.mjs`** — real automated test suite, 69 checks, run with `npm run test:api` against a live dev server. See Session 6–9 log entries.
 - Tested via `npm run build` (must pass — TypeScript + compile check) plus the automated suite above before every commit.
+- `/demo` mockup now has a live shareable link via GitHub Pages (`gh-pages` branch) — see Session 9 for how that was set up.
 
 **Known limitations / deliberate decisions:**
 - **Not using Prisma.** Its query-engine binary is hosted on `binaries.prisma.sh`, unreachable from this sandbox's network. Using the plain `pg` driver + hand-written SQL instead (`web/db/schema.sql` + `web/db/migrate.mjs`). Worth reconsidering if developing somewhere with normal network access.
@@ -121,12 +123,10 @@
 
 Roughly in priority order — pick up wherever makes sense:
 
-- [ ] **Vendor stats are still incomplete on purpose.** "Profile visitors" and "conversion rate" aren't shown since there's no page-view tracking — only real countable things (total leads, pending count, review count) are shown. Adding page-view tracking would let those come back as real numbers.
-- [ ] **No customer-facing view of a quote's status.** A vendor can mark a quote as responded/booked/declined now, but the customer dashboard shows the raw status text rather than anything more polished (e.g. no notification when it changes).
-- [ ] **Reviews can't be submitted by customers yet** — `vendor_reviews` only has seed data, no UI or API route to create one.
+- [ ] **Deploy the real app somewhere** (Vercel is the natural fit for Next.js) with a real production Postgres (Neon, Supabase, Railway all have free tiers) — nothing is deployed anywhere yet, everything so far only runs locally / in the dev sandbox. **In progress as of Session 9** — walking through Neon + Vercel setup with the user, needs their account creation (can't be done from this side).
+- [ ] **Vendor stats are still incomplete on purpose.** "Profile visitors" and "conversion rate" aren't shown since there's no page-view tracking — only real countable things (total leads, pending count, review count) are shown.
+- [ ] **No customer-facing notification when a quote's status changes** — a vendor can mark a lead as responded/booked/declined, but the customer just sees the updated status text next time they check their dashboard, no notification.
 - [ ] **Google OAuth** — needs a real Google Cloud OAuth client (client ID + secret), which only the project owner can create in Google Cloud Console. The button is present but disabled until then.
-- [ ] Decide on hosting for the real app (Vercel is the natural fit for Next.js) and a real production Postgres (Neon, Supabase, Railway, etc. all have free tiers) — nothing is deployed anywhere yet, everything so far only runs locally / in the dev sandbox.
-- [ ] Enable GitHub Pages for the `/demo` folder specifically, so there's a live shareable link for the mockup (asked about a few times now, no answer received yet — low priority, just noting it's still pending).
 - [ ] Revisit the original bigger product brief (AI planner, full vendor CRM, admin panel, etc.) if/when ready to scope further — that content isn't in this repo, it was discussed in chat only.
 - [ ] No mobile-specific manual testing has been done on `/web` yet.
 - [ ] The API test suite covers backend behavior well but not UI rendering/interaction — consider Playwright later if UI regressions become a concern.
@@ -157,6 +157,17 @@ Both `npm run build` and `npm run test:api` should pass with zero failures befor
 ## 6. Session Log
 
 > Add a new dated entry each session, newest at the top. Keep entries short — a few lines of what changed and why, not a full diff.
+
+### 2026-07-28 — Session 9 (customer reviews, GitHub Pages for the demo)
+- **Reviews can now be submitted for real.** Added `customer_id` to `vendor_reviews` (nullable — seed reviews don't have one), plus a partial unique index (`WHERE customer_id IS NOT NULL`) preventing the same customer from reviewing the same vendor twice. Added `POST /api/vendors/[id]/reviews` and a star-rating `ReviewForm` client component on the vendor profile page.
+- `createVendorReview` runs the insert **and** the vendor's aggregate rating/review-count recalculation inside a single DB transaction (`BEGIN`/`COMMIT`, with `SELECT ... FOR UPDATE` on the vendor row to avoid a race if two reviews land at the same time). Recomputes the average from every review each time rather than incrementally adjusting a running average — simpler to reason about correctly, and the table will never be large enough for that to matter performance-wise.
+- Blocks two specific misuse cases explicitly, each with its own test: a vendor reviewing their own listing (403), and a customer reviewing the same vendor twice (409, caught via the DB's unique constraint — `pg` error code `23505` — rather than a separate check-then-insert, so it's race-safe too).
+- The profile page now shows, depending on who's looking: the review form (signed in, hasn't reviewed yet, not their own listing), "you've already reviewed this vendor" (signed in, already reviewed), a sign-in prompt (logged out), or nothing (viewing your own listing).
+- **Finally resolved the long-pending GitHub Pages request.** Since GitHub's Pages API only serves from a branch's `/` or `/docs`, and `/demo` is neither, created a dedicated `gh-pages` branch containing just `demo/index.html` copied to the branch root — keeps `main`'s `/demo` folder as the actual source of truth, `gh-pages` is just a deploy target. Pushed that branch successfully, but **enabling Pages itself via the API failed** — the fine-grained PAT's "Administration: write" scope doesn't cover the separate "Pages" permission category GitHub's Pages API requires, and gave a 403. Talked the user through flipping the one setting manually (Settings → Pages → source = `gh-pages` branch, root) — no new token needed since it's just a repo setting, not a write operation.
+- Extended `web/tests/api.test.mjs` to 69 checks (from 59): review submission (success + all rejection cases: no auth, bad rating range, body too short, own-listing, duplicate, nonexistent vendor), confirms the vendor's `reviews_count` and `rating` actually update correctly after a real review lands, confirms the new review's text actually renders on the profile page (not just that the API call succeeded).
+- Full suite run against a freshly-seeded database: **69 passed, 0 failed**. Clean `npm run build` (22 routes).
+- **Also in progress this session (not yet complete):** walking the user through real deployment — Neon for Postgres, Vercel for hosting, importing from this repo with root directory set to `web/`. Waiting on the user to create those accounts; I'll finish the database schema setup on the live Neon instance once they share the connection string.
+- Updated `web/README.md` and this file.
 
 ### 2026-07-28 — Session 8 (edit listing, respond to leads)
 - Added `PATCH /api/vendors/[id]` — a vendor can now edit their own listing (name, category, location, price, experience, tags, about). Refactored `create-listing-form.tsx` into a shared `ListingForm` component with `mode="create" | "edit"`, used by both `/dashboard/create-listing` (unchanged) and the new `/dashboard/edit-listing`.
