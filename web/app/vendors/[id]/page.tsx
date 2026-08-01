@@ -1,7 +1,10 @@
 import { notFound } from "next/navigation";
+import Link from "next/link";
 import { findVendorById, findReviewsByVendor } from "@/lib/db";
+import { getSession } from "@/lib/session";
 import { VendorTile } from "@/lib/vendorVisuals";
 import QuoteButton from "./quote-button";
+import ReviewForm from "./review-form";
 
 function formatPrice(n: number) {
   return "₹" + Math.round(n).toLocaleString("en-IN");
@@ -19,8 +22,12 @@ export default async function VendorProfilePage({
   const vendor = await findVendorById(vendorId);
   if (!vendor) notFound();
 
-  const reviews = await findReviewsByVendor(vendorId);
+  const [reviews, session] = await Promise.all([findReviewsByVendor(vendorId), getSession()]);
   const price = Number(vendor.price);
+  const alreadyReviewed = session
+    ? reviews.some((r) => r.customer_id === session.userId)
+    : false;
+  const isOwnListing = session ? vendor.owner_id === session.userId : false;
 
   return (
     <main className="w-full">
@@ -69,6 +76,20 @@ export default async function VendorProfilePage({
           </div>
 
           <h2 className="text-base font-semibold mt-6.5 mb-3">Reviews</h2>
+
+          {isOwnListing ? null : alreadyReviewed ? (
+            <p className="text-sm text-ink-soft mb-4">You&apos;ve already reviewed this vendor.</p>
+          ) : session ? (
+            <ReviewForm vendorId={vendor.id} />
+          ) : (
+            <p className="text-sm text-ink-soft mb-4">
+              <Link href="/login" className="text-accent hover:underline">
+                Sign in
+              </Link>{" "}
+              to leave a review.
+            </p>
+          )}
+
           {reviews.length === 0 ? (
             <p className="text-sm text-ink-soft">No reviews yet.</p>
           ) : (
