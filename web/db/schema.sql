@@ -40,11 +40,16 @@ CREATE TABLE IF NOT EXISTS vendors (
   experience TEXT NOT NULL,
   tags TEXT[] NOT NULL DEFAULT '{}',
   about TEXT NOT NULL,
+  published BOOLEAN NOT NULL DEFAULT true,
   created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
 CREATE INDEX IF NOT EXISTS idx_vendors_category ON vendors (category);
 CREATE INDEX IF NOT EXISTS idx_vendors_location ON vendors (location);
+CREATE INDEX IF NOT EXISTS idx_vendors_owner ON vendors (owner_id);
+
+-- In case this ran before `published` existed:
+ALTER TABLE vendors ADD COLUMN IF NOT EXISTS published BOOLEAN NOT NULL DEFAULT true;
 
 CREATE TABLE IF NOT EXISTS vendor_reviews (
   id SERIAL PRIMARY KEY,
@@ -72,4 +77,14 @@ CREATE TABLE IF NOT EXISTS quote_requests (
 
 CREATE INDEX IF NOT EXISTS idx_quote_requests_vendor ON quote_requests (vendor_id);
 CREATE INDEX IF NOT EXISTS idx_quote_requests_customer ON quote_requests (customer_id);
+
+-- Links a review to the real account that wrote it. Nullable because the
+-- seeded sample reviews (see db/seed.mjs) don't correspond to real users.
+ALTER TABLE vendor_reviews ADD COLUMN IF NOT EXISTS customer_id INTEGER REFERENCES users(id) ON DELETE SET NULL;
+
+-- One review per customer per vendor. Partial index (WHERE customer_id IS
+-- NOT NULL) so the NULL-customer_id seed rows don't collide with each other.
+CREATE UNIQUE INDEX IF NOT EXISTS uniq_vendor_review_per_customer
+  ON vendor_reviews (vendor_id, customer_id) WHERE customer_id IS NOT NULL;
+
 

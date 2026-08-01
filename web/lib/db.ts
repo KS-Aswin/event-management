@@ -167,6 +167,7 @@ export async function findAllLocations(): Promise<string[]> {
 export interface ReviewRecord {
   id: number;
   vendor_id: number;
+  customer_id: number | null;
   reviewer_name: string;
   rating: number;
   body: string;
@@ -354,4 +355,73 @@ export async function updateQuoteStatus(
     [quoteId, ownerId, status]
   );
   return result.rows[0] ?? null;
+}
+
+export type CreateReviewResult =
+  | { ok: true; review: ReviewRecord }
+  | { ok: false; reason: "vendor_not_found" | "already_reviewed" | "own_listing" };
+
+export async function createVendorReview(params: {
+  vendorId: number;
+  customerId: number;
+  reviewerName: string;
+  rating: number;
+  body: string;
+}): Promise<CreateReviewResult> {
+  const client = await pool.connect();
+  try {
+    await client.query("BEGIN");
+
+    const vendorRes = await client.query<VendorRecord>(
+      "SELECT * FROM vendors WHERE id = $1 FOR UPDATE",
+      [params.vendorId]
+    );
+    const vendor = vendorRes.rows[0];
+    if (!vendor) {
+      await client.query("ROLLBACK");
+      return { ok: false, reason: "vendor_not_found" };
+    }
+    if (vendor.owner_id === params.customerId) {
+      await client.query("ROLLBACK");
+      return { ok: false, reason: "own_listing" };
+    }
+
+    let reviewRow;
+    try {
+      const insertRes = await client.query<ReviewRecord>(
+        `INSERT INTO vendor_reviews (vendor_id, customer_id, reviewer_name, rating, body)
+         VALUES ($1,$2,$3,$4,$5) RETURNING *`,
+        [params.vendorId, params.customerId, params.reviewerName, params.rating, params.body]
+      );
+      reviewRow = insertRes.rows[0];
+    } catch (err) {
+      await client.query("ROLLBACK");
+      // 23505 = unique_violation — the partial unique index on
+      // (vendor_id, customer_id) caught a duplicate review attempt.
+      if (err && typeof err === "object" && "code" in err && err.code === "23505") {
+        return { ok: false, reason: "already_reviewed" };
+      }
+      throw err;
+    }
+
+    // Recompute the vendor's aggregate rating from every review that now
+    // exists, rather than trying to incrementally adjust a running average
+    // (which is easy to get subtly wrong). This table won't have enough
+    // rows for a full recompute to be a performance concern.
+    await client.query(
+      `UPDATE vendors SET
+         rating = (SELECT ROUND(AVG(rating)::numeric, 1) FROM vendor_reviews WHERE vendor_id = $1),
+         reviews_count = (SELECT COUNT(*) FROM vendor_reviews WHERE vendor_id = $1)
+       WHERE id = $1`,
+      [params.vendorId]
+    );
+
+    await client.query("COMMIT");
+    return { ok: true, review: reviewRow };
+  } catch (err) {
+    await client.query("ROLLBACK");
+    throw err;
+  } finally {
+    client.release();
+  }
 }
