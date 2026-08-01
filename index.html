@@ -1,0 +1,908 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Vela — Plan your event</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Poppins:wght@500;600&family=Inter:wght@400;500;600&display=swap');
+
+  :root{
+    --bg:#ffffff; --ink:#202124; --ink-soft:#5f6368; --line:#e8eaed;
+    --chip:#f1f3f4; --chip-hover:#e8eaed;
+    --accent:#0f6d52; --accent-hover:#0b5940; --accent-tint:#e6f2ee; --gold:#c9a227;
+    --danger:#c5221f;
+  }
+  *{box-sizing:border-box; margin:0; padding:0;}
+  body{ font-family:'Inter',-apple-system,sans-serif; color:var(--ink); background:var(--bg); min-height:100vh; }
+  a{ color:inherit; cursor:pointer; }
+  button{ font-family:inherit; cursor:pointer; }
+  button:active, .chip:active, .filter-chip:active, a:active{ transform:scale(0.97); }
+  .view{ display:none; }
+  .view.active{ display:block; }
+
+  /* ---- Shared header (single source of truth for nav) ---- */
+  #appHeader{
+    display:flex; align-items:center; justify-content:space-between;
+    gap:16px; padding:14px 28px; position:sticky; top:0; background:#fff; z-index:20;
+  }
+  #appHeader.bordered{ border-bottom:1px solid var(--line); }
+  .topbar-left{ display:flex; align-items:center; gap:8px; min-width:34px; }
+  .icon-btn{ background:none; border:none; display:flex; align-items:center; justify-content:center; width:34px; height:34px; border-radius:50%; color:var(--ink); flex-shrink:0; }
+  .icon-btn:hover{ background:var(--chip); }
+  .logo{ font-family:'Poppins',sans-serif; font-weight:600; font-size:22px; color:var(--accent); white-space:nowrap; }
+  .logo span{ color:var(--gold); }
+  .nav-right{ display:flex; align-items:center; gap:22px; font-size:14px; white-space:nowrap; }
+  .nav-right a{ text-decoration:none; color:var(--ink); }
+  .nav-right a:hover{ text-decoration:underline; }
+  .nav-signin{ background:var(--accent); color:#fff !important; padding:8px 18px; border-radius:4px; font-weight:500; }
+  .nav-signin:hover{ background:var(--accent-hover); text-decoration:none !important; }
+  .nav-hi{ color:var(--ink-soft) !important; }
+
+  .mini-search{ display:flex; align-items:center; gap:10px; flex:1; max-width:480px; border:1px solid var(--line); border-radius:20px; padding:9px 16px; }
+  .mini-search input{ border:none; outline:none; flex:1; font-size:14px; font-family:inherit; }
+  .mini-search svg{ color:var(--ink-soft); flex-shrink:0; }
+
+  /* ---- HOME ---- */
+  #home main{ display:flex; flex-direction:column; align-items:center; justify-content:center; padding:56px 20px 96px; min-height:76vh; }
+  .wordmark{ font-family:'Poppins',sans-serif; font-weight:600; font-size:72px; color:var(--accent); margin-bottom:6px; }
+  .wordmark span{ color:var(--gold); }
+  .tagline{ color:var(--ink-soft); font-size:16px; margin-bottom:34px; text-align:center; }
+  .search-wrap{ width:100%; max-width:584px; }
+  .search-bar{ display:flex; align-items:center; gap:12px; width:100%; border:1px solid var(--line); border-radius:24px; padding:12px 20px; transition:box-shadow .15s, border-color .15s; }
+  .search-bar:hover, .search-bar.focused{ box-shadow:0 1px 6px rgba(32,33,36,0.18); border-color:transparent; }
+  .search-bar svg{ flex-shrink:0; color:var(--ink-soft); }
+  .search-bar input{ border:none; outline:none; flex:1; font-size:16px; font-family:inherit; background:transparent; color:var(--ink); }
+  .btn-row{ display:flex; gap:12px; margin-top:26px; flex-wrap:wrap; justify-content:center; }
+  .btn{ background:var(--chip); color:var(--ink); border:1px solid transparent; border-radius:6px; padding:10px 18px; font-size:14px; transition:.15s; }
+  .btn:hover{ background:var(--chip-hover); border-color:var(--line); }
+  .btn.primary{ background:var(--accent); color:#fff; }
+  .btn.primary:hover{ background:var(--accent-hover); }
+  .btn.danger{ background:#fdecea; color:var(--danger); }
+  .btn.danger:hover{ background:#fbd9d5; }
+  .btn.full{ width:100%; padding:11px; }
+  .chip-row{ display:flex; gap:10px; margin-top:42px; flex-wrap:wrap; justify-content:center; max-width:660px; }
+  .chip{ background:var(--bg); border:1px solid var(--line); color:var(--ink-soft); border-radius:20px; padding:8px 16px; font-size:13px; transition:.15s; white-space:nowrap; }
+  .chip:hover{ background:var(--accent-tint); color:var(--accent); border-color:var(--accent-tint); }
+  footer{ border-top:1px solid var(--line); background:#f8f9fa; padding:16px 32px; display:flex; justify-content:space-between; font-size:13px; color:var(--ink-soft); flex-wrap:wrap; gap:10px; }
+  .footer-links{ display:flex; gap:22px; }
+  .footer-links a{ color:var(--ink-soft); text-decoration:none; }
+  .footer-links a:hover{ text-decoration:underline; color:var(--accent); }
+
+  /* ---- RESULTS ---- */
+  .results-shell{ display:flex; max-width:1180px; margin:0 auto; padding:24px 24px 60px; gap:32px; }
+  .filters{ width:230px; flex-shrink:0; }
+  .filters-head{ display:flex; align-items:center; justify-content:space-between; margin-bottom:4px; }
+  .filters h4{ font-size:13px; text-transform:uppercase; letter-spacing:.04em; color:var(--ink-soft); margin:20px 0 10px; }
+  .filters h4:first-child{ margin-top:0; }
+  .clear-link{ font-size:12.5px; color:var(--accent); background:none; border:none; }
+  .clear-link:hover{ text-decoration:underline; }
+  select{ width:100%; padding:8px 10px; border:1px solid var(--line); border-radius:6px; font-size:14px; font-family:inherit; color:var(--ink); }
+  .results-main{ flex:1; min-width:0; }
+  .results-meta{ font-size:14px; color:var(--ink-soft); margin-bottom:18px; }
+  .filter-chip{ display:flex; align-items:center; gap:10px; width:100%; font-size:14px; padding:10px 12px; border:1.5px solid var(--line); border-radius:8px; margin-bottom:8px; transition:.15s; user-select:none; }
+  .filter-chip:hover{ border-color:var(--accent); }
+  .filter-chip .box{ width:18px; height:18px; border:1.5px solid var(--line); border-radius:5px; flex-shrink:0; display:flex; align-items:center; justify-content:center; transition:.15s; }
+  .filter-chip .box svg{ display:none; }
+  .filter-chip.checked{ background:var(--accent-tint); border-color:var(--accent); color:var(--accent); font-weight:600; }
+  .filter-chip.checked .box{ background:var(--accent); border-color:var(--accent); }
+  .filter-chip.checked .box svg{ display:block; }
+  .filters-toggle-btn{ display:none; align-items:center; gap:8px; border:1px solid var(--line); border-radius:8px; padding:9px 14px; font-size:14px; background:#fff; margin-bottom:16px; }
+  .filters-toggle-btn .count{ background:var(--accent); color:#fff; border-radius:10px; font-size:11px; padding:1px 7px; }
+
+  .vendor-card{ display:flex; gap:18px; padding:18px 0; border-bottom:1px solid var(--line); }
+  .vendor-card:hover .vendor-name{ color:var(--accent); text-decoration:underline; }
+  .vendor-thumb{ width:180px; height:130px; border-radius:10px; object-fit:cover; flex-shrink:0; background:var(--chip); display:flex; align-items:center; justify-content:center; }
+  .vendor-info{ flex:1; min-width:0; }
+  .vendor-name{ font-size:17px; font-weight:600; }
+  .vendor-sub{ font-size:13px; color:var(--ink-soft); margin-top:2px; }
+  .vendor-rating{ display:inline-flex; align-items:center; gap:5px; font-size:13px; margin-top:8px; }
+  .stars{ color:var(--gold); }
+  .vendor-tags{ display:flex; gap:6px; flex-wrap:wrap; margin-top:8px; }
+  .tag{ background:var(--chip); font-size:12px; color:var(--ink-soft); padding:3px 9px; border-radius:12px; }
+  .vendor-price{ font-size:14px; font-weight:600; margin-top:8px; color:var(--accent); }
+  .no-results{ padding:60px 0; text-align:center; color:var(--ink-soft); }
+
+  /* ---- PROFILE ---- */
+  .profile-hero{ height:260px; background-size:cover; background-position:center; background-color:var(--chip); display:flex; align-items:center; justify-content:center; }
+  .profile-shell{ max-width:900px; margin:-60px auto 60px; padding:0 24px; }
+  .profile-card{ background:#fff; border:1px solid var(--line); border-radius:12px; padding:28px; box-shadow:0 4px 18px rgba(0,0,0,0.06); }
+  .profile-top{ display:flex; justify-content:space-between; align-items:flex-start; gap:20px; flex-wrap:wrap; }
+  .profile-name{ font-size:26px; font-weight:600; }
+  .profile-sub{ color:var(--ink-soft); font-size:14px; margin-top:4px; }
+  .profile-rating{ display:flex; align-items:center; gap:6px; margin-top:10px; font-size:14px; }
+  .verified{ background:var(--accent-tint); color:var(--accent); font-size:12px; padding:3px 10px; border-radius:12px; font-weight:500; }
+  .gallery{ display:grid; grid-template-columns:repeat(4,1fr); gap:8px; margin:24px 0; }
+  .gallery img, .gallery .g-tile{ width:100%; height:110px; object-fit:cover; border-radius:8px; background:var(--chip); display:flex; align-items:center; justify-content:center; }
+  .section-title{ font-size:16px; font-weight:600; margin:26px 0 12px; }
+  .about-text{ font-size:14px; line-height:1.6; }
+  .packages{ display:grid; grid-template-columns:repeat(auto-fit,minmax(200px,1fr)); gap:14px; }
+  .package{ border:1px solid var(--line); border-radius:10px; padding:16px; }
+  .package h5{ font-size:14px; margin-bottom:6px; }
+  .package .price{ color:var(--accent); font-weight:600; font-size:15px; margin-bottom:8px; }
+  .package ul{ list-style:none; font-size:13px; color:var(--ink-soft); line-height:1.7; }
+  .package ul li:before{ content:"✓ "; color:var(--accent); }
+  .review{ padding:14px 0; border-bottom:1px solid var(--line); }
+  .review-head{ display:flex; justify-content:space-between; font-size:14px; font-weight:600; }
+  .review-text{ font-size:13px; color:var(--ink-soft); margin-top:4px; line-height:1.5; }
+
+  /* ---- AUTH ---- */
+  .auth-shell{ min-height:calc(100vh - 63px); display:flex; align-items:center; justify-content:center; padding:40px 20px; background:#fafafa; }
+  .auth-card{ background:#fff; border:1px solid var(--line); border-radius:12px; padding:36px; max-width:400px; width:100%; box-shadow:0 4px 18px rgba(0,0,0,0.05); }
+  .auth-title{ font-size:22px; font-weight:600; margin-bottom:6px; }
+  .auth-sub{ color:var(--ink-soft); font-size:14px; margin-bottom:22px; }
+  .role-toggle{ display:flex; border:1px solid var(--line); border-radius:8px; padding:3px; margin-bottom:20px; }
+  .role-opt{ flex:1; text-align:center; padding:8px; font-size:13px; border-radius:6px; color:var(--ink-soft); transition:.15s; user-select:none; }
+  .role-opt.active{ background:var(--accent); color:#fff; }
+  .auth-divider{ display:flex; align-items:center; gap:10px; margin:18px 0; color:var(--ink-soft); font-size:12px; }
+  .auth-divider:before, .auth-divider:after{ content:""; flex:1; height:1px; background:var(--line); }
+  .btn-google{ width:100%; display:flex; align-items:center; justify-content:center; gap:10px; padding:10px; border:1px solid var(--line); border-radius:6px; background:#fff; font-size:14px; }
+  .btn-google:hover{ background:#f8f9fa; }
+  .auth-switch{ text-align:center; font-size:13px; color:var(--ink-soft); margin-top:18px; }
+  .auth-switch a{ color:var(--accent); font-weight:500; }
+  .auth-switch a:hover{ text-decoration:underline; }
+  .field{ margin-bottom:14px; }
+  .field label{ display:block; font-size:13px; margin-bottom:5px; color:var(--ink-soft); }
+  .field input, .field textarea{ width:100%; padding:9px 12px; border:1px solid var(--line); border-radius:6px; font-size:14px; font-family:inherit; outline:none; }
+  .field input:focus, .field textarea:focus{ border-color:var(--accent); }
+  .password-row{ position:relative; }
+  .toggle-pass{ position:absolute; right:12px; top:34px; font-size:12px; color:var(--ink-soft); background:none; border:none; }
+
+  /* ---- DASHBOARD / SETTINGS / STATIC PAGES ---- */
+  .page-shell{ max-width:760px; margin:0 auto; padding:40px 24px 70px; }
+  .page-title{ font-size:26px; font-weight:600; margin-bottom:6px; }
+  .page-sub{ color:var(--ink-soft); font-size:14px; margin-bottom:30px; }
+  .card{ border:1px solid var(--line); border-radius:12px; padding:22px; margin-bottom:16px; }
+  .card h3{ font-size:15px; margin-bottom:10px; }
+  .stat-grid{ display:grid; grid-template-columns:repeat(auto-fit,minmax(140px,1fr)); gap:14px; margin-bottom:16px; }
+  .stat-box{ border:1px solid var(--line); border-radius:10px; padding:16px; }
+  .stat-box .num{ font-size:22px; font-weight:600; color:var(--accent); }
+  .stat-box .label{ font-size:12.5px; color:var(--ink-soft); margin-top:2px; }
+  .checklist-item{ display:flex; align-items:center; gap:10px; padding:8px 0; font-size:14px; border-bottom:1px solid var(--line); }
+  .checklist-item:last-child{ border-bottom:none; }
+  .status-dot{ width:9px; height:9px; border-radius:50%; flex-shrink:0; }
+  .status-done{ background:var(--accent); }
+  .status-pending{ background:var(--gold); }
+  .toggle-row{ display:flex; align-items:center; justify-content:space-between; padding:10px 0; border-bottom:1px solid var(--line); font-size:14px; }
+  .toggle-row:last-child{ border-bottom:none; }
+  .switch{ width:40px; height:22px; border-radius:12px; background:var(--line); position:relative; transition:.15s; flex-shrink:0; }
+  .switch.on{ background:var(--accent); }
+  .switch .knob{ width:16px; height:16px; border-radius:50%; background:#fff; position:absolute; top:3px; left:3px; transition:.15s; }
+  .switch.on .knob{ left:21px; }
+  .static-content p{ font-size:14.5px; line-height:1.7; margin-bottom:14px; }
+  .static-content h4{ font-size:15px; margin:20px 0 6px; }
+  .faq-item{ border-bottom:1px solid var(--line); padding:14px 0; }
+  .faq-q{ font-size:14.5px; font-weight:600; margin-bottom:6px; }
+  .faq-a{ font-size:14px; color:var(--ink-soft); line-height:1.6; }
+  .benefit-list{ list-style:none; margin:16px 0; }
+  .benefit-list li{ font-size:14.5px; padding:8px 0; padding-left:24px; position:relative; }
+  .benefit-list li:before{ content:"✓"; color:var(--accent); position:absolute; left:0; font-weight:600; }
+
+  /* ---- MODAL / TOAST ---- */
+  .overlay{ position:fixed; inset:0; background:rgba(32,33,36,0.5); display:none; align-items:center; justify-content:center; z-index:50; padding:20px; }
+  .overlay.active{ display:flex; }
+  .modal{ background:#fff; border-radius:12px; padding:28px; max-width:420px; width:100%; max-height:90vh; overflow:auto; }
+  .modal h3{ font-size:19px; margin-bottom:4px; }
+  .modal p.sub{ color:var(--ink-soft); font-size:13px; margin-bottom:18px; }
+  .modal-actions{ display:flex; gap:10px; margin-top:18px; }
+  .modal-close{ background:none; border:none; float:right; font-size:20px; color:var(--ink-soft); }
+  .toast{ position:fixed; bottom:24px; left:50%; transform:translateX(-50%) translateY(20px); background:var(--ink); color:#fff; padding:12px 22px; border-radius:8px; font-size:14px; opacity:0; transition:.25s; pointer-events:none; z-index:100; }
+  .toast.show{ opacity:1; transform:translateX(-50%) translateY(0); }
+  .back-link{ display:inline-flex; align-items:center; gap:6px; font-size:14px; color:var(--ink-soft); text-decoration:none; margin-bottom:16px; }
+  .back-link:hover{ color:var(--accent); }
+
+  @media (max-width:720px){
+    .results-shell{ flex-direction:column; }
+    .filters{ width:100%; display:none; border:1px solid var(--line); border-radius:10px; padding:16px; margin-bottom:18px; }
+    .filters.open{ display:block; }
+    .filters-toggle-btn{ display:inline-flex; }
+    .vendor-card{ flex-direction:column; }
+    .vendor-thumb{ width:100%; height:180px; }
+    .gallery{ grid-template-columns:repeat(2,1fr); }
+    .wordmark{ font-size:50px; }
+    #appHeader{ padding:12px 16px; }
+    .mini-search{ display:none; }
+  }
+</style>
+</head>
+<body>
+
+<header id="appHeader"></header>
+
+<!-- ============ HOME ============ -->
+<div id="home" class="view active">
+  <main>
+    <div class="wordmark">Vel<span>a</span></div>
+    <p class="tagline">Kerala's marketplace for weddings &amp; events</p>
+    <div class="search-wrap">
+      <div class="search-bar" id="searchBar">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
+        <input id="searchInput" type="text" autocomplete="off">
+      </div>
+    </div>
+    <div class="btn-row">
+      <button class="btn primary" onclick="runSearch()">Search vendors</button>
+      <button class="btn" onclick="runSearch()">Plan my event</button>
+    </div>
+    <div class="chip-row" id="homeChips"></div>
+  </main>
+  <footer>
+    <span>Kerala, India</span>
+    <div class="footer-links">
+      <a onclick="showAbout()">About</a>
+      <a onclick="showHelp()">Help</a>
+      <a onclick="showPrivacy()">Privacy</a>
+    </div>
+  </footer>
+</div>
+
+<!-- ============ RESULTS ============ -->
+<div id="results" class="view">
+  <div class="results-shell">
+    <aside class="filters" id="filtersPanel">
+      <div class="filters-head"><h4 style="margin-top:0">Category</h4><button class="clear-link" onclick="clearFilters()">Clear all</button></div>
+      <div id="catFilters"></div>
+      <h4>Location</h4>
+      <select id="locFilter" onchange="renderResults()"><option value="">All Kerala</option></select>
+      <h4>Minimum rating</h4>
+      <select id="ratingFilter" onchange="renderResults()">
+        <option value="0">Any</option>
+        <option value="4.5">4.5+</option>
+        <option value="4.7">4.7+</option>
+        <option value="4.8">4.8+</option>
+      </select>
+      <h4>Sort by</h4>
+      <select id="sortFilter" onchange="renderResults()">
+        <option value="rating">Highest rated</option>
+        <option value="reviews">Most reviewed</option>
+        <option value="priceLow">Price: low to high</option>
+        <option value="priceHigh">Price: high to low</option>
+      </select>
+    </aside>
+    <div class="results-main">
+      <button class="filters-toggle-btn" onclick="toggleFiltersPanel()">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 6h16M7 12h10M10 18h4"/></svg>
+        Filters <span class="count" id="activeFilterCount" style="display:none">0</span>
+      </button>
+      <div class="results-meta" id="resultsMeta"></div>
+      <div id="resultsList"></div>
+    </div>
+  </div>
+</div>
+
+<!-- ============ PROFILE ============ -->
+<div id="profile" class="view">
+  <div class="profile-hero" id="profileHero"></div>
+  <div class="profile-shell">
+    <a class="back-link" onclick="backToResults()">&larr; Back to results</a>
+    <div class="profile-card" id="profileCard"></div>
+  </div>
+</div>
+
+<!-- ============ LOGIN ============ -->
+<div id="login" class="view">
+  <div class="auth-shell">
+    <div class="auth-card">
+      <div class="auth-title">Welcome back</div>
+      <div class="auth-sub">Sign in to manage your events or your vendor profile</div>
+      <div class="role-toggle">
+        <div class="role-opt active" id="loginRoleCustomer" onclick="setRole('login','customer')">I'm a customer</div>
+        <div class="role-opt" id="loginRoleVendor" onclick="setRole('login','vendor')">I'm a vendor</div>
+      </div>
+      <button class="btn-google" onclick="fakeGoogleAuth('login')">
+        <svg width="16" height="16" viewBox="0 0 48 48"><path fill="#FFC107" d="M43.6 20.5H42V20H24v8h11.3C33.9 32.3 29.4 35 24 35c-6.1 0-11-4.9-11-11s4.9-11 11-11c2.8 0 5.3 1 7.3 2.7l6-6C33.6 6.5 29 4.5 24 4.5 13.2 4.5 4.5 13.2 4.5 24S13.2 43.5 24 43.5 43.5 34.8 43.5 24c0-1.2-.1-2.4-.4-3.5z"/><path fill="#FF3D00" d="M6.3 14.7l6.6 4.8C14.6 16 19 13 24 13c2.8 0 5.3 1 7.3 2.7l6-6C33.6 6.5 29 4.5 24 4.5c-7.5 0-14 4.2-17.7 10.2z"/><path fill="#4CAF50" d="M24 43.5c5.3 0 10-1.8 13.6-5l-6.3-5.3C29.3 34.6 26.8 35.5 24 35.5c-5.4 0-9.9-3.6-11.5-8.5l-6.5 5C9.9 39.1 16.4 43.5 24 43.5z"/><path fill="#1976D2" d="M43.6 20.5H42V20H24v8h11.3c-.7 2-2 3.7-3.7 4.9l6.3 5.3C41.4 35 43.5 30 43.5 24c0-1.2-.1-2.4-.4-3.5z"/></svg>
+        Continue with Google
+      </button>
+      <div class="auth-divider">or sign in with email</div>
+      <form onsubmit="submitAuth(event,'login')">
+        <div class="field"><label>Email</label><input id="loginEmail" type="email" required></div>
+        <div class="field password-row"><label>Password</label><input id="loginPass" type="password" required><button type="button" class="toggle-pass" onclick="togglePass('loginPass',this)">Show</button></div>
+        <button type="submit" class="btn primary full">Sign in</button>
+      </form>
+      <div class="auth-switch">Don't have an account? <a onclick="showSignup()">Sign up</a></div>
+    </div>
+  </div>
+</div>
+
+<!-- ============ SIGNUP ============ -->
+<div id="signup" class="view">
+  <div class="auth-shell">
+    <div class="auth-card">
+      <div class="auth-title">Create your account</div>
+      <div class="auth-sub">Plan an event, or list your business as a vendor</div>
+      <div class="role-toggle">
+        <div class="role-opt active" id="signupRoleCustomer" onclick="setRole('signup','customer')">I'm a customer</div>
+        <div class="role-opt" id="signupRoleVendor" onclick="setRole('signup','vendor')">I'm a vendor</div>
+      </div>
+      <button class="btn-google" onclick="fakeGoogleAuth('signup')">
+        <svg width="16" height="16" viewBox="0 0 48 48"><path fill="#FFC107" d="M43.6 20.5H42V20H24v8h11.3C33.9 32.3 29.4 35 24 35c-6.1 0-11-4.9-11-11s4.9-11 11-11c2.8 0 5.3 1 7.3 2.7l6-6C33.6 6.5 29 4.5 24 4.5 13.2 4.5 4.5 13.2 4.5 24S13.2 43.5 24 43.5 43.5 34.8 43.5 24c0-1.2-.1-2.4-.4-3.5z"/><path fill="#FF3D00" d="M6.3 14.7l6.6 4.8C14.6 16 19 13 24 13c2.8 0 5.3 1 7.3 2.7l6-6C33.6 6.5 29 4.5 24 4.5c-7.5 0-14 4.2-17.7 10.2z"/><path fill="#4CAF50" d="M24 43.5c5.3 0 10-1.8 13.6-5l-6.3-5.3C29.3 34.6 26.8 35.5 24 35.5c-5.4 0-9.9-3.6-11.5-8.5l-6.5 5C9.9 39.1 16.4 43.5 24 43.5z"/><path fill="#1976D2" d="M43.6 20.5H42V20H24v8h11.3c-.7 2-2 3.7-3.7 4.9l6.3 5.3C41.4 35 43.5 30 43.5 24c0-1.2-.1-2.4-.4-3.5z"/></svg>
+        Continue with Google
+      </button>
+      <div class="auth-divider">or sign up with email</div>
+      <form onsubmit="submitAuth(event,'signup')">
+        <div class="field"><label id="signupNameLabel">Full name</label><input id="signupName" required></div>
+        <div class="field"><label>Email</label><input id="signupEmail" type="email" required></div>
+        <div class="field"><label>Phone number</label><input type="tel" required></div>
+        <div class="field password-row"><label>Password</label><input id="signupPass" type="password" required minlength="8"><button type="button" class="toggle-pass" onclick="togglePass('signupPass',this)">Show</button></div>
+        <button type="submit" class="btn primary full">Create account</button>
+      </form>
+      <div class="auth-switch">Already have an account? <a onclick="showLogin()">Sign in</a></div>
+    </div>
+  </div>
+</div>
+
+<!-- ============ DASHBOARD ============ -->
+<div id="dashboard" class="view">
+  <div class="page-shell" id="dashboardContent"></div>
+</div>
+
+<!-- ============ SETTINGS ============ -->
+<div id="settings" class="view">
+  <div class="page-shell" id="settingsContent"></div>
+</div>
+
+<!-- ============ ABOUT ============ -->
+<div id="about" class="view">
+  <div class="page-shell static-content">
+    <div class="page-title">About Vela</div>
+    <p>Vela is a marketplace built for how people actually plan weddings and events in Kerala today — by asking around, comparing prices in WhatsApp groups, and hoping the photographer replies before the venue gets booked out.</p>
+    <p>We bring venues, photographers, caterers, decorators, DJs, makeup artists, and every other vendor an event needs onto one platform, with transparent pricing, verified reviews, and a simple way to request quotes from several vendors at once.</p>
+    <p>Vela started with weddings in Kerala and is built to grow with the people who use it — from a birthday for thirty guests to a wedding for a thousand.</p>
+    <h4>What we're not</h4>
+    <p>We're not an event planning company and we don't take a cut of what you pay your vendor unless you ask us to arrange something extra. We're the place you go to find and compare the people who'll actually make your event happen.</p>
+  </div>
+</div>
+
+<!-- ============ HELP ============ -->
+<div id="help" class="view">
+  <div class="page-shell static-content">
+    <div class="page-title">Help centre</div>
+    <p class="page-sub">Answers to the most common questions. Can't find yours? Email us at help@vela.example.</p>
+    <div class="faq-item"><div class="faq-q">How do I request a quote from a vendor?</div><div class="faq-a">Open any vendor's profile and tap "Request quote." Fill in your event date, budget, and a short message — the vendor typically replies within a few hours.</div></div>
+    <div class="faq-item"><div class="faq-q">How are vendors verified?</div><div class="faq-a">Verified vendors have confirmed their business registration and completed at least one booking through Vela with a reviewed customer. Look for the green "Verified" badge on a profile.</div></div>
+    <div class="faq-item"><div class="faq-q">Is it free to use Vela as a customer?</div><div class="faq-a">Yes. Searching, comparing vendors, and requesting quotes is free. You pay vendors directly for their services.</div></div>
+    <div class="faq-item"><div class="faq-q">How do I list my business on Vela?</div><div class="faq-a">Tap "List your business" from the home page, choose "I'm a vendor" when creating your account, and fill in your business profile. Your listing goes live after a quick verification check.</div></div>
+    <div class="faq-item"><div class="faq-q">Can I cancel a quote request?</div><div class="faq-a">Yes, from your dashboard under "Pending quotations." If a vendor has already responded, we'd appreciate a quick message letting them know.</div></div>
+  </div>
+</div>
+
+<!-- ============ PRIVACY ============ -->
+<div id="privacy" class="view">
+  <div class="page-shell static-content">
+    <div class="page-title">Privacy</div>
+    <p class="page-sub">This is a demo product. In a live version, this page would describe exactly what data we collect and why — this summary explains the intent.</p>
+    <p>We'd collect the information you give us when you create an account or request a quote — your name, contact details, and event information — and share it only with the vendors you choose to contact.</p>
+    <p>We wouldn't sell your personal data to third parties. Vendors see your enquiry details only after you submit a quote request to them.</p>
+    <h4>Your choices</h4>
+    <p>You'd be able to update or delete your account information at any time from Settings, and control whether you receive email or SMS notifications.</p>
+  </div>
+</div>
+
+<!-- ============ FOR VENDORS ============ -->
+<div id="forVendors" class="view">
+  <div class="page-shell static-content">
+    <div class="page-title">Grow your business with Vela</div>
+    <p class="page-sub">Join the marketplace couples and event planners across Kerala are already searching.</p>
+    <ul class="benefit-list">
+      <li>A business profile with your portfolio, pricing, and availability calendar</li>
+      <li>Direct quote requests from customers actively planning an event</li>
+      <li>A dashboard showing leads, profile visitors, and conversion rate</li>
+      <li>A verification badge that builds trust with new customers</li>
+    </ul>
+    <button class="btn primary" onclick="presetRoleAndSignup('vendor')">Create vendor account</button>
+  </div>
+</div>
+
+<!-- ============ QUOTE MODAL ============ -->
+<div class="overlay" id="quoteOverlay">
+  <div class="modal">
+    <button class="modal-close" onclick="closeModal()">&times;</button>
+    <h3 id="modalVendorName"></h3>
+    <p class="sub">Vendor usually replies within a few hours</p>
+    <form id="quoteForm" onsubmit="submitQuote(event)">
+      <div class="field"><label>Your name</label><input required></div>
+      <div class="field"><label>Phone number</label><input required type="tel"></div>
+      <div class="field"><label>Event date</label><input required type="date"></div>
+      <div class="field"><label>Budget (₹)</label><input placeholder="e.g. 1,50,000"></div>
+      <div class="field"><label>Message</label><textarea rows="3" placeholder="Tell them about your event..."></textarea></div>
+      <div class="modal-actions">
+        <button type="button" class="btn" onclick="closeModal()">Cancel</button>
+        <button type="submit" class="btn primary">Send request</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+/* ================= Sample data ================= */
+const vendors = [
+  {id:1, name:"Backwater Grand Palace", category:"Venue", location:"Kochi", price:300000, priceLabel:"₹3,00,000 onwards", rating:4.8, reviews:142, experience:"12 yrs", tags:["Banquet Hall","AC","1000+ capacity"],
+    img:"https://images.unsplash.com/photo-1587271407850-8d438ca9fdf2?auto=format&fit=crop&w=800&q=80",
+    gallery:["https://images.unsplash.com/photo-1744805624954-a6686543c3ff?auto=format&fit=crop&w=500&q=80","https://images.unsplash.com/photo-1761472606347-bfebc5a3e546?auto=format&fit=crop&w=500&q=80","https://images.unsplash.com/photo-1744805624890-9931ebb50428?auto=format&fit=crop&w=500&q=80","https://images.unsplash.com/photo-1772127822525-7eda37383b9f?auto=format&fit=crop&w=500&q=80"],
+    about:"A full-service banquet hall on the Kochi backwaters, hosting weddings and receptions for up to 1,200 guests with in-house catering and decor partners."},
+  {id:2, name:"Studio Frames by Arun", category:"Photography", location:"Kochi", price:45000, priceLabel:"₹45,000 onwards", rating:4.9, reviews:98, experience:"8 yrs", tags:["Candid","Drone","Cinematic"],
+    img:"https://images.unsplash.com/photo-1519689950823-0a2251441815?auto=format&fit=crop&w=800&q=80",
+    gallery:["https://images.unsplash.com/photo-1611550287705-7ff8b459c8eb?auto=format&fit=crop&w=500&q=80","https://images.unsplash.com/photo-1629756048377-09540f52caa1?auto=format&fit=crop&w=500&q=80","https://images.unsplash.com/photo-1770387688486-397ff1afdb2c?auto=format&fit=crop&w=500&q=80","https://images.unsplash.com/photo-1744805624890-9931ebb50428?auto=format&fit=crop&w=500&q=80"],
+    about:"Candid wedding photography and cinematic films, with drone coverage and same-week previews. Shot 300+ Kerala weddings since 2018."},
+  {id:3, name:"Malabar Spice Caterers", category:"Catering", location:"Kozhikode", price:600, priceLabel:"₹600 per plate", rating:4.7, reviews:210, experience:"15 yrs", tags:["Sadya","North Indian","Live Counters"],
+    img:"https://images.unsplash.com/photo-1616734755909-bb016ce64930?auto=format&fit=crop&w=800&q=80",
+    gallery:["https://images.unsplash.com/photo-1637059395523-d5a35541d544?auto=format&fit=crop&w=500&q=80","https://images.unsplash.com/photo-1576842546422-60562b9242ae?auto=format&fit=crop&w=500&q=80","https://images.unsplash.com/photo-1511795409834-ef04bbd61622?auto=format&fit=crop&w=500&q=80","https://images.unsplash.com/photo-1522413452208-996ff3f3e740?auto=format&fit=crop&w=500&q=80"],
+    about:"Traditional Kerala sadya and multi-cuisine catering for weddings and functions, with live counters and custom menu planning."},
+  {id:4, name:"Petal & Palm Decor", category:"Decoration", location:"Thrissur", price:80000, priceLabel:"₹80,000 onwards", rating:4.6, reviews:76, experience:"6 yrs", tags:["Floral","Stage","LED Wall"],
+    img:"https://images.unsplash.com/photo-1772127822653-4431a9b8c31b?auto=format&fit=crop&w=800&q=80",
+    gallery:["https://images.unsplash.com/photo-1744805624890-9931ebb50428?auto=format&fit=crop&w=500&q=80","https://images.unsplash.com/photo-1744805624954-a6686543c3ff?auto=format&fit=crop&w=500&q=80","https://images.unsplash.com/photo-1761472606347-bfebc5a3e546?auto=format&fit=crop&w=500&q=80","https://images.unsplash.com/photo-1772127822525-7eda37383b9f?auto=format&fit=crop&w=500&q=80"],
+    about:"Floral and stage decor studio specialising in themed mandaps, LED backdrops, and entrance arches."},
+  {id:5, name:"DJ Rhythm Kerala", category:"DJ & Music", location:"Ernakulam", price:25000, priceLabel:"₹25,000 onwards", rating:4.5, reviews:54, experience:"5 yrs", tags:["Live Band","Sound System","Lighting"],
+    img:"https://images.unsplash.com/photo-1553190842-24c3f93ba116?auto=format&fit=crop&w=800&q=80",
+    gallery:["https://images.unsplash.com/photo-1544785349-c4a5301826fd?auto=format&fit=crop&w=500&q=80","https://images.unsplash.com/photo-1618409698966-6caa2b95733a?auto=format&fit=crop&w=500&q=80","https://images.unsplash.com/photo-1770387688486-397ff1afdb2c?auto=format&fit=crop&w=500&q=80","https://images.unsplash.com/photo-1481653125770-b78c206c59d4?auto=format&fit=crop&w=500&q=80"],
+    about:"DJ and live band services for weddings and sangeet nights, with full sound and stage lighting setup."},
+  {id:6, name:"Glow Bridal Studio", category:"Makeup", location:"Kottayam", price:15000, priceLabel:"₹15,000 onwards", rating:4.9, reviews:189, experience:"10 yrs", tags:["Bridal","HD Makeup","Hairstyling"],
+    img:"https://images.unsplash.com/photo-1709477542149-f4e0e21d590b?auto=format&fit=crop&w=800&q=80",
+    gallery:["https://images.unsplash.com/photo-1636023730877-233b9237d4ec?auto=format&fit=crop&w=500&q=80","https://images.unsplash.com/photo-1709477542170-f11ee7d471a0?auto=format&fit=crop&w=500&q=80","https://images.unsplash.com/photo-1594465919760-441fe5908ab0?auto=format&fit=crop&w=500&q=80","https://images.unsplash.com/photo-1596704017254-9b121068fb31?auto=format&fit=crop&w=500&q=80"],
+    about:"Bridal makeup and hairstyling artists trained in HD and airbrush techniques, with trial sessions included."},
+  {id:7, name:"Henna Dreams", category:"Mehendi", location:"Kozhikode", price:8000, priceLabel:"₹8,000 onwards", rating:4.7, reviews:63, experience:"7 yrs", tags:["Bridal Mehendi","Arabic","Traditional"],
+    img:"https://images.unsplash.com/photo-1525135850648-b42365991054?auto=format&fit=crop&w=800&q=80",
+    gallery:["https://images.unsplash.com/photo-1525135927526-a01d9e5e9484?auto=format&fit=crop&w=500&q=80","https://images.unsplash.com/photo-1505932794465-147d1f1b2c97?auto=format&fit=crop&w=500&q=80","https://images.unsplash.com/photo-1619734089700-842e56497353?auto=format&fit=crop&w=500&q=80","https://images.unsplash.com/photo-1583878544826-8f8c418033ed?auto=format&fit=crop&w=500&q=80"],
+    about:"Bridal and guest mehendi artists offering Arabic, traditional Kerala, and Indo-Arabic designs."},
+  {id:8, name:"Grand Vista Convention Centre", category:"Venue", location:"Thiruvananthapuram", price:250000, priceLabel:"₹2,50,000 onwards", rating:4.4, reviews:88, experience:"9 yrs", tags:["Indoor","Outdoor Lawn","Valet"],
+    img:"https://images.unsplash.com/photo-1772127822525-7eda37383b9f?auto=format&fit=crop&w=800&q=80",
+    gallery:["https://images.unsplash.com/photo-1587271407850-8d438ca9fdf2?auto=format&fit=crop&w=500&q=80","https://images.unsplash.com/photo-1761472606347-bfebc5a3e546?auto=format&fit=crop&w=500&q=80","https://images.unsplash.com/photo-1744805624890-9931ebb50428?auto=format&fit=crop&w=500&q=80","https://images.unsplash.com/photo-1772127822653-4431a9b8c31b?auto=format&fit=crop&w=500&q=80"],
+    about:"Indoor and outdoor lawn venue with valet parking, suited for weddings, receptions and corporate events."},
+  {id:9, name:"Momentz Cinematics", category:"Photography", location:"Thrissur", price:55000, priceLabel:"₹55,000 onwards", rating:4.8, reviews:120, experience:"9 yrs", tags:["Cinematic","Same Day Edit"],
+    img:"https://images.unsplash.com/photo-1629756048377-09540f52caa1?auto=format&fit=crop&w=800&q=80",
+    gallery:["https://images.unsplash.com/photo-1519689950823-0a2251441815?auto=format&fit=crop&w=500&q=80","https://images.unsplash.com/photo-1611550287705-7ff8b459c8eb?auto=format&fit=crop&w=500&q=80","https://images.unsplash.com/photo-1770387688486-397ff1afdb2c?auto=format&fit=crop&w=500&q=80","https://images.unsplash.com/photo-1744805624954-a6686543c3ff?auto=format&fit=crop&w=500&q=80"],
+    about:"Cinematic wedding films with same-day edits and drone coverage, working across Kerala and South India."}
+];
+
+const reviewsData = {
+  1:[{n:"Anjali R.",r:5,t:"Beautiful venue, staff coordinated everything smoothly on the day."},{n:"Vishnu K.",r:5,t:"Spacious hall, parking was never an issue even with 800 guests."}],
+  2:[{n:"Meera S.",r:5,t:"Arun captured moments we didn't even know were happening. Loved the drone shots."},{n:"Rahul P.",r:4,t:"Great photos, delivery took a little longer than promised."}],
+  3:[{n:"Devika N.",r:5,t:"The sadya was authentic and the live counters were a huge hit with guests."}],
+  4:[{n:"Sona T.",r:4,t:"Loved the floral mandap design, exactly what we asked for."}],
+  5:[{n:"Arjun M.",r:5,t:"Great song selection, kept the dance floor full all night."}],
+  6:[{n:"Nithya V.",r:5,t:"The trial session helped a lot, bridal look was perfect."}],
+  7:[{n:"Fathima A.",r:5,t:"Intricate designs, finished quickly even with 20 guests waiting."}],
+  8:[{n:"Kiran J.",r:4,t:"Nice outdoor lawn option, would have liked more shaded seating."}],
+  9:[{n:"Anu B.",r:5,t:"The same-day edit at the reception made everyone emotional."}]
+};
+
+const categories = ["Venue","Photography","Catering","Decoration","DJ & Music","Makeup","Mehendi"];
+
+/* Illustrated tiles instead of hotlinked photos — external images are blocked
+   in sandboxed previews, so category art is drawn with inline SVG + gradients
+   to guarantee it always renders. */
+const categoryVisuals = {
+  "Venue":       { grad:"linear-gradient(135deg,#12855f,#0b5940)", icon:'<path d="M4 21h16M6 21V6a1 1 0 0 1 1-1h10a1 1 0 0 1 1 1v15M9.5 9h1M13.5 9h1M9.5 13h1M13.5 13h1M9.5 17h1M13.5 17h1"/>' },
+  "Photography": { grad:"linear-gradient(135deg,#4b5563,#1f2937)", icon:'<path d="M22 18a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h3.5L9 4h6l1.5 2H20a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="3.5"/>' },
+  "Catering":    { grad:"linear-gradient(135deg,#c2760f,#8a4e0a)", icon:'<path d="M4 3v6a2 2 0 0 0 2 2v10M4 3v6M8 3v6M6 11V3M17 3c-1.5 0-3 1.5-3 4v4a2 2 0 0 0 2 2v8M17 3v18"/>' },
+  "Decoration":  { grad:"linear-gradient(135deg,#c2477a,#8f2f56)", icon:'<path d="M12 12a4 4 0 1 1 4-4h-4zM12 12a4 4 0 1 0-4-4h4zM12 12v2m-4-2a4 4 0 1 0 4 4v-4zm8 0a4 4 0 1 1-4 4v-4z"/><circle cx="12" cy="12" r="1"/>' },
+  "DJ & Music":  { grad:"linear-gradient(135deg,#5b3fae,#37276f)", icon:'<path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/>' },
+  "Makeup":      { grad:"linear-gradient(135deg,#c2478f,#7a2f60)", icon:'<path d="m12 3-2 5-5 2 5 2 2 5 2-5 5-2-5-2z"/>' },
+  "Mehendi":     { grad:"linear-gradient(135deg,#b3672c,#7a4419)", icon:'<path d="M18 11.5V6a2 2 0 0 0-4 0v4M14 9.5V4a2 2 0 0 0-4 0v5.5M10 10V6a2 2 0 0 0-4 0v9M6 13.5V10a2 2 0 0 0-4 0v6a8 8 0 0 0 8 8h1a8 8 0 0 0 8-8v-3a2 2 0 0 0-4 0"/>' }
+};
+function tileHTML(category, className, size){
+  const v = categoryVisuals[category] || categoryVisuals["Venue"];
+  return `<div class="${className}" style="background:${v.grad}">
+    <svg width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="#ffffff" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" opacity="0.92">${v.icon}</svg>
+  </div>`;
+}
+
+/* ================= App state ================= */
+let session = { loggedIn:false, role:'customer', name:'', email:'' };
+let currentView = 'home';
+let viewStack = [];
+let currentFilterCategory = "";
+let lastProfileId = null;
+
+/* ================= Header (single shared component) ================= */
+const backSvg = '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 12H5M12 19l-7-7 7-7"/></svg>';
+const searchSvg = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>';
+
+function escapeHtml(s){
+  return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
+
+function renderHeader(id){
+  const header = document.getElementById('appHeader');
+  header.className = id === 'home' ? '' : 'bordered';
+
+  let left;
+  if(id === 'home'){
+    left = '<div class="topbar-left"></div>';
+  } else {
+    left = `<div class="topbar-left"><button class="icon-btn" onclick="goBack()" aria-label="Back">${backSvg}</button><div class="logo" onclick="showHome()">Vel<span>a</span></div></div>`;
+  }
+
+  let center = '';
+  if(id === 'results'){
+    center = `<div class="mini-search">${searchSvg}<input id="miniSearchInput" value="${escapeHtml(currentSearchQuery)}" oninput="onMiniSearchInput(this.value)" placeholder="Search vendors, categories, locations"></div>`;
+  } else {
+    center = '<div></div>';
+  }
+
+  let right;
+  if(session.loggedIn){
+    const firstName = escapeHtml(session.name.split(' ')[0] || 'Account');
+    right = `<div class="nav-right"><a class="nav-hi" onclick="showDashboard()">Hi, ${firstName}</a><a onclick="logout()">Logout</a></div>`;
+  } else {
+    right = `<div class="nav-right"><a onclick="showForVendors()">List your business</a><a onclick="showForVendors()">For vendors</a><a class="nav-signin" onclick="showLogin()">Sign in</a></div>`;
+  }
+
+  header.innerHTML = left + center + right;
+}
+
+/* ================= View switching ================= */
+function setView(id, skipHistory){
+  if(!skipHistory && currentView !== id){ viewStack.push(currentView); }
+  currentView = id;
+  document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
+  document.getElementById(id).classList.add('active');
+  renderHeader(id);
+  window.scrollTo(0,0);
+}
+function goBack(){
+  const prev = viewStack.pop();
+  setView(prev || 'home', true);
+}
+function showHome(){ setView('home'); }
+function showAbout(){ setView('about'); }
+function showHelp(){ setView('help'); }
+function showPrivacy(){ setView('privacy'); }
+function showForVendors(){ setView('forVendors'); }
+function backToResults(){ setView('results'); }
+
+/* ================= Home ================= */
+const homeChips = document.getElementById('homeChips');
+categories.forEach(c=>{
+  const el = document.createElement('span');
+  el.className='chip'; el.textContent=c;
+  el.onclick = ()=>{ currentFilterCategory=c; document.getElementById('searchInput').value=""; showResults(); };
+  homeChips.appendChild(el);
+});
+
+const examples = [
+  "Photographer in Kochi under ₹50,000",
+  "Wedding venue for 600 guests, Kottayam",
+  "Caterer available on 10 January",
+  "Decorator, 4.8+ rating, Thrissur",
+  "Mehendi artist near Kozhikode"
+];
+const homeInput = document.getElementById('searchInput');
+const homeSearchBar = document.getElementById('searchBar');
+let exIndex=0, charIndex=0, deleting=false;
+function typeLoop(){
+  const full = examples[exIndex];
+  if(document.activeElement === homeInput) return setTimeout(typeLoop, 400);
+  if(!deleting){
+    charIndex++; homeInput.placeholder = full.slice(0,charIndex);
+    if(charIndex===full.length){ deleting=true; return setTimeout(typeLoop,1400); }
+  } else {
+    charIndex--; homeInput.placeholder = full.slice(0,charIndex);
+    if(charIndex===0){ deleting=false; exIndex=(exIndex+1)%examples.length; }
+  }
+  setTimeout(typeLoop, deleting?25:55);
+}
+typeLoop();
+homeInput.addEventListener('focus', ()=>homeSearchBar.classList.add('focused'));
+homeInput.addEventListener('blur', ()=>homeSearchBar.classList.remove('focused'));
+homeInput.addEventListener('keydown', e=>{ if(e.key==='Enter') runSearch(); });
+function runSearch(){ currentFilterCategory=""; showResults(); }
+
+/* ================= Results ================= */
+let currentSearchQuery = "";
+const catFiltersEl = document.getElementById('catFilters');
+categories.forEach(c=>{
+  const label = document.createElement('label');
+  label.className='filter-chip';
+  label.innerHTML = `<input type="checkbox" value="${c}" style="display:none">
+    <span class="box"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="3"><polyline points="20 6 9 17 4 12"/></svg></span>
+    ${c}`;
+  const cb = label.querySelector('input');
+  label.addEventListener('click', e=>{
+    e.preventDefault();
+    cb.checked = !cb.checked;
+    label.classList.toggle('checked', cb.checked);
+    renderResults();
+  });
+  catFiltersEl.appendChild(label);
+});
+const locFilter = document.getElementById('locFilter');
+[...new Set(vendors.map(v=>v.location))].forEach(l=>{
+  const o=document.createElement('option'); o.value=l; o.textContent=l; locFilter.appendChild(o);
+});
+
+function onMiniSearchInput(val){
+  currentSearchQuery = val;
+  renderResults();
+}
+
+function showResults(){
+  currentSearchQuery = homeInput.value || "";
+  setView('results');
+  document.querySelectorAll('#catFilters .filter-chip').forEach(chip=>{
+    const cb = chip.querySelector('input');
+    cb.checked = currentFilterCategory ? cb.value===currentFilterCategory : false;
+    chip.classList.toggle('checked', cb.checked);
+  });
+  renderResults();
+}
+
+function clearFilters(){
+  document.querySelectorAll('#catFilters .filter-chip').forEach(chip=>{
+    chip.querySelector('input').checked = false;
+    chip.classList.remove('checked');
+  });
+  locFilter.value = '';
+  document.getElementById('ratingFilter').value = '0';
+  document.getElementById('sortFilter').value = 'rating';
+  currentSearchQuery = '';
+  const miniInput = document.getElementById('miniSearchInput');
+  if(miniInput) miniInput.value = '';
+  renderResults();
+}
+
+function toggleFiltersPanel(){
+  document.getElementById('filtersPanel').classList.toggle('open');
+}
+
+function renderResults(){
+  const q = (currentSearchQuery||'').toLowerCase().trim();
+  const checkedCats = [...document.querySelectorAll('#catFilters input:checked')].map(c=>c.value);
+  const loc = locFilter.value;
+  const minRating = parseFloat(document.getElementById('ratingFilter').value);
+  const sortBy = document.getElementById('sortFilter').value;
+
+  let list = vendors.filter(v=>{
+    const matchesQuery = !q || [v.name,v.category,v.location,...v.tags].join(' ').toLowerCase().includes(q);
+    const matchesCat = checkedCats.length===0 || checkedCats.includes(v.category);
+    const matchesLoc = !loc || v.location===loc;
+    const matchesRating = v.rating >= minRating;
+    return matchesQuery && matchesCat && matchesLoc && matchesRating;
+  });
+
+  if(sortBy==='rating') list.sort((a,b)=>b.rating-a.rating);
+  if(sortBy==='reviews') list.sort((a,b)=>b.reviews-a.reviews);
+  if(sortBy==='priceLow') list.sort((a,b)=>a.price-b.price);
+  if(sortBy==='priceHigh') list.sort((a,b)=>b.price-a.price);
+
+  const activeCount = checkedCats.length + (loc?1:0) + (minRating>0?1:0);
+  const badge = document.getElementById('activeFilterCount');
+  badge.textContent = activeCount;
+  badge.style.display = activeCount>0 ? 'inline' : 'none';
+
+  document.getElementById('resultsMeta').textContent = `${list.length} vendor${list.length!==1?'s':''} found`;
+  const container = document.getElementById('resultsList');
+  container.innerHTML = '';
+  if(list.length===0){
+    container.innerHTML = '<div class="no-results">No vendors match these filters. Try widening your search.</div>';
+    return;
+  }
+  list.forEach(v=>{
+    const card = document.createElement('div');
+    card.className='vendor-card';
+    card.style.cursor='pointer';
+    card.onclick = ()=>showProfile(v.id);
+    card.innerHTML = `
+      ${tileHTML(v.category, 'vendor-thumb', 40)}
+      <div class="vendor-info">
+        <div class="vendor-name">${escapeHtml(v.name)}</div>
+        <div class="vendor-sub">${v.category} · ${v.location} · ${v.experience} experience</div>
+        <div class="vendor-rating"><span class="stars">★</span> ${v.rating} (${v.reviews} reviews)</div>
+        <div class="vendor-tags">${v.tags.map(t=>`<span class="tag">${t}</span>`).join('')}</div>
+        <div class="vendor-price">${v.priceLabel}</div>
+      </div>`;
+    container.appendChild(card);
+  });
+}
+
+/* ================= Profile ================= */
+function showProfile(id){
+  lastProfileId = id;
+  const v = vendors.find(x=>x.id===id);
+  const hero = document.getElementById('profileHero');
+  const heroVisual = categoryVisuals[v.category] || categoryVisuals["Venue"];
+  hero.style.background = heroVisual.grad;
+  hero.innerHTML = `<svg width="72" height="72" viewBox="0 0 24 24" fill="none" stroke="#ffffff" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round" opacity="0.85">${heroVisual.icon}</svg>`;
+
+  const revs = reviewsData[id] || [];
+  document.getElementById('profileCard').innerHTML = `
+    <div class="profile-top">
+      <div>
+        <div class="profile-name">${escapeHtml(v.name)}</div>
+        <div class="profile-sub">${v.category} · ${v.location} · ${v.experience} experience</div>
+        <div class="profile-rating"><span class="stars">★</span> ${v.rating} (${v.reviews} reviews) <span class="verified">Verified</span></div>
+      </div>
+      <button class="btn primary" onclick="openModal(${v.id})">Request quote</button>
+    </div>
+    <div class="gallery">${v.gallery.map((g,i)=>tileHTML(v.category, 'g-tile', 28).replace('opacity="0.92"', `opacity="${0.7 + i*0.08}"`)).join('')}</div>
+    <div class="section-title">About</div>
+    <p class="about-text">${escapeHtml(v.about)}</p>
+    <div class="section-title">Packages</div>
+    <div class="packages">
+      <div class="package"><h5>Basic</h5><div class="price">${v.priceLabel}</div><ul><li>Standard service</li><li>Up to 4 hours</li><li>Digital delivery</li></ul></div>
+      <div class="package"><h5>Standard</h5><div class="price">${formatPrice(v.price*1.6)}</div><ul><li>Extended coverage</li><li>Priority support</li><li>Extra add-ons</li></ul></div>
+      <div class="package"><h5>Premium</h5><div class="price">${formatPrice(v.price*2.4)}</div><ul><li>Full-day service</li><li>Dedicated coordinator</li><li>All add-ons included</li></ul></div>
+    </div>
+    <div class="section-title">Reviews</div>
+    ${revs.map(r=>`<div class="review"><div class="review-head"><span>${escapeHtml(r.n)}</span><span class="stars">${'★'.repeat(r.r)}</span></div><div class="review-text">${escapeHtml(r.t)}</div></div>`).join('') || '<p class="about-text">No reviews yet.</p>'}
+  `;
+  setView('profile');
+}
+function formatPrice(n){ return '₹' + Math.round(n).toLocaleString('en-IN'); }
+
+/* ================= Quote modal ================= */
+function openModal(id){
+  const v = vendors.find(x=>x.id===id);
+  document.getElementById('modalVendorName').textContent = `Request a quote from ${v.name}`;
+  document.getElementById('quoteOverlay').classList.add('active');
+}
+function closeModal(){ document.getElementById('quoteOverlay').classList.remove('active'); }
+function submitQuote(e){
+  e.preventDefault();
+  closeModal();
+  document.getElementById('quoteForm').reset();
+  showToast('Quote request sent — the vendor will reply soon');
+}
+
+/* ================= Auth ================= */
+function showLogin(){ setView('login'); }
+function showSignup(){ setView('signup'); }
+function presetRoleAndSignup(role){
+  setRole('signup', role);
+  setView('signup');
+}
+function setRole(form, role){
+  document.getElementById(form+'RoleCustomer').classList.toggle('active', role==='customer');
+  document.getElementById(form+'RoleVendor').classList.toggle('active', role==='vendor');
+  if(form==='signup'){
+    document.getElementById('signupNameLabel').textContent = role==='vendor' ? 'Business name' : 'Full name';
+  }
+}
+function getRole(form){
+  return document.getElementById(form+'RoleVendor').classList.contains('active') ? 'vendor' : 'customer';
+}
+function togglePass(id, btn){
+  const field = document.getElementById(id);
+  const showing = field.type === 'text';
+  field.type = showing ? 'password' : 'text';
+  btn.textContent = showing ? 'Show' : 'Hide';
+}
+function fakeGoogleAuth(form){
+  const role = getRole(form);
+  session = { loggedIn:true, role, name: role==='vendor' ? 'Coastal Events Co.' : 'Alex Menon', email:'alex@example.com' };
+  showToast('Signed in with Google');
+  showDashboard();
+}
+function submitAuth(e, form){
+  e.preventDefault();
+  const role = getRole(form);
+  if(form==='signup'){
+    const name = document.getElementById('signupName').value || (role==='vendor' ? 'Your Business' : 'Your Name');
+    const email = document.getElementById('signupEmail').value || '';
+    session = { loggedIn:true, role, name, email };
+    e.target.reset();
+    showToast('Account created — welcome to Vela');
+  } else {
+    const email = document.getElementById('loginEmail').value || '';
+    const guessName = email.split('@')[0] || 'there';
+    session = { loggedIn:true, role, name: role==='vendor' ? guessName+"'s Business" : (guessName.charAt(0).toUpperCase()+guessName.slice(1)), email };
+    e.target.reset();
+    showToast('Signed in successfully');
+  }
+  showDashboard();
+}
+function logout(){
+  session = { loggedIn:false, role:'customer', name:'', email:'' };
+  showToast('Logged out');
+  showHome();
+}
+
+/* ================= Dashboard ================= */
+function showDashboard(){
+  if(!session.loggedIn){ showLogin(); return; }
+  renderDashboard();
+  setView('dashboard');
+}
+function renderDashboard(){
+  const el = document.getElementById('dashboardContent');
+  const firstName = escapeHtml(session.name.split(' ')[0] || 'there');
+  if(session.role === 'vendor'){
+    el.innerHTML = `
+      <div class="page-title">Welcome back, ${firstName}</div>
+      <p class="page-sub">Here's how your listing is performing this month.</p>
+      <div class="stat-grid">
+        <div class="stat-box"><div class="num">1,204</div><div class="label">Profile visitors</div></div>
+        <div class="stat-box"><div class="num">37</div><div class="label">Leads received</div></div>
+        <div class="stat-box"><div class="num">24%</div><div class="label">Conversion rate</div></div>
+        <div class="stat-box"><div class="num">4.8</div><div class="label">Average rating</div></div>
+      </div>
+      <div class="card">
+        <h3>Recent enquiries</h3>
+        <div class="checklist-item"><span class="status-dot status-pending"></span> Aiswarya M. — Wedding, 600 guests, Kochi — awaiting your reply</div>
+        <div class="checklist-item"><span class="status-dot status-done"></span> Nikhil R. — Reception, 300 guests — quote sent</div>
+        <div class="checklist-item"><span class="status-dot status-done"></span> Priya S. — Engagement, 150 guests — booking confirmed</div>
+      </div>
+      <button class="btn primary" onclick="showSettings()">Go to settings</button>
+    `;
+  } else {
+    el.innerHTML = `
+      <div class="page-title">Welcome back, ${firstName}</div>
+      <p class="page-sub">Here's what's happening with your event.</p>
+      <div class="card">
+        <h3>Rahul &amp; Neha's Wedding — 14 March 2027, Kochi</h3>
+        <div class="checklist-item"><span class="status-dot status-done"></span> Venue — booked (Backwater Grand Palace)</div>
+        <div class="checklist-item"><span class="status-dot status-done"></span> Photography — booked (Studio Frames by Arun)</div>
+        <div class="checklist-item"><span class="status-dot status-pending"></span> Catering — quote requested, awaiting reply</div>
+        <div class="checklist-item"><span class="status-dot status-pending"></span> Decoration — not started</div>
+        <div class="checklist-item"><span class="status-dot status-pending"></span> DJ &amp; Music — not started</div>
+      </div>
+      <div class="btn-row" style="justify-content:flex-start; margin-top:0;">
+        <button class="btn primary" onclick="showResults()">Browse vendors</button>
+        <button class="btn" onclick="showSettings()">Settings</button>
+      </div>
+    `;
+  }
+}
+
+/* ================= Settings ================= */
+let prefs = { email:true, sms:false };
+function showSettings(){
+  if(!session.loggedIn){ showLogin(); return; }
+  renderSettings();
+  setView('settings');
+}
+function renderSettings(){
+  const el = document.getElementById('settingsContent');
+  el.innerHTML = `
+    <div class="page-title">Settings</div>
+    <p class="page-sub">Manage your account and preferences.</p>
+    <div class="card">
+      <h3>Profile</h3>
+      <div class="field"><label>${session.role==='vendor' ? 'Business name' : 'Full name'}</label><input id="settingsName" value="${escapeHtml(session.name)}"></div>
+      <div class="field"><label>Email</label><input id="settingsEmail" type="email" value="${escapeHtml(session.email)}"></div>
+      <button class="btn primary" onclick="saveSettings()">Save changes</button>
+    </div>
+    <div class="card">
+      <h3>Notifications</h3>
+      <div class="toggle-row">Email notifications
+        <div class="switch ${prefs.email?'on':''}" onclick="togglePref('email', this)"><div class="knob"></div></div>
+      </div>
+      <div class="toggle-row">SMS notifications
+        <div class="switch ${prefs.sms?'on':''}" onclick="togglePref('sms', this)"><div class="knob"></div></div>
+      </div>
+    </div>
+    <div class="card">
+      <h3>Account</h3>
+      <div class="btn-row" style="justify-content:flex-start; margin-top:0;">
+        <button class="btn" onclick="logout()">Log out</button>
+        <button class="btn danger" onclick="showToast('This is a demo — account deletion isn\\'t available.')">Delete account</button>
+      </div>
+    </div>
+  `;
+}
+function togglePref(key, el){
+  prefs[key] = !prefs[key];
+  el.classList.toggle('on', prefs[key]);
+}
+function saveSettings(){
+  session.name = document.getElementById('settingsName').value || session.name;
+  session.email = document.getElementById('settingsEmail').value || session.email;
+  renderHeader(currentView);
+  showToast('Settings saved');
+}
+
+/* ================= Toast ================= */
+function showToast(msg){
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.classList.add('show');
+  setTimeout(()=>t.classList.remove('show'), 2600);
+}
+
+/* ================= Init ================= */
+renderHeader('home');
+</script>
+</body>
+</html>
