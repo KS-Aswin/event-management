@@ -1,8 +1,9 @@
 import { notFound } from "next/navigation";
 import Link from "next/link";
-import { findVendorById, findReviewsByVendor } from "@/lib/db";
+import { findVendorById, findReviewsByVendor, isFavorited } from "@/lib/db";
 import { getSession } from "@/lib/session";
 import { VendorTile } from "@/lib/vendorVisuals";
+import FavoriteButton from "@/lib/favorite-button";
 import QuoteButton from "./quote-button";
 import ReviewForm from "./review-form";
 
@@ -28,6 +29,7 @@ export default async function VendorProfilePage({
     ? reviews.some((r) => r.customer_id === session.userId)
     : false;
   const isOwnListing = session ? vendor.owner_id === session.userId : false;
+  const favorited = session ? await isFavorited(session.userId, vendorId) : false;
 
   return (
     <main className="w-full">
@@ -50,7 +52,10 @@ export default async function VendorProfilePage({
                 </span>
               </div>
             </div>
-            <QuoteButton vendorId={vendor.id} vendorName={vendor.name} />
+            <div className="flex items-center gap-3">
+              <FavoriteButton vendorId={vendor.id} initialFavorited={favorited} loggedIn={!!session} />
+              <QuoteButton vendorId={vendor.id} vendorName={vendor.name} />
+            </div>
           </div>
 
           <div className="grid grid-cols-4 gap-2 my-6">

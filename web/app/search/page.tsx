@@ -1,6 +1,8 @@
 import Link from "next/link";
-import { findVendors, findAllLocations } from "@/lib/db";
+import { findVendors, findAllLocations, findFavoriteVendorIds } from "@/lib/db";
+import { getSession } from "@/lib/session";
 import { VendorTile } from "@/lib/vendorVisuals";
+import FavoriteButton from "@/lib/favorite-button";
 import SearchFilters from "./search-filters";
 
 export default async function SearchPage({
@@ -18,9 +20,11 @@ export default async function SearchPage({
   const sort =
     sortRaw === "reviews" || sortRaw === "priceLow" || sortRaw === "priceHigh" ? sortRaw : "rating";
 
-  const [vendors, locations] = await Promise.all([
+  const session = await getSession();
+  const [vendors, locations, favoriteIds] = await Promise.all([
     findVendors({ query, categories: categories.length > 0 ? categories : undefined, location, minRating, sort }),
     findAllLocations(),
+    session ? findFavoriteVendorIds(session.userId) : Promise.resolve(new Set<number>()),
   ]);
 
   return (
@@ -50,8 +54,16 @@ export default async function SearchPage({
                   className="w-full sm:w-[180px] h-[180px] sm:h-[130px] rounded-[10px] shrink-0"
                 />
                 <div className="flex-1 min-w-0">
-                  <div className="text-[17px] font-semibold group-hover:text-accent group-hover:underline">
-                    {v.name}
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="text-[17px] font-semibold group-hover:text-accent group-hover:underline">
+                      {v.name}
+                    </div>
+                    <FavoriteButton
+                      vendorId={v.id}
+                      initialFavorited={favoriteIds.has(v.id)}
+                      loggedIn={!!session}
+                      size="sm"
+                    />
                   </div>
                   <div className="text-[13px] text-ink-soft mt-0.5">
                     {v.category} · {v.location} · {v.experience} experience

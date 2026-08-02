@@ -87,4 +87,15 @@ ALTER TABLE vendor_reviews ADD COLUMN IF NOT EXISTS customer_id INTEGER REFERENC
 CREATE UNIQUE INDEX IF NOT EXISTS uniq_vendor_review_per_customer
   ON vendor_reviews (vendor_id, customer_id) WHERE customer_id IS NOT NULL;
 
+CREATE TABLE IF NOT EXISTS favorites (
+  id SERIAL PRIMARY KEY,
+  customer_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  vendor_id INTEGER NOT NULL REFERENCES vendors(id) ON DELETE CASCADE,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  UNIQUE (customer_id, vendor_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_favorites_customer ON favorites (customer_id);
+
+
 

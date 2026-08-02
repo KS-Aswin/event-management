@@ -425,3 +425,75 @@ export async function createVendorReview(params: {
     client.release();
   }
 }
+
+export async function addFavorite(customerId: number, vendorId: number): Promise<void> {
+  await pool.query(
+    `INSERT INTO favorites (customer_id, vendor_id) VALUES ($1, $2)
+     ON CONFLICT (customer_id, vendor_id) DO NOTHING`,
+    [customerId, vendorId]
+  );
+}
+
+export async function removeFavorite(customerId: number, vendorId: number): Promise<void> {
+  await pool.query(
+    "DELETE FROM favorites WHERE customer_id = $1 AND vendor_id = $2",
+    [customerId, vendorId]
+  );
+}
+
+export async function isFavorited(customerId: number, vendorId: number): Promise<boolean> {
+  const result = await pool.query(
+    "SELECT 1 FROM favorites WHERE customer_id = $1 AND vendor_id = $2",
+    [customerId, vendorId]
+  );
+  return (result.rowCount ?? 0) > 0;
+}
+
+export async function findFavoriteVendorIds(customerId: number): Promise<Set<number>> {
+  const result = await pool.query<{ vendor_id: number }>(
+    "SELECT vendor_id FROM favorites WHERE customer_id = $1",
+    [customerId]
+  );
+  return new Set(result.rows.map((r) => r.vendor_id));
+}
+
+export interface FavoriteVendor extends VendorRecord {
+  favorited_at: string;
+}
+
+export async function findFavoritesByCustomer(customerId: number): Promise<FavoriteVendor[]> {
+  const result = await pool.query<FavoriteVendor>(
+    `SELECT v.*, f.created_at AS favorited_at
+     FROM favorites f
+     JOIN vendors v ON v.id = f.vendor_id
+     WHERE f.customer_id = $1
+     ORDER BY f.created_at DESC`,
+    [customerId]
+  );
+  return result.rows;
+}
+
+export interface SearchSuggestions {
+  locations: string[];
+  vendors: { id: number; name: string; category: string }[];
+}
+
+export async function findSearchSuggestions(query: string): Promise<SearchSuggestions> {
+  const like = `%${query.toLowerCase()}%`;
+
+  const [locationsRes, vendorsRes] = await Promise.all([
+    pool.query<{ location: string }>(
+      "SELECT DISTINCT location FROM vendors WHERE LOWER(location) LIKE $1 ORDER BY location LIMIT 5",
+      [like]
+    ),
+    pool.query<{ id: number; name: string; category: string }>(
+      "SELECT id, name, category FROM vendors WHERE LOWER(name) LIKE $1 ORDER BY rating DESC LIMIT 5",
+      [like]
+    ),
+  ]);
+
+  return {
+    locations: locationsRes.rows.map((r) => r.location),
+    vendors: vendorsRes.rows,
+  };
+}

@@ -1,7 +1,7 @@
 import { redirect } from "next/navigation";
 import Link from "next/link";
 import { getSession } from "@/lib/session";
-import { findVendorByOwner, findQuoteRequestsByVendor, findQuoteRequestsByCustomer } from "@/lib/db";
+import { findVendorByOwner, findQuoteRequestsByVendor, findQuoteRequestsByCustomer, findFavoritesByCustomer } from "@/lib/db";
 import LeadStatusControl from "./lead-status-control";
 
 export default async function DashboardPage() {
@@ -103,7 +103,10 @@ async function VendorDashboard({ userId }: { userId: number }) {
 }
 
 async function CustomerDashboard({ userId }: { userId: number }) {
-  const quotes = await findQuoteRequestsByCustomer(userId);
+  const [quotes, favorites] = await Promise.all([
+    findQuoteRequestsByCustomer(userId),
+    findFavoritesByCustomer(userId),
+  ]);
 
   return (
     <>
@@ -141,6 +144,34 @@ async function CustomerDashboard({ userId }: { userId: number }) {
                   Requested {new Date(q.created_at).toLocaleDateString("en-IN")} · status: {q.status}
                 </div>
               </div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      <h3 className="text-[15px] font-semibold mb-2.5">Your favorites</h3>
+      {favorites.length === 0 ? (
+        <p className="text-sm text-ink-soft mb-6">
+          No saved vendors yet. Tap the heart icon on a vendor to save them here for later.
+        </p>
+      ) : (
+        <div className="border border-line rounded-xl p-5.5 mb-6">
+          {favorites.map((f, i) => (
+            <div
+              key={f.id}
+              className={`flex items-center justify-between gap-2.5 py-2.5 text-sm ${
+                i < favorites.length - 1 ? "border-b border-line" : ""
+              }`}
+            >
+              <div>
+                <Link href={`/vendors/${f.id}`} className="font-medium hover:underline">
+                  {f.name}
+                </Link>{" "}
+                <span className="text-ink-soft">
+                  ({f.category} · {f.location})
+                </span>
+              </div>
+              <span className="text-xs text-ink-soft">{f.price_label}</span>
             </div>
           ))}
         </div>
