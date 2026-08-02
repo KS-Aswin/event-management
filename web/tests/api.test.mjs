@@ -423,6 +423,66 @@ async function main() {
     profilePageAfterReview.text.includes("Excellent to work with")
   );
 
+  // ---------- Favorites ----------
+  const favNoAuth = await request(`/api/vendors/1/favorite`, { method: "POST" });
+  check("favorite: rejected without auth (401)", favNoAuth.status, 401);
+
+  const favAdd = await request(`/api/vendors/1/favorite`, { method: "POST", cookie: customerCookie });
+  check("favorite: add succeeds (200)", favAdd.status, 200);
+  check("favorite: response confirms favorited=true", favAdd.data?.favorited, true);
+
+  const favAddAgain = await request(`/api/vendors/1/favorite`, { method: "POST", cookie: customerCookie });
+  check("favorite: adding the same vendor twice doesn't error (idempotent, 200)", favAddAgain.status, 200);
+
+  const dashWithFavorite = await request("/dashboard", { cookie: customerCookie });
+  checkTrue(
+    "customer dashboard: shows the favorited vendor",
+    dashWithFavorite.text.includes("Backwater Grand Palace")
+  );
+
+  const favRemove = await request(`/api/vendors/1/favorite`, { method: "DELETE", cookie: customerCookie });
+  check("favorite: remove succeeds (200)", favRemove.status, 200);
+  check("favorite: response confirms favorited=false", favRemove.data?.favorited, false);
+
+  const favBadVendorId = await request(`/api/vendors/not-a-number/favorite`, {
+    method: "POST",
+    cookie: customerCookie,
+  });
+  check("favorite: non-numeric vendor id rejected (400)", favBadVendorId.status, 400);
+
+  // ---------- Search suggestions ----------
+  const suggestShort = await request("/api/suggest?q=k");
+  check("suggest: query under 2 chars returns empty results (not an error)", suggestShort.status, 200);
+  check("suggest: query under 2 chars returns no vendors", suggestShort.data?.vendors?.length, 0);
+
+  const suggestCategory = await request("/api/suggest?q=Photo");
+  checkTrue(
+    "suggest: partial category match found (Photography)",
+    suggestCategory.data?.categories?.includes("Photography")
+  );
+
+  const suggestLocation = await request("/api/suggest?q=Koc");
+  checkTrue(
+    "suggest: partial location match found (Kochi)",
+    suggestLocation.data?.locations?.includes("Kochi")
+  );
+
+  const suggestVendorName = await request("/api/suggest?q=Backwater");
+  checkTrue(
+    "suggest: partial vendor name match found (Backwater Grand Palace)",
+    suggestVendorName.data?.vendors?.some((v) => v.name === "Backwater Grand Palace")
+  );
+
+  const suggestNoMatch = await request("/api/suggest?q=zzzznomatchzzzz");
+  check("suggest: no matches returns empty arrays, not an error", suggestNoMatch.status, 200);
+  check(
+    "suggest: no matches — all three categories empty",
+    (suggestNoMatch.data?.categories?.length ?? -1) +
+      (suggestNoMatch.data?.locations?.length ?? -1) +
+      (suggestNoMatch.data?.vendors?.length ?? -1),
+    0
+  );
+
   // ---------- Settings ----------
   const settingsNoAuth = await request("/api/account", {
     method: "PATCH",
