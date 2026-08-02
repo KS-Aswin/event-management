@@ -36,10 +36,12 @@
 - `/dashboard/edit-listing` — edit an existing listing (shares the `ListingForm` component with create, via a `mode` prop)
 - Vendor dashboard leads now have a **status dropdown** (`pending`/`responded`/`booked`/`declined`), backed by `PATCH /api/quotes/[id]`
 - **Customers can submit real reviews** — star rating + text, one per customer per vendor, vendor's aggregate rating/count recalculated transactionally. Blocks self-review and duplicate review, both tested.
+- **Search typeahead** on the home page — suggests matching categories/locations/vendor names as you type (from our own DB, not real address autocomplete — that would need a Google Places API key)
+- **Favorites/shortlist** — heart icon on vendor cards and profile pages, saved list shown on the customer dashboard
 - `/settings` — real profile edit (name/email) + notification toggles, persisted to Postgres
 - `/about`, `/help`, `/privacy`, `/for-vendors` — static pages with real written copy
 - `web/db/seed.mjs` — seeds 9 sample vendors + reviews matching `/demo`'s data, so both versions are consistent
-- **`web/tests/api.test.mjs`** — real automated test suite, 69 checks, run with `npm run test:api` against a live dev server. See Session 6–9 log entries.
+- **`web/tests/api.test.mjs`** — real automated test suite, 84 checks, run with `npm run test:api` against a live dev server. See Session 6–10 log entries.
 - Tested via `npm run build` (must pass — TypeScript + compile check) plus the automated suite above before every commit.
 - `/demo` mockup now has a live shareable link via GitHub Pages (`gh-pages` branch) — see Session 9 for how that was set up.
 
@@ -123,13 +125,15 @@
 
 Roughly in priority order — pick up wherever makes sense:
 
-- [ ] **Deploy the real app somewhere** (Vercel is the natural fit for Next.js) with a real production Postgres (Neon, Supabase, Railway all have free tiers) — nothing is deployed anywhere yet, everything so far only runs locally / in the dev sandbox. **In progress as of Session 9** — walking through Neon + Vercel setup with the user, needs their account creation (can't be done from this side).
-- [ ] **Vendor stats are still incomplete on purpose.** "Profile visitors" and "conversion rate" aren't shown since there's no page-view tracking — only real countable things (total leads, pending count, review count) are shown.
-- [ ] **No customer-facing notification when a quote's status changes** — a vendor can mark a lead as responded/booked/declined, but the customer just sees the updated status text next time they check their dashboard, no notification.
-- [ ] **Google OAuth** — needs a real Google Cloud OAuth client (client ID + secret), which only the project owner can create in Google Cloud Console. The button is present but disabled until then.
-- [ ] Revisit the original bigger product brief (AI planner, full vendor CRM, admin panel, etc.) if/when ready to scope further — that content isn't in this repo, it was discussed in chat only.
+- [ ] **Deploy the real app somewhere** (Vercel + a hosted Postgres like Neon) — still the biggest gap, needs the user's account creation. In progress as of Session 9/10.
+- [ ] **Real location/address autocomplete** (Google Places API) — the current typeahead (Session 10) only suggests locations/vendors/categories that already exist in our own database, not arbitrary Kerala place names. Needs a Google Maps Platform API key from the user.
+- [ ] **Vendor stats are still incomplete on purpose.** "Profile visitors" and "conversion rate" aren't shown since there's no page-view tracking.
+- [ ] **No customer-facing notification when a quote's status changes.**
+- [ ] **Google OAuth** — needs a real Google Cloud OAuth client from the user.
+- [ ] Revisit the original bigger product brief (AI planner, full vendor CRM, admin panel, etc.) if/when ready to scope further.
 - [ ] No mobile-specific manual testing has been done on `/web` yet.
 - [ ] The API test suite covers backend behavior well but not UI rendering/interaction — consider Playwright later if UI regressions become a concern.
+- [ ] Favorites has no "remove" button on the dashboard list itself yet — you'd need to go to the vendor's profile page and un-heart it there.
 
 ## 5. How to verify changes before committing
 
@@ -157,6 +161,16 @@ Both `npm run build` and `npm run test:api` should pass with zero failures befor
 ## 6. Session Log
 
 > Add a new dated entry each session, newest at the top. Keep entries short — a few lines of what changed and why, not a full diff.
+
+### 2026-07-28 — Session 10 (search typeahead, favorites/shortlist)
+- User asked specifically for "while typing, locations list down" (search suggestions) and to build anything else useful that doesn't need new credentials from them. Built two features:
+- **Search typeahead** (`GET /api/suggest?q=`) — as you type in the home page search box (2+ characters, debounced 250ms), a dropdown shows matching categories, locations, and vendor names, grouped. Clicking a category/location jumps straight to filtered `/search` results; clicking a vendor goes straight to their profile. Closes on outside click or Escape (deliberately not on input blur, since blur fires before a click on a suggestion registers — would have closed the dropdown before the click could land).
+  - **Honest limitation, noted in the backlog:** this only suggests things that already exist in our database (vendor locations/names/categories) — it is NOT real address autocomplete like Google Maps. Real place-name autocomplete for all of Kerala would need the Google Places API, which needs a Google Cloud API key from the user. Didn't want to leave that distinction implicit.
+- **Favorites/shortlist** — heart-icon toggle button (`lib/favorite-button.tsx`, shared between vendor cards on `/search` and the vendor profile page), backed by `POST`/`DELETE /api/vendors/[id]/favorite`. New `favorites` table with a unique constraint on `(customer_id, vendor_id)` so toggling is idempotent (`ON CONFLICT DO NOTHING` on add). Customer dashboard now has a "Your favorites" section.
+- Caught and fixed my own editing mistake mid-session: a `str_replace` accidentally deleted the `FavoriteVendor` interface while adding a new function nearby (the old string being replaced included the interface, the replacement didn't). Caught it with a quick `grep` before running the build, not by the build failing — worth doing that check proactively when a `str_replace` on a shared file feels like it might have touched more than intended.
+- Extended `web/tests/api.test.mjs` to 84 checks (from 69): favorites (add, idempotent re-add, remove, no-auth, bad id, dashboard reflects it), search suggestions (short query returns empty not an error, category/location/vendor-name matches, no-match case).
+- Full suite run against a freshly-seeded database: **84 passed, 0 failed**. Clean `npm run build` (24 routes).
+- Updated `web/README.md` and this file.
 
 ### 2026-07-28 — Session 9 (customer reviews, GitHub Pages for the demo)
 - **Reviews can now be submitted for real.** Added `customer_id` to `vendor_reviews` (nullable — seed reviews don't have one), plus a partial unique index (`WHERE customer_id IS NOT NULL`) preventing the same customer from reviewing the same vendor twice. Added `POST /api/vendors/[id]/reviews` and a star-rating `ReviewForm` client component on the vendor profile page.
