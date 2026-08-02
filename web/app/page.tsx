@@ -12,12 +12,23 @@ const EXAMPLES = [
   "Mehendi artist near Kozhikode",
 ];
 
+interface Suggestions {
+  categories: string[];
+  locations: string[];
+  vendors: { id: number; name: string; category: string }[];
+}
+
+const EMPTY_SUGGESTIONS: Suggestions = { categories: [], locations: [], vendors: [] };
+
 export default function Home() {
   const router = useRouter();
   const [value, setValue] = useState("");
   const [placeholder, setPlaceholder] = useState("");
   const [focused, setFocused] = useState(false);
+  const [suggestions, setSuggestions] = useState<Suggestions>(EMPTY_SUGGESTIONS);
+  const [showSuggestions, setShowSuggestions] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
+  const wrapperRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     let exIndex = 0;
@@ -53,12 +64,51 @@ export default function Home() {
     return () => clearTimeout(timeoutId);
   }, []);
 
-  function search(category?: string) {
+  // Debounced fetch of suggestions as the person types.
+  useEffect(() => {
+    if (value.trim().length < 2) {
+      setSuggestions(EMPTY_SUGGESTIONS);
+      setShowSuggestions(false);
+      return;
+    }
+    const timeoutId = setTimeout(async () => {
+      try {
+        const res = await fetch(`/api/suggest?q=${encodeURIComponent(value)}`);
+        if (!res.ok) return;
+        const data = await res.json();
+        setSuggestions(data);
+        setShowSuggestions(true);
+      } catch {
+        // suggestions are a nice-to-have — silently ignore a failed fetch
+      }
+    }, 250);
+    return () => clearTimeout(timeoutId);
+  }, [value]);
+
+  // Close the dropdown on an outside click, rather than on input blur —
+  // blur fires before a click on a suggestion registers, which would close
+  // the dropdown before the click could be handled.
+  useEffect(() => {
+    function handleClickOutside(e: MouseEvent) {
+      if (wrapperRef.current && !wrapperRef.current.contains(e.target as Node)) {
+        setShowSuggestions(false);
+      }
+    }
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
+
+  function search(category?: string, location?: string) {
     const params = new URLSearchParams();
     if (value) params.set("q", value);
     if (category) params.set("category", category);
+    if (location) params.set("location", location);
+    setShowSuggestions(false);
     router.push(`/search?${params.toString()}`);
   }
+
+  const hasSuggestions =
+    suggestions.categories.length + suggestions.locations.length + suggestions.vendors.length > 0;
 
   return (
     <main className="flex-1 flex flex-col items-center justify-center px-5 py-14">
@@ -69,13 +119,13 @@ export default function Home() {
         Kerala&apos;s marketplace for weddings &amp; events
       </p>
 
-      <div className="w-full max-w-[584px]">
+      <div className="w-full max-w-[584px] relative" ref={wrapperRef}>
         <form
           onSubmit={(e) => {
             e.preventDefault();
             search();
           }}
-          className={`flex items-center gap-3 border rounded-full px-5 py-3 transition-shadow ${
+          className={`flex items-center gap-3 border rounded-full px-5 py-3 transition-shadow relative z-10 bg-white ${
             focused ? "shadow-[0_1px_6px_rgba(32,33,36,0.18)] border-transparent" : "border-line"
           }`}
         >
@@ -87,13 +137,51 @@ export default function Home() {
             ref={inputRef}
             value={value}
             onChange={(e) => setValue(e.target.value)}
-            onFocus={() => setFocused(true)}
+            onFocus={() => {
+              setFocused(true);
+              if (hasSuggestions) setShowSuggestions(true);
+            }}
             onBlur={() => setFocused(false)}
+            onKeyDown={(e) => {
+              if (e.key === "Escape") setShowSuggestions(false);
+            }}
             placeholder={placeholder}
             autoComplete="off"
             className="flex-1 outline-none text-base bg-transparent"
           />
         </form>
+
+        {showSuggestions && hasSuggestions && (
+          <div className="absolute top-full left-0 right-0 mt-1.5 bg-white border border-line rounded-2xl shadow-lg py-2 z-20 max-h-[360px] overflow-auto">
+            {suggestions.categories.length > 0 && (
+              <SuggestionGroup label="Categories">
+                {suggestions.categories.map((c) => (
+                  <SuggestionRow key={c} onClick={() => search(c)}>
+                    {c}
+                  </SuggestionRow>
+                ))}
+              </SuggestionGroup>
+            )}
+            {suggestions.locations.length > 0 && (
+              <SuggestionGroup label="Locations">
+                {suggestions.locations.map((l) => (
+                  <SuggestionRow key={l} onClick={() => search(undefined, l)}>
+                    {l}
+                  </SuggestionRow>
+                ))}
+              </SuggestionGroup>
+            )}
+            {suggestions.vendors.length > 0 && (
+              <SuggestionGroup label="Vendors">
+                {suggestions.vendors.map((v) => (
+                  <SuggestionRow key={v.id} onClick={() => router.push(`/vendors/${v.id}`)}>
+                    {v.name} <span className="text-ink-soft">· {v.category}</span>
+                  </SuggestionRow>
+                ))}
+              </SuggestionGroup>
+            )}
+          </div>
+        )}
       </div>
 
       <div className="flex gap-3 mt-6.5 flex-wrap justify-center">
@@ -123,5 +211,26 @@ export default function Home() {
         ))}
       </div>
     </main>
+  );
+}
+
+function SuggestionGroup({ label, children }: { label: string; children: React.ReactNode }) {
+  return (
+    <div className="px-2 py-1">
+      <div className="text-[11px] uppercase tracking-wide text-ink-soft px-2.5 pt-1.5 pb-1">{label}</div>
+      {children}
+    </div>
+  );
+}
+
+function SuggestionRow({ children, onClick }: { children: React.ReactNode; onClick: () => void }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className="w-full text-left px-2.5 py-2 text-sm rounded-lg hover:bg-accent-tint hover:text-accent"
+    >
+      {children}
+    </button>
   );
 }
