@@ -80,7 +80,7 @@ export default function QuoteButton({ vendorId, vendorName }: { vendorId: number
                 )}
                 <FormField label="Your name" name="name" required />
                 <FormField label="Phone number" name="phone" type="tel" required />
-                <FormField label="Event date" name="eventDate" type="date" required />
+                <FormField label="Event date" name="eventDate" type="date" required min={new Date().toISOString().slice(0, 10)} />
                 <FormField label="Budget (₹)" name="budget" placeholder="e.g. 1,50,000" />
                 <div>
                   <label className="block text-[13px] text-ink-soft mb-1.5">Message</label>
@@ -122,12 +122,14 @@ function FormField({
   type = "text",
   required,
   placeholder,
+  min,
 }: {
   label: string;
   name: string;
   type?: string;
   required?: boolean;
   placeholder?: string;
+  min?: string;
 }) {
   return (
     <div>
@@ -137,6 +139,7 @@ function FormField({
         type={type}
         required={required}
         placeholder={placeholder}
+        min={min}
         className="w-full px-3 py-2.5 border border-line rounded-md text-sm outline-none focus:border-accent"
       />
     </div>

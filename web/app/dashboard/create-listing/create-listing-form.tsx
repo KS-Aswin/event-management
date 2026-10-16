@@ -4,12 +4,15 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { CATEGORIES } from "@/lib/vendorVisuals";
 
+const PRICE_UNIT_OPTIONS = ["onwards", "per plate", "per event", "per day"] as const;
+
 interface InitialValues {
   vendorId: number;
   name: string;
   category: string;
   location: string;
   price: number;
+  priceUnit: string;
   experience: string;
   tags: string[];
   about: string;
@@ -27,6 +30,7 @@ export default function ListingForm({
   const [category, setCategory] = useState<string>(initialValues?.category ?? CATEGORIES[0]);
   const [location, setLocation] = useState(initialValues?.location ?? "");
   const [price, setPrice] = useState(initialValues ? String(initialValues.price) : "");
+  const [priceUnit, setPriceUnit] = useState<string>(initialValues?.priceUnit ?? "onwards");
   const [experience, setExperience] = useState(initialValues?.experience ?? "");
   const [tags, setTags] = useState(initialValues?.tags.join(", ") ?? "");
   const [about, setAbout] = useState(initialValues?.about ?? "");
@@ -49,6 +53,7 @@ export default function ListingForm({
         category,
         location,
         price: parseInt(price, 10),
+        priceUnit,
         experience,
         tags: tags.split(",").map((t) => t.trim()).filter(Boolean),
         about,
@@ -94,6 +99,20 @@ export default function ListingForm({
         required
         type="number"
       />
+      <div>
+        <label className="block text-[13px] text-ink-soft mb-1.5">Price type</label>
+        <select
+          value={priceUnit}
+          onChange={(e) => setPriceUnit(e.target.value)}
+          className="w-full px-2.5 py-2 border border-line rounded-md text-sm"
+        >
+          {PRICE_UNIT_OPTIONS.map((u) => (
+            <option key={u} value={u}>
+              {u === "onwards" ? "Starting price (onwards)" : u.charAt(0).toUpperCase() + u.slice(1)}
+            </option>
+          ))}
+        </select>
+      </div>
       <Field label="Years of experience (e.g. 5 yrs)" value={experience} onChange={setExperience} required />
       <Field label="Tags (comma-separated, e.g. Candid, Drone, Cinematic)" value={tags} onChange={setTags} />
       <div>

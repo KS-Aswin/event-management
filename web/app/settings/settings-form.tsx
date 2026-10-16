@@ -6,11 +6,13 @@ import { useRouter } from "next/navigation";
 export default function SettingsForm({
   initialName,
   initialEmail,
+  initialEmailVerified,
   initialEmailNotifications,
   initialSmsNotifications,
 }: {
   initialName: string;
   initialEmail: string;
+  initialEmailVerified: boolean;
   initialEmailNotifications: boolean;
   initialSmsNotifications: boolean;
 }) {
@@ -20,6 +22,13 @@ export default function SettingsForm({
   const [emailNotifications, setEmailNotifications] = useState(initialEmailNotifications);
   const [smsNotifications, setSmsNotifications] = useState(initialSmsNotifications);
   const [saving, setSaving] = useState(false);
+  const [verified, setVerified] = useState(initialEmailVerified);
+  const [currentPassword, setCurrentPassword] = useState("");
+  const [newPassword, setNewPassword] = useState("");
+  const [passwordError, setPasswordError] = useState<string | null>(null);
+  const [deleting, setDeleting] = useState(false);
+  const [deletePassword, setDeletePassword] = useState("");
+  const [deleteError, setDeleteError] = useState<string | null>(null);
   const [toast, setToast] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -43,7 +52,49 @@ export default function SettingsForm({
       setError(data.error ?? "Something went wrong.");
       return;
     }
+    setVerified(data.user?.emailVerified ?? verified);
     showToast("Settings saved");
+    router.refresh();
+  }
+
+  async function resendVerification() {
+    const res = await fetch("/api/account/verify-email", { method: "POST" });
+    const data = await res.json();
+    showToast(res.ok ? "Verification email sent." : data.error ?? "Could not send the email.");
+  }
+
+  async function changePassword(e: React.FormEvent) {
+    e.preventDefault();
+    setPasswordError(null);
+    const res = await fetch("/api/account/password", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ currentPassword, newPassword }),
+    });
+    const data = await res.json();
+    if (!res.ok) {
+      setPasswordError(data.error ?? "Something went wrong.");
+      return;
+    }
+    setCurrentPassword("");
+    setNewPassword("");
+    showToast("Password changed");
+  }
+
+  async function deleteAccount(e: React.FormEvent) {
+    e.preventDefault();
+    setDeleteError(null);
+    const res = await fetch("/api/account", {
+      method: "DELETE",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ password: deletePassword }),
+    });
+    const data = await res.json();
+    if (!res.ok) {
+      setDeleteError(data.error ?? "Something went wrong.");
+      return;
+    }
+    router.push("/");
     router.refresh();
   }
 
@@ -90,12 +141,57 @@ export default function SettingsForm({
               className="w-full px-3 py-2.5 border border-line rounded-md text-sm outline-none focus:border-accent"
             />
           </div>
+          {!verified && (
+            <p className="text-[13px] text-ink-soft">
+              Your email isn&apos;t verified yet.{" "}
+              <button type="button" onClick={resendVerification} className="text-accent hover:underline">
+                Resend verification email
+              </button>
+            </p>
+          )}
           <button
             type="submit"
             disabled={saving}
             className="px-4.5 py-2.5 rounded-md bg-accent hover:bg-accent-hover text-white text-sm font-medium disabled:opacity-70"
           >
             {saving ? "Saving…" : "Save changes"}
+          </button>
+        </form>
+      </div>
+
+      <div className="border border-line rounded-xl p-5.5">
+        <h3 className="text-[15px] font-semibold mb-3">Change password</h3>
+        {passwordError && (
+          <div className="mb-3 text-sm text-red-700 bg-red-50 border border-red-100 rounded-md px-3 py-2">
+            {passwordError}
+          </div>
+        )}
+        <form onSubmit={changePassword} className="space-y-3">
+          <input
+            type="password"
+            value={currentPassword}
+            onChange={(e) => setCurrentPassword(e.target.value)}
+            required
+            autoComplete="current-password"
+            placeholder="Current password"
+            className="w-full px-3 py-2.5 border border-line rounded-md text-sm outline-none focus:border-accent"
+          />
+          <input
+            type="password"
+            value={newPassword}
+            onChange={(e) => setNewPassword(e.target.value)}
+            required
+            minLength={8}
+            maxLength={72}
+            autoComplete="new-password"
+            placeholder="New password (8–72 characters)"
+            className="w-full px-3 py-2.5 border border-line rounded-md text-sm outline-none focus:border-accent"
+          />
+          <button
+            type="submit"
+            className="px-4.5 py-2.5 rounded-md bg-accent hover:bg-accent-hover text-white text-sm font-medium"
+          >
+            Change password
           </button>
         </form>
       </div>
@@ -122,12 +218,37 @@ export default function SettingsForm({
             Log out
           </button>
           <button
-            onClick={() => showToast("This is a demo — account deletion isn't available.")}
+            onClick={() => setDeleting((v) => !v)}
             className="px-4 py-2 rounded-md bg-red-50 hover:bg-red-100 text-red-700 text-sm"
           >
             Delete account
           </button>
         </div>
+        {deleting && (
+          <form onSubmit={deleteAccount} className="mt-4 space-y-3">
+            <p className="text-[13px] text-ink-soft">
+              This permanently deletes your account and, for vendors, your listing and all its leads. Enter
+              your password to confirm.
+            </p>
+            {deleteError && (
+              <div className="text-sm text-red-700 bg-red-50 border border-red-100 rounded-md px-3 py-2">
+                {deleteError}
+              </div>
+            )}
+            <input
+              type="password"
+              value={deletePassword}
+              onChange={(e) => setDeletePassword(e.target.value)}
+              required
+              autoComplete="current-password"
+              placeholder="Your password"
+              className="w-full px-3 py-2.5 border border-line rounded-md text-sm outline-none focus:border-red-400"
+            />
+            <button type="submit" className="px-4 py-2 rounded-md bg-red-600 hover:bg-red-700 text-white text-sm">
+              Permanently delete my account
+            </button>
+          </form>
+        )}
       </div>
 
       {toast && (

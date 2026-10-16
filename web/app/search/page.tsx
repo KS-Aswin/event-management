@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { findVendors, findAllLocations, findFavoriteVendorIds } from "@/lib/db";
+import { findVendors, findAllLocations, findFavoriteVendorIds, DEFAULT_PAGE_SIZE } from "@/lib/db";
 import { getSession } from "@/lib/session";
 import { VendorTile } from "@/lib/vendorVisuals";
 import FavoriteButton from "@/lib/favorite-button";
@@ -18,14 +18,37 @@ export default async function SearchPage({
   const minRating = typeof sp.minRating === "string" ? parseFloat(sp.minRating) : undefined;
   const sortRaw = typeof sp.sort === "string" ? sp.sort : "rating";
   const sort =
-    sortRaw === "reviews" || sortRaw === "priceLow" || sortRaw === "priceHigh" ? sortRaw : "rating";
+    sortRaw === "reviews" || sortRaw === "priceLow" || sortRaw === "priceHigh" || sortRaw === "trending"
+      ? sortRaw
+      : "rating";
+  const pageParsed = typeof sp.page === "string" ? parseInt(sp.page, 10) : 1;
+  const page = Number.isInteger(pageParsed) && pageParsed > 0 ? pageParsed : 1;
 
   const session = await getSession();
-  const [vendors, locations, favoriteIds] = await Promise.all([
-    findVendors({ query, categories: categories.length > 0 ? categories : undefined, location, minRating, sort }),
+  const [{ vendors, total }, locations, favoriteIds] = await Promise.all([
+    findVendors({
+      query,
+      categories: categories.length > 0 ? categories : undefined,
+      location,
+      minRating: minRating && !Number.isNaN(minRating) ? minRating : undefined,
+      sort,
+      page,
+    }),
     findAllLocations(),
     session ? findFavoriteVendorIds(session.userId) : Promise.resolve(new Set<number>()),
   ]);
+
+  const totalPages = Math.max(1, Math.ceil(total / DEFAULT_PAGE_SIZE));
+  function pageHref(target: number) {
+    const params = new URLSearchParams();
+    for (const [key, value] of Object.entries(sp)) {
+      if (key === "page" || value === undefined) continue;
+      for (const v of Array.isArray(value) ? value : [value]) params.append(key, v);
+    }
+    if (target > 1) params.set("page", String(target));
+    const qs = params.toString();
+    return qs ? `/search?${qs}` : "/search";
+  }
 
   return (
     <main className="max-w-[1180px] mx-auto px-6 py-6 flex flex-col md:flex-row gap-8 w-full">
@@ -33,7 +56,7 @@ export default async function SearchPage({
 
       <div className="flex-1 min-w-0">
         <p className="text-sm text-ink-soft mb-4">
-          {vendors.length} vendor{vendors.length !== 1 ? "s" : ""} found
+          {total} vendor{total !== 1 ? "s" : ""} found
         </p>
 
         {vendors.length === 0 ? (
@@ -57,6 +80,16 @@ export default async function SearchPage({
                   <div className="flex items-start justify-between gap-2">
                     <div className="text-[17px] font-semibold group-hover:text-accent group-hover:underline">
                       {v.name}
+                      {v.verified && (
+                        <span className="ml-2 align-middle bg-accent-tint text-accent text-[11px] px-2 py-0.5 rounded-full font-medium">
+                          Verified
+                        </span>
+                      )}
+                      {v.featured && (
+                        <span className="ml-1.5 align-middle bg-amber-50 text-amber-700 text-[11px] px-2 py-0.5 rounded-full font-medium">
+                          Featured
+                        </span>
+                      )}
                     </div>
                     <FavoriteButton
                       vendorId={v.id}
@@ -83,6 +116,28 @@ export default async function SearchPage({
               </Link>
             ))}
           </div>
+        )}
+
+        {totalPages > 1 && (
+          <nav className="flex items-center justify-between mt-6 text-sm" aria-label="Pagination">
+            {page > 1 ? (
+              <Link href={pageHref(page - 1)} className="border border-line rounded-md px-3.5 py-2 hover:border-accent">
+                ← Previous
+              </Link>
+            ) : (
+              <span />
+            )}
+            <span className="text-ink-soft">
+              Page {page} of {totalPages}
+            </span>
+            {page < totalPages ? (
+              <Link href={pageHref(page + 1)} className="border border-line rounded-md px-3.5 py-2 hover:border-accent">
+                Next →
+              </Link>
+            ) : (
+              <span />
+            )}
+          </nav>
         )}
       </div>
     </main>

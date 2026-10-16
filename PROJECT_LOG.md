@@ -127,8 +127,8 @@ Roughly in priority order — pick up wherever makes sense:
 
 - [ ] **Deploy the real app somewhere** (Vercel + a hosted Postgres like Neon) — still the biggest gap, needs the user's account creation. In progress as of Session 9/10.
 - [ ] **Real location/address autocomplete** (Google Places API) — the current typeahead (Session 10) only suggests locations/vendors/categories that already exist in our own database, not arbitrary Kerala place names. Needs a Google Maps Platform API key from the user.
-- [ ] **Vendor stats are still incomplete on purpose.** "Profile visitors" and "conversion rate" aren't shown since there's no page-view tracking.
-- [ ] **No customer-facing notification when a quote's status changes.**
+- [x] Page-view tracking and vendor stats (done in Session 11). Conversion rate still not shown.
+- [x] Customer notifications on quote status change (done in Session 11).
 - [ ] **Google OAuth** — needs a real Google Cloud OAuth client from the user.
 - [ ] Revisit the original bigger product brief (AI planner, full vendor CRM, admin panel, etc.) if/when ready to scope further.
 - [ ] No mobile-specific manual testing has been done on `/web` yet.
@@ -161,6 +161,13 @@ Both `npm run build` and `npm run test:api` should pass with zero failures befor
 ## 6. Session Log
 
 > Add a new dated entry each session, newest at the top. Keep entries short — a few lines of what changed and why, not a full diff.
+
+### 2026-10-16 — Session 11 (complete Vela, branch `claude/complete-vela`)
+- Added everything that doesn't need outside accounts: password reset + email verification, change password, delete account, packages, portfolio, availability, quote chat, notifications, pagination + trending, featured vendors, recommendations, admin page, rate limits, security headers, 404/error pages, `.env.example`, CI workflow.
+- Schema v2 is appended to `db/schema.sql` and is idempotent (re-run `npm run db:migrate`).
+- All new SQL was run against local Postgres 16 with sample data and behaved correctly. The API test suite was extended (`v2` section).
+- **Not run in the build sandbox:** `npm ci`, `next build`, `npm run test:api` (npm registry was unreachable). Run these first when verifying; CI will also run them.
+- Backlog left: Stripe, AI features, Google OAuth, Places autocomplete, multiple listings per vendor, deploy (needs Neon/Vercel/Cloudinary/Resend accounts).
 
 ### 2026-07-28 — Session 10 (search typeahead, favorites/shortlist)
 - User asked specifically for "while typing, locations list down" (search suggestions) and to build anything else useful that doesn't need new credentials from them. Built two features:

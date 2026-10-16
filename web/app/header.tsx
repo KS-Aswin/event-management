@@ -7,8 +7,10 @@ import type { UserRole } from "@/lib/db";
 
 export default function Header({
   session,
+  unread = 0,
 }: {
   session: { name: string; role: UserRole } | null;
+  unread?: number;
 }) {
   const pathname = usePathname();
   const router = useRouter();
@@ -44,6 +46,21 @@ export default function Header({
 
       {session ? (
         <nav className="flex items-center gap-5 text-sm whitespace-nowrap">
+          {session.role === "admin" && (
+            <Link href="/admin" className="text-accent font-medium hover:underline">
+              Admin
+            </Link>
+          )}
+          <Link href="/notifications" aria-label="Notifications" className="relative text-ink-soft hover:text-foreground">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <path d="M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9M13.7 21a2 2 0 0 1-3.4 0" />
+            </svg>
+            {unread > 0 && (
+              <span className="absolute -top-1.5 -right-2 bg-accent text-white text-[10px] leading-none rounded-full px-1.5 py-[3px]">
+                {unread > 9 ? "9+" : unread}
+              </span>
+            )}
+          </Link>
           <Link href="/dashboard" className="text-ink-soft hover:underline">
             Hi, {session.name.split(" ")[0]}
           </Link>

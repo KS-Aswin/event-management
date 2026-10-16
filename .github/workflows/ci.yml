@@ -1,0 +1,46 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: web
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: vela
+          POSTGRES_PASSWORD: vela
+          POSTGRES_DB: vela_test
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U vela"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      DATABASE_URL: postgres://vela:vela@localhost:5432/vela_test
+      SESSION_SECRET: ci-only-secret-at-least-32-characters-long
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+      - run: npm ci
+      - run: npm run lint
+      - run: npm run db:migrate
+      - run: npm run db:seed
+      - run: npm run build
+      - name: Start server and run API tests
+        run: |
+          npm run start &
+          for i in $(seq 1 30); do curl -sf http://localhost:3000 >/dev/null && break; sleep 2; done
+          npm run test:api

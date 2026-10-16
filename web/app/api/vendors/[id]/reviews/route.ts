@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { getSession } from "@/lib/session";
-import { createVendorReview } from "@/lib/db";
+import { createVendorReview, findVendorById } from "@/lib/db";
+import { notify } from "@/lib/notifications";
 
 export async function POST(
   request: Request,
@@ -36,6 +37,9 @@ export async function POST(
       { status: 400 }
     );
   }
+  if (reviewBody.length > 2000) {
+    return NextResponse.json({ error: "Review is too long (2000 characters max)." }, { status: 400 });
+  }
 
   const result = await createVendorReview({
     vendorId,
@@ -60,6 +64,15 @@ export async function POST(
       { error: "You've already reviewed this vendor." },
       { status: 409 }
     );
+  }
+
+  const vendor = await findVendorById(vendorId);
+  if (vendor?.owner_id) {
+    await notify(vendor.owner_id, {
+      type: "review",
+      title: `New ${ratingNum}-star review from ${session.name}`,
+      link: `/vendors/${vendorId}`,
+    });
   }
 
   return NextResponse.json({ review: result.review }, { status: 201 });

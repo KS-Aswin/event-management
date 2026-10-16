@@ -26,6 +26,7 @@ Prisma needs to download a native query-engine binary from `binaries.prisma.sh` 
    ```
    - `DATABASE_URL` — your Postgres connection string
    - `SESSION_SECRET` — a long random string, e.g. `openssl rand -base64 32`
+   - Optional: `APP_URL` (used in email links), `RESEND_API_KEY` + `EMAIL_FROM` (real emails; without them emails are printed in the server console), `CLOUDINARY_CLOUD_NAME` / `CLOUDINARY_API_KEY` / `CLOUDINARY_API_SECRET` (photo uploads; without them vendors paste an https image link), `RATE_LIMIT=on` (rate limiting is on automatically in production)
 
 3. **Install dependencies:**
    ```bash
@@ -36,7 +37,8 @@ Prisma needs to download a native query-engine binary from `binaries.prisma.sh` 
    ```bash
    node db/migrate.mjs
    ```
-   (This runs `db/schema.sql` against `DATABASE_URL`. Safe to re-run — it uses `CREATE TABLE IF NOT EXISTS`.)
+   (This runs `db/schema.sql` against `DATABASE_URL`. Safe to re-run — every statement is idempotent, so it also upgrades an older database.)
+   Then add sample vendors with `npm run db:seed` (refuses to run in production unless `SEED_FORCE=1`).
 
 5. **Run the dev server:**
    ```bash
@@ -65,15 +67,37 @@ Prisma needs to download a native query-engine binary from `binaries.prisma.sh` 
 - `GET /api/suggest?q=` — search typeahead: matching categories, locations, and vendor names from our own data (not real address autocomplete — see "Not wired yet")
 - `POST`/`DELETE /api/vendors/[id]/favorite` — save/unsave a vendor, shown as a heart icon on vendor cards and profile pages, listed on the customer dashboard
 
-**Not wired yet:** Google OAuth (button present but disabled — needs a real Google Cloud OAuth client), page-view tracking (so "profile visitors" isn't shown — only real countable stats are), customer notifications when a quote's status changes, real address/place autocomplete (current typeahead only suggests things already in our own database — full Kerala place-name suggestions would need a Google Places API key).
+**Not wired yet (older note, see the section below for the current list):** Google OAuth (button present but disabled — needs a real Google Cloud OAuth client), page-view tracking (so "profile visitors" isn't shown — only real countable stats are), customer notifications when a quote's status changes, real address/place autocomplete (current typeahead only suggests things already in our own database — full Kerala place-name suggestions would need a Google Places API key).
+
+## Added in the "complete Vela" pass
+
+- **Accounts:** forgot/reset password (single-use hashed tokens, 1 hour), email verification, change password, delete account (asks for password). Emails are lowercased; passwords 8–72 chars.
+- **Vendor tools:** packages (`/dashboard/packages`), portfolio photos (`/dashboard/portfolio`), unavailable dates (`/dashboard/availability`), real "Profile visitors (30 days)" and lead stats. Customers cannot request a quote on a blocked date; marking a quote *booked* blocks that date automatically.
+- **Messages and notifications:** chat thread per quote request (`/dashboard/quotes/[id]`, refreshes every 8 s), in-app bell with unread count (`/notifications`) plus an email copy.
+- **Search:** pagination, a *Trending* sort (recent leads x5 + views over 30 days), featured vendors first, `%` and `_` searched as plain text.
+- **Home page:** Featured vendors. **Dashboard:** recommended vendors for customers (best-rated vendor in categories they haven't tried).
+- **Admin:** `/admin` to verify / feature / hide listings. Admin is never creatable from the app. Make one with:
+  ```bash
+  npm run db:make-admin -- someone@example.com
+  ```
+- **Hardening:** rate limits on login/register/quotes/messages, validation helpers, security headers, 404 and error pages.
+
+### Deploying (suggested: Vercel + Neon)
+1. Create a Neon Postgres database and use the **pooled** connection string as `DATABASE_URL`.
+2. Run `npm run db:migrate` once against it (from your computer, with `DATABASE_URL` set).
+3. In Vercel, set the root directory to `web`, and add the env vars above (`SESSION_SECRET`, `APP_URL`, and Resend/Cloudinary if you use them).
+4. Note: rate limiting is in memory (per server instance), so it is a basic guard, not a complete one.
+
+### Still not built
+Stripe payments/commission, AI planner, Google sign-in, Google Places autocomplete, several listings per vendor, SMS, session logout-everywhere after a password reset (sessions are stateless JWTs).
 
 ## Database schema
 
-See `db/schema.sql`. Tables: `users`, `vendors`, `vendor_reviews`, `quote_requests`. Run `node db/seed.mjs` after migrating to populate sample vendors (the same 9 used in the `/demo` mockup, so both stay consistent) — safe to re-run, it clears and re-inserts rather than duplicating.
+See `db/schema.sql`. Tables: `users`, `vendors`, `vendor_reviews`, `quote_requests`, `favorites`, `vendor_packages`, `portfolio_items`, `vendor_unavailable_dates`, `notifications`, `quote_messages`, `auth_tokens`, `vendor_views`. Run `node db/seed.mjs` after migrating to populate sample vendors (the same 9 used in the `/demo` mockup, so both stay consistent) — safe to re-run, it only replaces the sample (ownerless) vendors and never touches real vendor listings.
 
 ## Testing
 
-There's a real automated test suite now: `web/tests/api.test.mjs` — 84 checks covering registration validation, login, protected-route redirects, vendor search (all filter types + sort ordering), vendor detail lookup, quote request submission, vendor listing creation, editing a listing, quote status updates, review submission (including the vendor rating/count actually recalculating), **favorites** (add, idempotent re-add, remove, dashboard reflects it), **search suggestions** (category/location/vendor-name matches, short-query and no-match edge cases), settings updates, logout, and role-specific dashboard content reflecting real data.
+There's a real automated test suite now: `web/tests/api.test.mjs` — about 150 checks covering registration validation, login, protected-route redirects, vendor search (all filter types + sort ordering), vendor detail lookup, quote request submission, vendor listing creation, editing a listing, quote status updates, review submission (including the vendor rating/count actually recalculating), **favorites** (add, idempotent re-add, remove, dashboard reflects it), **search suggestions** (category/location/vendor-name matches, short-query and no-match edge cases), settings updates, logout, role-specific dashboard content, and the newer features (pagination, packages, portfolio, availability, messages, notifications, admin guard, password change/reset, delete account).
 
 To run it:
 ```bash

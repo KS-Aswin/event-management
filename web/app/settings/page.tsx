@@ -17,6 +17,7 @@ export default async function SettingsPage() {
       <SettingsForm
         initialName={user.name}
         initialEmail={user.email}
+        initialEmailVerified={user.email_verified}
         initialEmailNotifications={user.email_notifications}
         initialSmsNotifications={user.sms_notifications}
       />
