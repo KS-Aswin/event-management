@@ -1,7 +1,8 @@
 import { notFound } from "next/navigation";
 import Link from "next/link";
-import { findVendorById, findReviewsByVendor, isFavorited } from "@/lib/db";
+import { findVendorById, findReviewsByVendor, isFavorited, recordVendorView } from "@/lib/db";
 import { getSession } from "@/lib/session";
+import { listPackages, listPortfolio, listUnavailableDates } from "@/lib/vendor-content";
 import { VendorTile } from "@/lib/vendorVisuals";
 import FavoriteButton from "@/lib/favorite-button";
 import QuoteButton from "./quote-button";
@@ -23,12 +24,29 @@ export default async function VendorProfilePage({
   const vendor = await findVendorById(vendorId);
   if (!vendor) notFound();
 
-  const [reviews, session] = await Promise.all([findReviewsByVendor(vendorId), getSession()]);
-  const price = Number(vendor.price);
+  const session = await getSession();
+  const isOwnListing = session ? vendor.owner_id === session.userId : false;
+  // Hidden listings are visible only to their owner and admins.
+  if (!vendor.published && !isOwnListing && session?.role !== "admin") notFound();
+
+  // Count the visit (the owner looking at their own page doesn't count).
+  if (!isOwnListing) {
+    try {
+      await recordVendorView(vendorId, session?.userId ?? null);
+    } catch (err) {
+      console.error("[vendor view] could not record:", err);
+    }
+  }
+
+  const [reviews, packages, portfolio, unavailableDates] = await Promise.all([
+    findReviewsByVendor(vendorId),
+    listPackages(vendorId),
+    listPortfolio(vendorId),
+    listUnavailableDates(vendorId),
+  ]);
   const alreadyReviewed = session
     ? reviews.some((r) => r.customer_id === session.userId)
     : false;
-  const isOwnListing = session ? vendor.owner_id === session.userId : false;
   const favorited = session ? await isFavorited(session.userId, vendorId) : false;
 
   return (
@@ -45,40 +63,76 @@ export default async function VendorProfilePage({
               <p className="text-ink-soft text-sm mt-1">
                 {vendor.category} · {vendor.location} · {vendor.experience} experience
               </p>
-              <div className="flex items-center gap-1.5 mt-2.5 text-sm">
+              <div className="flex items-center gap-1.5 mt-2.5 text-sm flex-wrap">
                 <span className="text-gold">★</span> {vendor.rating} ({vendor.reviews_count} reviews)
-                <span className="bg-accent-tint text-accent text-xs px-2.5 py-0.5 rounded-full font-medium ml-1">
-                  Verified
-                </span>
+                {vendor.verified && (
+                  <span className="bg-accent-tint text-accent text-xs px-2.5 py-0.5 rounded-full font-medium ml-1">
+                    Verified
+                  </span>
+                )}
+                {vendor.featured && (
+                  <span className="bg-amber-50 text-amber-700 text-xs px-2.5 py-0.5 rounded-full font-medium">
+                    Featured
+                  </span>
+                )}
               </div>
+              <div className="text-sm font-semibold text-accent mt-2">{vendor.price_label}</div>
             </div>
             <div className="flex items-center gap-3">
               <FavoriteButton vendorId={vendor.id} initialFavorited={favorited} loggedIn={!!session} />
-              <QuoteButton vendorId={vendor.id} vendorName={vendor.name} />
+              {!isOwnListing && <QuoteButton vendorId={vendor.id} vendorName={vendor.name} />}
             </div>
           </div>
 
-          <div className="grid grid-cols-4 gap-2 my-6">
-            {[0, 1, 2, 3].map((i) => (
-              <VendorTile
-                key={i}
-                category={vendor.category}
-                size={28}
-                opacity={0.7 + i * 0.08}
-                className="w-full h-[110px] rounded-lg"
-              />
-            ))}
-          </div>
+          {portfolio.length > 0 && (
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 my-6">
+              {portfolio.map((p) => (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img
+                  key={p.id}
+                  src={p.url}
+                  alt={p.caption ?? `${vendor.name} portfolio photo`}
+                  loading="lazy"
+                  className="w-full h-[130px] object-cover rounded-lg"
+                />
+              ))}
+            </div>
+          )}
 
           <h2 className="text-base font-semibold mt-6.5 mb-3">About</h2>
-          <p className="text-sm leading-relaxed">{vendor.about}</p>
+          <p className="text-sm leading-relaxed whitespace-pre-line">{vendor.about}</p>
 
           <h2 className="text-base font-semibold mt-6.5 mb-3">Packages</h2>
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3.5">
-            <Package title="Basic" price={vendor.price_label} items={["Standard service", "Up to 4 hours", "Digital delivery"]} />
-            <Package title="Standard" price={formatPrice(price * 1.6)} items={["Extended coverage", "Priority support", "Extra add-ons"]} />
-            <Package title="Premium" price={formatPrice(price * 2.4)} items={["Full-day service", "Dedicated coordinator", "All add-ons included"]} />
-          </div>
+          {packages.length === 0 ? (
+            <p className="text-sm text-ink-soft">
+              {vendor.name} hasn&apos;t listed packages yet — request a quote to get exact pricing.
+            </p>
+          ) : (
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3.5">
+              {packages.map((pkg) => (
+                <Package key={pkg.id} title={pkg.name} price={formatPrice(pkg.price)} items={pkg.items} />
+              ))}
+            </div>
+          )}
+
+          {unavailableDates.length > 0 && (
+            <>
+              <h2 className="text-base font-semibold mt-6.5 mb-3">Not available on</h2>
+              <p className="text-sm text-ink-soft">
+                {unavailableDates
+                  .slice(0, 12)
+                  .map((d) =>
+                    new Date(`${d}T00:00:00Z`).toLocaleDateString("en-IN", {
+                      timeZone: "UTC",
+                      day: "numeric",
+                      month: "short",
+                    })
+                  )
+                  .join(" · ")}
+                {unavailableDates.length > 12 ? ` · and ${unavailableDates.length - 12} more` : ""}
+              </p>
+            </>
+          )}
 
           <h2 className="text-base font-semibold mt-6.5 mb-3">Reviews</h2>
 

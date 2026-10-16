@@ -1,6 +1,8 @@
 import { NextResponse } from "next/server";
 import { getSession } from "@/lib/session";
 import { updateQuoteStatus, QUOTE_STATUSES } from "@/lib/db";
+import { notify } from "@/lib/notifications";
+import { markDateUnavailable } from "@/lib/vendor-content";
 
 export async function PATCH(
   request: Request,
@@ -42,6 +44,19 @@ export async function PATCH(
       { error: "Quote request not found, or it wasn't sent to your listing." },
       { status: 404 }
     );
+  }
+
+  // A booked job blocks that date on the vendor's calendar.
+  if (updated.status === "booked" && updated.event_date) {
+    await markDateUnavailable(updated.vendor_id, updated.event_date);
+  }
+
+  if (updated.customer_id) {
+    await notify(updated.customer_id, {
+      type: "quote_status",
+      title: `${updated.vendor_name} marked your request as ${updated.status}`,
+      link: `/dashboard/quotes/${updated.id}`,
+    });
   }
 
   return NextResponse.json({ quote: updated });

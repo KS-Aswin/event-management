@@ -23,6 +23,7 @@ export default async function EditListingPage() {
           category: vendor.category,
           location: vendor.location,
           price: vendor.price,
+          priceUnit: vendor.price_unit,
           experience: vendor.experience,
           tags: vendor.tags,
           about: vendor.about,

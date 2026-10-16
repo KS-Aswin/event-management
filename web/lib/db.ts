@@ -24,7 +24,7 @@ if (process.env.NODE_ENV !== "production") {
   global._velaPgPool = pool;
 }
 
-export type UserRole = "customer" | "vendor";
+export type UserRole = "customer" | "vendor" | "admin";
 
 export interface UserRecord {
   id: number;
@@ -34,6 +34,7 @@ export interface UserRecord {
   role: UserRole;
   email_notifications: boolean;
   sms_notifications: boolean;
+  email_verified: boolean;
   created_at: string;
 }
 
@@ -75,12 +76,20 @@ export async function updateUser(
   const result = await pool.query<UserRecord>(
     `UPDATE users SET
        name = COALESCE($2, name),
-       email = COALESCE($3, email),
+       email_verified = CASE WHEN $3::text IS NOT NULL AND $3::text <> email THEN false ELSE email_verified END,
+       email = COALESCE($3::text, email),
        email_notifications = COALESCE($4, email_notifications),
        sms_notifications = COALESCE($5, sms_notifications)
      WHERE id = $1
      RETURNING *`,
-    [id, fields.name ?? null, fields.email ?? null, fields.emailNotifications ?? null, fields.smsNotifications ?? null]
+    [
+      id,
+      fields.name ?? null,
+      // Always stored lowercase so it matches findUserByEmail's lookup.
+      fields.email ? fields.email.toLowerCase().trim() : null,
+      fields.emailNotifications ?? null,
+      fields.smsNotifications ?? null,
+    ]
   );
   return result.rows[0];
 }
@@ -98,7 +107,18 @@ export interface VendorRecord {
   experience: string;
   tags: string[];
   about: string;
+  published: boolean;
+  verified: boolean;
+  featured: boolean;
+  price_unit: string;
   created_at: string;
+}
+
+export const PRICE_UNITS = ["onwards", "per plate", "per event", "per day"] as const;
+export type PriceUnit = (typeof PRICE_UNITS)[number];
+
+export function buildPriceLabel(price: number, unit: string): string {
+  return `₹${price.toLocaleString("en-IN")} ${unit}`;
 }
 
 export interface VendorFilters {
@@ -106,17 +126,29 @@ export interface VendorFilters {
   categories?: string[];
   location?: string;
   minRating?: number;
-  sort?: "rating" | "reviews" | "priceLow" | "priceHigh";
+  sort?: "rating" | "reviews" | "priceLow" | "priceHigh" | "trending";
+  page?: number;
+  pageSize?: number;
 }
 
-export async function findVendors(filters: VendorFilters): Promise<VendorRecord[]> {
-  const clauses: string[] = [];
+export const DEFAULT_PAGE_SIZE = 12;
+
+function escapeLike(input: string): string {
+  // Escape LIKE wildcards so a search for "100%" doesn't match everything.
+  return input.replace(/[\\%_]/g, "\\$&");
+}
+
+export async function findVendors(
+  filters: VendorFilters
+): Promise<{ vendors: VendorRecord[]; total: number }> {
+  const clauses: string[] = ["published = true"];
   const values: unknown[] = [];
 
   if (filters.query) {
-    values.push(`%${filters.query.toLowerCase()}%`);
+    values.push(`%${escapeLike(filters.query.toLowerCase())}%`);
+    const p = `$${values.length}`;
     clauses.push(
-      `(LOWER(name) LIKE $${values.length} OR LOWER(category) LIKE $${values.length} OR LOWER(location) LIKE $${values.length} OR EXISTS (SELECT 1 FROM unnest(tags) t WHERE LOWER(t) LIKE $${values.length}))`
+      `(LOWER(name) LIKE ${p} ESCAPE '\\' OR LOWER(category) LIKE ${p} ESCAPE '\\' OR LOWER(location) LIKE ${p} ESCAPE '\\' OR EXISTS (SELECT 1 FROM unnest(tags) t WHERE LOWER(t) LIKE ${p} ESCAPE '\\'))`
     );
   }
   if (filters.categories && filters.categories.length > 0) {
@@ -132,21 +164,35 @@ export async function findVendors(filters: VendorFilters): Promise<VendorRecord[
     clauses.push(`rating >= $${values.length}`);
   }
 
-  const where = clauses.length > 0 ? `WHERE ${clauses.join(" AND ")}` : "";
+  const where = `WHERE ${clauses.join(" AND ")}`;
 
+  // Trending = recent leads (weighted) + recent profile views.
+  const trendingScore = `(
+    (SELECT COUNT(*) FROM quote_requests q WHERE q.vendor_id = vendors.id AND q.created_at > now() - interval '30 days') * 5
+    + (SELECT COUNT(*) FROM vendor_views w WHERE w.vendor_id = vendors.id AND w.created_at > now() - interval '30 days')
+  ) DESC, rating DESC`;
   const sortMap: Record<string, string> = {
-    rating: "rating DESC",
+    // Paid "featured" vendors float to the top of the default sort only.
+    rating: "featured DESC, rating DESC",
     reviews: "reviews_count DESC",
     priceLow: "price ASC",
     priceHigh: "price DESC",
+    trending: trendingScore,
   };
   const orderBy = sortMap[filters.sort ?? "rating"] ?? sortMap.rating;
 
-  const result = await pool.query<VendorRecord>(
-    `SELECT * FROM vendors ${where} ORDER BY ${orderBy}`,
-    values
-  );
-  return result.rows;
+  const pageSize = Math.min(Math.max(filters.pageSize ?? DEFAULT_PAGE_SIZE, 1), 50);
+  const page = Math.max(filters.page ?? 1, 1);
+  const offset = (page - 1) * pageSize;
+
+  const [rowsRes, countRes] = await Promise.all([
+    pool.query<VendorRecord>(
+      `SELECT * FROM vendors ${where} ORDER BY ${orderBy}, id ASC LIMIT ${pageSize} OFFSET ${offset}`,
+      values
+    ),
+    pool.query<{ count: string }>(`SELECT COUNT(*) FROM vendors ${where}`, values),
+  ]);
+  return { vendors: rowsRes.rows, total: parseInt(countRes.rows[0].count, 10) };
 }
 
 export async function findVendorById(id: number): Promise<VendorRecord | null> {
@@ -159,7 +205,7 @@ export async function findVendorById(id: number): Promise<VendorRecord | null> {
 
 export async function findAllLocations(): Promise<string[]> {
   const result = await pool.query<{ location: string }>(
-    "SELECT DISTINCT location FROM vendors ORDER BY location"
+    "SELECT DISTINCT location FROM vendors WHERE published = true ORDER BY location"
   );
   return result.rows.map((r) => r.location);
 }
@@ -214,13 +260,14 @@ export async function createVendorListing(params: {
   location: string;
   price: number;
   priceLabel: string;
+  priceUnit: string;
   experience: string;
   tags: string[];
   about: string;
 }): Promise<VendorRecord> {
   const result = await pool.query<VendorRecord>(
-    `INSERT INTO vendors (owner_id, name, category, location, price, price_label, experience, tags, about, rating, reviews_count)
-     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,0,0)
+    `INSERT INTO vendors (owner_id, name, category, location, price, price_label, price_unit, experience, tags, about, rating, reviews_count)
+     VALUES ($1,$2,$3,$4,$5,$6,$10,$7,$8,$9,0,0)
      RETURNING *`,
     [
       params.ownerId,
@@ -232,6 +279,7 @@ export async function createVendorListing(params: {
       params.experience,
       params.tags,
       params.about,
+      params.priceUnit,
     ]
   );
   return result.rows[0];
@@ -254,7 +302,7 @@ export interface QuoteRequestWithVendor {
 export async function findQuoteRequestsByCustomer(customerId: number): Promise<QuoteRequestWithVendor[]> {
   const result = await pool.query<QuoteRequestWithVendor>(
     `SELECT q.id, q.vendor_id, v.name AS vendor_name, v.category AS vendor_category,
-            q.name, q.phone, q.event_date, q.budget, q.message, q.status, q.created_at
+            q.name, q.phone, to_char(q.event_date, 'YYYY-MM-DD') AS event_date, q.budget, q.message, q.status, q.created_at
      FROM quote_requests q
      JOIN vendors v ON v.id = q.vendor_id
      WHERE q.customer_id = $1
@@ -266,6 +314,7 @@ export async function findQuoteRequestsByCustomer(customerId: number): Promise<Q
 
 export interface LeadRecord {
   id: number;
+  customer_id: number | null;
   name: string;
   phone: string;
   event_date: string | null;
@@ -277,7 +326,7 @@ export interface LeadRecord {
 
 export async function findQuoteRequestsByVendor(vendorId: number): Promise<LeadRecord[]> {
   const result = await pool.query<LeadRecord>(
-    `SELECT id, name, phone, event_date, budget, message, status, created_at
+    `SELECT id, customer_id, name, phone, to_char(event_date, 'YYYY-MM-DD') AS event_date, budget, message, status, created_at
      FROM quote_requests
      WHERE vendor_id = $1
      ORDER BY created_at DESC`,
@@ -295,6 +344,7 @@ export async function updateVendorListing(
     location?: string;
     price?: number;
     priceLabel?: string;
+    priceUnit?: string;
     experience?: string;
     tags?: string[];
     about?: string;
@@ -313,7 +363,8 @@ export async function updateVendorListing(
        price_label = COALESCE($7, price_label),
        experience = COALESCE($8, experience),
        tags = COALESCE($9, tags),
-       about = COALESCE($10, about)
+       about = COALESCE($10, about),
+       price_unit = COALESCE($11, price_unit)
      WHERE id = $1 AND owner_id = $2
      RETURNING *`,
     [
@@ -327,6 +378,7 @@ export async function updateVendorListing(
       fields.experience ?? null,
       fields.tags ?? null,
       fields.about ?? null,
+      fields.priceUnit ?? null,
     ]
   );
   return result.rows[0] ?? null;
@@ -335,23 +387,29 @@ export async function updateVendorListing(
 export const QUOTE_STATUSES = ["pending", "responded", "booked", "declined"] as const;
 export type QuoteStatus = (typeof QUOTE_STATUSES)[number];
 
+export interface LeadWithVendor extends LeadRecord {
+  vendor_id: number;
+  vendor_name: string;
+}
+
 export async function updateQuoteStatus(
   quoteId: number,
   ownerId: number,
   status: QuoteStatus
-): Promise<LeadRecord | null> {
+): Promise<LeadWithVendor | null> {
   // Same pattern as updateVendorListing: the ownership check is baked into
   // the WHERE clause (via a join back to vendors.owner_id) instead of done
   // as a separate query, so a vendor can only ever update the status of a
   // quote request that was actually sent to their own listing.
-  const result = await pool.query<LeadRecord>(
+  const result = await pool.query<LeadWithVendor>(
     `UPDATE quote_requests q
      SET status = $3
      FROM vendors v
      WHERE q.id = $1
        AND q.vendor_id = v.id
        AND v.owner_id = $2
-     RETURNING q.id, q.name, q.phone, q.event_date, q.budget, q.message, q.status, q.created_at`,
+     RETURNING q.id, q.customer_id, q.name, q.phone, to_char(q.event_date, 'YYYY-MM-DD') AS event_date, q.budget, q.message, q.status, q.created_at,
+               q.vendor_id, v.name AS vendor_name`,
     [quoteId, ownerId, status]
   );
   return result.rows[0] ?? null;
@@ -479,15 +537,15 @@ export interface SearchSuggestions {
 }
 
 export async function findSearchSuggestions(query: string): Promise<SearchSuggestions> {
-  const like = `%${query.toLowerCase()}%`;
+  const like = `%${escapeLike(query.toLowerCase())}%`;
 
   const [locationsRes, vendorsRes] = await Promise.all([
     pool.query<{ location: string }>(
-      "SELECT DISTINCT location FROM vendors WHERE LOWER(location) LIKE $1 ORDER BY location LIMIT 5",
+      "SELECT DISTINCT location FROM vendors WHERE published = true AND LOWER(location) LIKE $1 ESCAPE '\\' ORDER BY location LIMIT 5",
       [like]
     ),
     pool.query<{ id: number; name: string; category: string }>(
-      "SELECT id, name, category FROM vendors WHERE LOWER(name) LIKE $1 ORDER BY rating DESC LIMIT 5",
+      "SELECT id, name, category FROM vendors WHERE published = true AND LOWER(name) LIKE $1 ESCAPE '\\' ORDER BY rating DESC LIMIT 5",
       [like]
     ),
   ]);
@@ -495,5 +553,159 @@ export async function findSearchSuggestions(query: string): Promise<SearchSugges
   return {
     locations: locationsRes.rows.map((r) => r.location),
     vendors: vendorsRes.rows,
+  };
+}
+
+// ---------------------------------------------------------------------------
+// Accounts
+// ---------------------------------------------------------------------------
+
+export async function updateUserPassword(userId: number, passwordHash: string): Promise<void> {
+  await pool.query("UPDATE users SET password_hash = $2 WHERE id = $1", [userId, passwordHash]);
+}
+
+export async function markEmailVerified(userId: number): Promise<void> {
+  await pool.query("UPDATE users SET email_verified = true WHERE id = $1", [userId]);
+}
+
+// Deletes the account and the vendor listing it owns (listing, packages,
+// portfolio, leads and views go with it via ON DELETE CASCADE). Reviews the
+// user wrote stay, but are detached from the account.
+export async function deleteUserAccount(userId: number): Promise<void> {
+  const client = await pool.connect();
+  try {
+    await client.query("BEGIN");
+    await client.query("DELETE FROM vendors WHERE owner_id = $1", [userId]);
+    await client.query("DELETE FROM users WHERE id = $1", [userId]);
+    await client.query("COMMIT");
+  } catch (err) {
+    await client.query("ROLLBACK");
+    throw err;
+  } finally {
+    client.release();
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Vendor analytics, discovery and recommendations
+// ---------------------------------------------------------------------------
+
+export async function recordVendorView(vendorId: number, viewerId: number | null): Promise<void> {
+  await pool.query("INSERT INTO vendor_views (vendor_id, viewer_id) VALUES ($1, $2)", [
+    vendorId,
+    viewerId,
+  ]);
+}
+
+export interface VendorStats {
+  views30: number;
+  leads: number;
+  pending: number;
+  booked: number;
+}
+
+export async function getVendorStats(vendorId: number): Promise<VendorStats> {
+  const result = await pool.query<{
+    views30: string;
+    leads: string;
+    pending: string;
+    booked: string;
+  }>(
+    `SELECT
+       (SELECT COUNT(*) FROM vendor_views WHERE vendor_id = $1 AND created_at > now() - interval '30 days') AS views30,
+       (SELECT COUNT(*) FROM quote_requests WHERE vendor_id = $1) AS leads,
+       (SELECT COUNT(*) FROM quote_requests WHERE vendor_id = $1 AND status = 'pending') AS pending,
+       (SELECT COUNT(*) FROM quote_requests WHERE vendor_id = $1 AND status = 'booked') AS booked`,
+    [vendorId]
+  );
+  const r = result.rows[0];
+  return {
+    views30: parseInt(r.views30, 10),
+    leads: parseInt(r.leads, 10),
+    pending: parseInt(r.pending, 10),
+    booked: parseInt(r.booked, 10),
+  };
+}
+
+export async function findFeaturedVendors(limit: number): Promise<VendorRecord[]> {
+  const result = await pool.query<VendorRecord>(
+    `SELECT * FROM vendors WHERE published = true AND featured = true
+     ORDER BY rating DESC, id ASC LIMIT $1`,
+    [limit]
+  );
+  return result.rows;
+}
+
+// "Complete your event": the best-rated vendor in each category the customer
+// hasn't contacted or saved yet. Simple rule-based suggestions (no AI).
+export async function findRecommendations(customerId: number, limit: number): Promise<VendorRecord[]> {
+  const result = await pool.query<VendorRecord>(
+    `SELECT * FROM (
+       SELECT DISTINCT ON (v.category) v.*
+       FROM vendors v
+       WHERE v.published = true
+         AND (v.owner_id IS NULL OR v.owner_id <> $1)
+         AND v.category NOT IN (
+           SELECT v2.category FROM quote_requests q JOIN vendors v2 ON v2.id = q.vendor_id WHERE q.customer_id = $1
+           UNION
+           SELECT v3.category FROM favorites f JOIN vendors v3 ON v3.id = f.vendor_id WHERE f.customer_id = $1
+         )
+       ORDER BY v.category, v.featured DESC, v.rating DESC
+     ) t
+     ORDER BY featured DESC, rating DESC
+     LIMIT $2`,
+    [customerId, limit]
+  );
+  return result.rows;
+}
+
+// ---------------------------------------------------------------------------
+// Admin
+// ---------------------------------------------------------------------------
+
+export async function findAllVendorsForAdmin(): Promise<VendorRecord[]> {
+  const result = await pool.query<VendorRecord>(
+    "SELECT * FROM vendors ORDER BY created_at DESC, id DESC"
+  );
+  return result.rows;
+}
+
+export async function setVendorFlags(
+  vendorId: number,
+  flags: { verified?: boolean; featured?: boolean; published?: boolean }
+): Promise<VendorRecord | null> {
+  const result = await pool.query<VendorRecord>(
+    `UPDATE vendors SET
+       verified = COALESCE($2, verified),
+       featured = COALESCE($3, featured),
+       published = COALESCE($4, published)
+     WHERE id = $1
+     RETURNING *`,
+    [vendorId, flags.verified ?? null, flags.featured ?? null, flags.published ?? null]
+  );
+  return result.rows[0] ?? null;
+}
+
+export interface AdminStats {
+  users: number;
+  vendors: number;
+  quotes: number;
+  reviews: number;
+}
+
+export async function getAdminStats(): Promise<AdminStats> {
+  const result = await pool.query<{ users: string; vendors: string; quotes: string; reviews: string }>(
+    `SELECT
+       (SELECT COUNT(*) FROM users) AS users,
+       (SELECT COUNT(*) FROM vendors) AS vendors,
+       (SELECT COUNT(*) FROM quote_requests) AS quotes,
+       (SELECT COUNT(*) FROM vendor_reviews) AS reviews`
+  );
+  const r = result.rows[0];
+  return {
+    users: parseInt(r.users, 10),
+    vendors: parseInt(r.vendors, 10),
+    quotes: parseInt(r.quotes, 10),
+    reviews: parseInt(r.reviews, 10),
   };
 }

@@ -20,6 +20,7 @@ export default function SearchFilters({ locations }: { locations: string[] }) {
   function updateParams(mutator: (params: URLSearchParams) => void) {
     const params = new URLSearchParams(searchParams.toString());
     mutator(params);
+    params.delete("page"); // a new filter always starts from page 1
     router.push(`/search?${params.toString()}`);
   }
 
@@ -113,6 +114,7 @@ export default function SearchFilters({ locations }: { locations: string[] }) {
         className="w-full px-2.5 py-2 border border-line rounded-md text-sm"
       >
         <option value="rating">Highest rated</option>
+        <option value="trending">Trending</option>
         <option value="reviews">Most reviewed</option>
         <option value="priceLow">Price: low to high</option>
         <option value="priceHigh">Price: high to low</option>

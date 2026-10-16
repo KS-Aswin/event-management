@@ -5,7 +5,7 @@ const FAQS = [
   },
   {
     q: "How are vendors verified?",
-    a: "Verified vendors have confirmed their business registration and completed at least one booking through Vela with a reviewed customer. Look for the green \"Verified\" badge on a profile.",
+    a: "Verified vendors have been checked by the Vela team, who confirm their business details before adding the badge. Look for the green \"Verified\" badge on a profile.",
   },
   {
     q: "Is it free to use Vela as a customer?",

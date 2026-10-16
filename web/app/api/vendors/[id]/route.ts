@@ -1,7 +1,16 @@
 import { NextResponse } from "next/server";
-import { findVendorById, findReviewsByVendor, updateVendorListing } from "@/lib/db";
+import {
+  findVendorById,
+  findReviewsByVendor,
+  updateVendorListing,
+  buildPriceLabel,
+  PRICE_UNITS,
+} from "@/lib/db";
 import { getSession } from "@/lib/session";
 import { CATEGORIES } from "@/lib/vendorVisuals";
+import { toPublicVendor } from "@/lib/vendor-auth";
+import { listPackages, listPortfolio, listUnavailableDates } from "@/lib/vendor-content";
+import { positiveInt } from "@/lib/validate";
 
 export async function GET(
   request: Request,
@@ -14,13 +23,26 @@ export async function GET(
   }
 
   const vendor = await findVendorById(vendorId);
-  if (!vendor) {
+  const session = await getSession();
+  // Unpublished listings are visible only to their owner.
+  if (!vendor || (!vendor.published && vendor.owner_id !== session?.userId)) {
     return NextResponse.json({ error: "Vendor not found." }, { status: 404 });
   }
 
-  const reviews = await findReviewsByVendor(vendorId);
+  const [reviews, packages, portfolio, unavailableDates] = await Promise.all([
+    findReviewsByVendor(vendorId),
+    listPackages(vendorId),
+    listPortfolio(vendorId),
+    listUnavailableDates(vendorId),
+  ]);
 
-  return NextResponse.json({ vendor, reviews });
+  return NextResponse.json({
+    vendor: toPublicVendor(vendor),
+    reviews,
+    packages,
+    portfolio,
+    unavailableDates,
+  });
 }
 
 export async function PATCH(
@@ -45,7 +67,7 @@ export async function PATCH(
     return NextResponse.json({ error: "Invalid request body." }, { status: 400 });
   }
 
-  const { name, category, location, price, experience, tags, about } = (body ?? {}) as Record<
+  const { name, category, location, price, priceUnit, experience, tags, about } = (body ?? {}) as Record<
     string,
     unknown
   >;
@@ -53,37 +75,60 @@ export async function PATCH(
   if (category !== undefined && !CATEGORIES.includes(category as (typeof CATEGORIES)[number])) {
     return NextResponse.json({ error: "Please choose a valid category." }, { status: 400 });
   }
-
-  let priceNum: number | undefined;
-  let priceLabel: string | undefined;
-  if (price !== undefined) {
-    priceNum = typeof price === "number" ? price : parseInt(String(price), 10);
-    if (!priceNum || priceNum <= 0) {
-      return NextResponse.json({ error: "Please enter a valid starting price." }, { status: 400 });
-    }
-    priceLabel = `₹${priceNum.toLocaleString("en-IN")} onwards`;
+  if (
+    priceUnit !== undefined &&
+    (typeof priceUnit !== "string" || !PRICE_UNITS.includes(priceUnit as (typeof PRICE_UNITS)[number]))
+  ) {
+    return NextResponse.json({ error: "Please choose a valid price type." }, { status: 400 });
   }
 
+  // The price label combines price + unit, so we need the current values to
+  // rebuild it when only one of them changes. Not-found and not-yours share
+  // one 404 on purpose (see requireOwnedVendor).
+  const current = await findVendorById(vendorId);
+  if (!current || current.owner_id !== session.userId) {
+    return NextResponse.json(
+      { error: "Listing not found, or you don't own it." },
+      { status: 404 }
+    );
+  }
+
+  let priceNum: number | undefined;
+  if (price !== undefined) {
+    const parsed = positiveInt(price);
+    if (!parsed) {
+      return NextResponse.json({ error: "Please enter a valid starting price." }, { status: 400 });
+    }
+    priceNum = parsed;
+  }
+  const unit = typeof priceUnit === "string" ? priceUnit : undefined;
+  const priceLabel =
+    priceNum !== undefined || unit !== undefined
+      ? buildPriceLabel(priceNum ?? current.price, unit ?? current.price_unit)
+      : undefined;
+
   const tagList = Array.isArray(tags)
-    ? tags.filter((t): t is string => typeof t === "string" && t.trim().length > 0)
+    ? tags
+        .filter((t): t is string => typeof t === "string" && t.trim().length > 0)
+        .map((t) => t.trim().slice(0, 30))
+        .slice(0, 10)
     : undefined;
 
   const updated = await updateVendorListing(vendorId, session.userId, {
-    name: typeof name === "string" && name.trim() ? name.trim() : undefined,
+    name: typeof name === "string" && name.trim() ? name.trim().slice(0, 100) : undefined,
     category: typeof category === "string" ? category : undefined,
-    location: typeof location === "string" && location.trim() ? location.trim() : undefined,
+    location: typeof location === "string" && location.trim() ? location.trim().slice(0, 80) : undefined,
     price: priceNum,
     priceLabel,
-    experience: typeof experience === "string" && experience.trim() ? experience.trim() : undefined,
+    priceUnit: unit,
+    experience: typeof experience === "string" && experience.trim() ? experience.trim().slice(0, 40) : undefined,
     tags: tagList,
-    about: typeof about === "string" && about.trim() ? about.trim() : undefined,
+    about: typeof about === "string" && about.trim() ? about.trim().slice(0, 3000) : undefined,
   });
 
-  // updateVendorListing's WHERE clause matches on (id AND owner_id) together,
-  // so a null result here means either the listing doesn't exist or it
-  // doesn't belong to this user — deliberately the same 404 for both, so a
-  // caller can't use this endpoint to probe which vendor ids exist and are
-  // (or aren't) owned by someone else.
+  // The WHERE clause matches on (id AND owner_id) as well, so even if
+  // ownership changed between the lookup above and this update, it can't
+  // modify someone else's row.
   if (!updated) {
     return NextResponse.json(
       { error: "Listing not found, or you don't own it." },

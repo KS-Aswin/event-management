@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { findUserByEmail } from "@/lib/db";
 import { verifyPassword } from "@/lib/password";
 import { createSessionCookie } from "@/lib/session";
+import { clientIp, rateLimit } from "@/lib/ratelimit";
 
 export async function POST(request: Request) {
   let body: unknown;
@@ -15,6 +16,19 @@ export async function POST(request: Request) {
 
   if (typeof email !== "string" || typeof password !== "string") {
     return NextResponse.json({ error: "Email and password are required." }, { status: 400 });
+  }
+
+  // Slows down password guessing: 8 tries per 15 minutes per IP + email.
+  const limited = rateLimit(
+    `login:${clientIp(request)}:${email.toLowerCase().trim()}`,
+    8,
+    15 * 60 * 1000
+  );
+  if (!limited.ok) {
+    return NextResponse.json(
+      { error: "Too many sign-in attempts. Please wait a few minutes and try again." },
+      { status: 429, headers: { "Retry-After": String(limited.retryAfterSeconds) } }
+    );
   }
 
   const user = await findUserByEmail(email);

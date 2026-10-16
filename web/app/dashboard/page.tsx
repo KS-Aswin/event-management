@@ -1,17 +1,46 @@
 import { redirect } from "next/navigation";
 import Link from "next/link";
 import { getSession } from "@/lib/session";
-import { findVendorByOwner, findQuoteRequestsByVendor, findQuoteRequestsByCustomer, findFavoritesByCustomer } from "@/lib/db";
+import {
+  findVendorByOwner,
+  findQuoteRequestsByVendor,
+  findQuoteRequestsByCustomer,
+  findFavoritesByCustomer,
+  findRecommendations,
+  getVendorStats,
+} from "@/lib/db";
+import { VendorTile } from "@/lib/vendorVisuals";
 import LeadStatusControl from "./lead-status-control";
 
-export default async function DashboardPage() {
+export default async function DashboardPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ [key: string]: string | string[] | undefined }>;
+}) {
   const session = await getSession();
   if (!session) redirect("/login");
+  if (session.role === "admin") redirect("/admin");
 
+  const sp = await searchParams;
+  const verified = sp.verified;
   const firstName = session.name.split(" ")[0];
 
   return (
     <main className="max-w-2xl mx-auto px-6 py-10 w-full">
+      {verified === "1" && (
+        <div className="mb-5 text-sm text-accent bg-accent-tint rounded-md px-3.5 py-3">
+          Thanks — your email address is now confirmed.
+        </div>
+      )}
+      {verified === "0" && (
+        <div className="mb-5 text-sm text-red-700 bg-red-50 border border-red-100 rounded-md px-3.5 py-3">
+          That confirmation link is invalid or has expired. You can request a new one from{" "}
+          <Link href="/settings" className="underline">
+            Settings
+          </Link>
+          .
+        </div>
+      )}
       <h1 className="text-2xl font-semibold">Welcome back, {firstName}</h1>
 
       {session.role === "vendor" ? (
@@ -42,21 +71,44 @@ async function VendorDashboard({ userId }: { userId: number }) {
     );
   }
 
-  const leads = await findQuoteRequestsByVendor(vendor.id);
-  const pendingCount = leads.filter((l) => l.status === "pending").length;
+  const [leads, stats] = await Promise.all([findQuoteRequestsByVendor(vendor.id), getVendorStats(vendor.id)]);
+  const conversion = stats.leads > 0 ? Math.round((stats.booked / stats.leads) * 100) : 0;
 
   return (
     <>
-      <p className="text-ink-soft text-sm mt-1 mb-6">
+      <p className="text-ink-soft text-sm mt-1 mb-4">
         Real stats for <span className="font-medium text-accent">{vendor.name}</span>.{" "}
-        <Link href="/dashboard/edit-listing" className="text-accent hover:underline">
-          Edit listing
+        <Link href={`/vendors/${vendor.id}`} className="text-accent hover:underline">
+          View public page
         </Link>
       </p>
+
+      {!vendor.published && (
+        <div className="mb-4 text-sm text-red-700 bg-red-50 border border-red-100 rounded-md px-3.5 py-3">
+          Your listing is currently hidden from search. Contact support if you think this is a mistake.
+        </div>
+      )}
+
+      <div className="flex gap-2 flex-wrap mb-5 text-sm">
+        {[
+          ["/dashboard/edit-listing", "Edit listing"],
+          ["/dashboard/packages", "Packages"],
+          ["/dashboard/portfolio", "Portfolio"],
+          ["/dashboard/availability", "Availability"],
+        ].map(([href, label]) => (
+          <Link key={href} href={href} className="border border-line rounded-full px-3.5 py-1.5 hover:bg-accent-tint hover:text-accent">
+            {label}
+          </Link>
+        ))}
+      </div>
+
       <div className="grid grid-cols-2 sm:grid-cols-3 gap-3.5 mb-4">
-        <Stat num={String(leads.length)} label="Total leads" />
-        <Stat num={String(pendingCount)} label="Awaiting reply" />
+        <Stat num={String(stats.leads)} label="Total leads" />
+        <Stat num={String(stats.pending)} label="Awaiting reply" />
         <Stat num={String(vendor.reviews_count)} label="Reviews" />
+        <Stat num={String(stats.views30)} label="Profile visitors (30 days)" />
+        <Stat num={String(stats.booked)} label="Booked" />
+        <Stat num={`${conversion}%`} label="Lead → booked" />
       </div>
 
       <div className="border border-line rounded-xl p-5.5 mb-4">
@@ -80,7 +132,9 @@ async function VendorDashboard({ userId }: { userId: number }) {
                   }`}
                 />
                 <div className="min-w-0">
-                  <span className="font-medium">{l.name}</span>
+                  <Link href={`/dashboard/quotes/${l.id}`} className="font-medium hover:underline">
+                    {l.name}
+                  </Link>
                   {l.event_date ? ` — event on ${new Date(l.event_date).toLocaleDateString("en-IN")}` : ""}
                   {l.budget ? ` — budget ₹${l.budget}` : ""}
                   <div className="text-ink-soft text-xs mt-0.5">
@@ -93,19 +147,15 @@ async function VendorDashboard({ userId }: { userId: number }) {
           ))
         )}
       </div>
-      <p className="text-xs text-ink-soft mb-4">
-        &quot;Profile visitors&quot; and &quot;conversion rate&quot; aren&apos;t shown because there&apos;s no
-        page-view tracking built yet — these numbers are real counts from actual quote requests, not
-        sample data.
-      </p>
     </>
   );
 }
 
 async function CustomerDashboard({ userId }: { userId: number }) {
-  const [quotes, favorites] = await Promise.all([
+  const [quotes, favorites, recommendations] = await Promise.all([
     findQuoteRequestsByCustomer(userId),
     findFavoritesByCustomer(userId),
+    findRecommendations(userId, 3),
   ]);
 
   return (
@@ -134,7 +184,7 @@ async function CustomerDashboard({ userId }: { userId: number }) {
                   q.status === "pending" ? "bg-gold" : "bg-accent"
                 }`}
               />
-              <div>
+              <div className="flex-1 min-w-0">
                 <Link href={`/vendors/${q.vendor_id}`} className="font-medium hover:underline">
                   {q.vendor_name}
                 </Link>{" "}
@@ -144,6 +194,9 @@ async function CustomerDashboard({ userId }: { userId: number }) {
                   Requested {new Date(q.created_at).toLocaleDateString("en-IN")} · status: {q.status}
                 </div>
               </div>
+              <Link href={`/dashboard/quotes/${q.id}`} className="text-xs text-accent hover:underline shrink-0">
+                Open chat
+              </Link>
             </div>
           ))}
         </div>
@@ -175,6 +228,28 @@ async function CustomerDashboard({ userId }: { userId: number }) {
             </div>
           ))}
         </div>
+      )}
+
+      {recommendations.length > 0 && (
+        <>
+          <h3 className="text-[15px] font-semibold mb-1">Complete your event</h3>
+          <p className="text-[13px] text-ink-soft mb-2.5">
+            Top-rated vendors in categories you haven&apos;t looked at yet.
+          </p>
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-6">
+            {recommendations.map((v) => (
+              <Link key={v.id} href={`/vendors/${v.id}`} className="border border-line rounded-xl overflow-hidden hover:border-accent">
+                <VendorTile category={v.category} size={30} className="w-full h-[70px]" />
+                <div className="p-3">
+                  <div className="text-sm font-semibold truncate">{v.name}</div>
+                  <div className="text-xs text-ink-soft">
+                    {v.category} · ★ {v.rating}
+                  </div>
+                </div>
+              </Link>
+            ))}
+          </div>
+        </>
       )}
 
       <Link href="/search" className="px-4.5 py-2.5 rounded-md bg-accent hover:bg-accent-hover text-white text-sm inline-block">

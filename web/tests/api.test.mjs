@@ -182,7 +182,7 @@ async function main() {
     body: {
       name: "Quote Test",
       phone: "9999900000",
-      eventDate: "2027-03-14",
+      eventDate: "2099-03-14",
       budget: "200000",
       message: `Automated test run ${RUN_ID}`,
     },
@@ -505,6 +505,245 @@ async function main() {
     cookie: customerCookie,
   });
   check("settings: email conflict with another account rejected (409)", settingsEmailConflict.status, 409);
+
+  // ---------- v2: validation, pagination, content, messages ----------
+  const upperEmailReg = await request("/api/auth/register", {
+    method: "POST",
+    body: { name: "Case Test", email: `CaseTest-${RUN_ID}@Example.com`, password: "password123", role: "customer" },
+  });
+  check("v2 register: mixed-case email accepted (201)", upperEmailReg.status, 201);
+  const lowerLogin = await request("/api/auth/login", {
+    method: "POST",
+    body: { email: `casetest-${RUN_ID}@example.com`, password: "password123" },
+  });
+  check("v2 login: works with lowercase version of the email", lowerLogin.status, 200);
+
+  const shortPw = await request("/api/auth/register", {
+    method: "POST",
+    body: { name: "Short", email: `short-${RUN_ID}@example.com`, password: "1234567", role: "customer" },
+  });
+  check("v2 register: 7-character password rejected (400)", shortPw.status, 400);
+
+  const pastQuote = await request(`/api/vendors/3/quotes`, {
+    method: "POST",
+    body: { name: "Past", phone: "9999900000", eventDate: "2001-01-01" },
+  });
+  check("v2 quote: past event date rejected (400)", pastQuote.status, 400);
+
+  const badDateQuote = await request(`/api/vendors/3/quotes`, {
+    method: "POST",
+    body: { name: "Bad", phone: "9999900000", eventDate: "2099-02-31" },
+  });
+  check("v2 quote: impossible date rejected (400)", badDateQuote.status, 400);
+
+  const ownQuote = await request(`/api/vendors/${createdVendorId}/quotes`, {
+    method: "POST",
+    body: { name: "Owner", phone: "9999900000" },
+    cookie: vendorCookie,
+  });
+  check("v2 quote: vendor cannot quote their own listing (403)", ownQuote.status, 403);
+
+  const paged = await request("/api/vendors?pageSize=2&page=1");
+  check("v2 vendors: pagination returns pageSize items", paged.data?.vendors?.length, 2);
+  checkTrue("v2 vendors: pagination returns a total", typeof paged.data?.total === "number" && paged.data.total >= 9);
+
+  const percentSearch = await request("/api/vendors?q=%25");
+  check("v2 vendors: '%' search is treated as plain text (no matches)", percentSearch.data?.vendors?.length, 0);
+
+  const trending = await request("/api/vendors?sort=trending");
+  check("v2 vendors: trending sort works (200)", trending.status, 200);
+
+  // Packages
+  const pkgNoAuth = await request(`/api/vendors/${createdVendorId}/packages`, {
+    method: "POST",
+    body: { name: "Gold", price: 50000, items: ["a"] },
+  });
+  check("v2 packages: add without login rejected (401)", pkgNoAuth.status, 401);
+  const pkgOther = await request(`/api/vendors/${createdVendorId}/packages`, {
+    method: "POST",
+    body: { name: "Gold", price: 50000, items: ["a"] },
+    cookie: customerCookie,
+  });
+  check("v2 packages: add by non-owner gets 404 (no leak)", pkgOther.status, 404);
+  const pkgBad = await request(`/api/vendors/${createdVendorId}/packages`, {
+    method: "POST",
+    body: { name: "Gold", price: -5 },
+    cookie: vendorCookie,
+  });
+  check("v2 packages: bad price rejected (400)", pkgBad.status, 400);
+  const pkgOk = await request(`/api/vendors/${createdVendorId}/packages`, {
+    method: "POST",
+    body: { name: "Gold", price: 50000, items: ["Album", "Drone shots"] },
+    cookie: vendorCookie,
+  });
+  check("v2 packages: owner can add (201)", pkgOk.status, 201);
+  const pkgId = pkgOk.data?.package?.id;
+  const profileWithPkg = await request(`/vendors/${createdVendorId}`);
+  checkTrue("v2 packages: shows on public profile", profileWithPkg.text.includes("Gold"));
+  const pkgDelOther = await request(`/api/vendors/${createdVendorId}/packages/${pkgId}`, {
+    method: "DELETE",
+    cookie: customerCookie,
+  });
+  check("v2 packages: non-owner cannot delete (404)", pkgDelOther.status, 404);
+  const pkgDel = await request(`/api/vendors/${createdVendorId}/packages/${pkgId}`, {
+    method: "DELETE",
+    cookie: vendorCookie,
+  });
+  check("v2 packages: owner can delete (200)", pkgDel.status, 200);
+
+  // Portfolio
+  const portBad = await request(`/api/vendors/${createdVendorId}/portfolio`, {
+    method: "POST",
+    body: { url: "http://insecure.example.com/a.jpg" },
+    cookie: vendorCookie,
+  });
+  check("v2 portfolio: non-https link rejected (400)", portBad.status, 400);
+  const portOk = await request(`/api/vendors/${createdVendorId}/portfolio`, {
+    method: "POST",
+    body: { url: "https://example.com/photo.jpg", caption: "Test wedding" },
+    cookie: vendorCookie,
+  });
+  check("v2 portfolio: https link accepted (201)", portOk.status, 201);
+  const portId = portOk.data?.item?.id;
+  const portDel = await request(`/api/vendors/${createdVendorId}/portfolio/${portId}`, {
+    method: "DELETE",
+    cookie: vendorCookie,
+  });
+  check("v2 portfolio: owner can delete (200)", portDel.status, 200);
+
+  // Availability
+  const availOk = await request(`/api/vendors/${createdVendorId}/availability`, {
+    method: "PUT",
+    body: { dates: ["2099-06-01", "2099-06-02"] },
+    cookie: vendorCookie,
+  });
+  check("v2 availability: owner can set dates (200)", availOk.status, 200);
+  const availBad = await request(`/api/vendors/${createdVendorId}/availability`, {
+    method: "PUT",
+    body: { dates: ["not-a-date"] },
+    cookie: vendorCookie,
+  });
+  check("v2 availability: invalid date rejected (400)", availBad.status, 400);
+  const blockedQuote = await request(`/api/vendors/${createdVendorId}/quotes`, {
+    method: "POST",
+    body: { name: "Blocked", phone: "9999900000", eventDate: "2099-06-01" },
+  });
+  check("v2 availability: quote on blocked date rejected (409)", blockedQuote.status, 409);
+  await request(`/api/vendors/${createdVendorId}/availability`, {
+    method: "PUT",
+    body: { dates: [] },
+    cookie: vendorCookie,
+  });
+
+  // Messages (customer <-> vendor)
+  const customerQuote2 = await request(`/api/vendors/${createdVendorId}/quotes`, {
+    method: "POST",
+    body: { name: "Chat Customer", phone: "9999911111" },
+    cookie: customerCookie,
+  });
+  const chatQuoteId = customerQuote2.data?.quote?.id;
+  checkTrue("v2 messages: setup quote created", typeof chatQuoteId === "number");
+  const msgNoAuth = await request(`/api/quotes/${chatQuoteId}/messages`);
+  check("v2 messages: read without login rejected (401)", msgNoAuth.status, 401);
+  const msgOutsider = await request(`/api/quotes/${chatQuoteId}/messages`, { cookie: lowerLogin.cookie });
+  check("v2 messages: outsider gets 404", msgOutsider.status, 404);
+  const msgEmpty = await request(`/api/quotes/${chatQuoteId}/messages`, {
+    method: "POST",
+    body: { body: "   " },
+    cookie: customerCookie,
+  });
+  check("v2 messages: empty message rejected (400)", msgEmpty.status, 400);
+  const msgSend = await request(`/api/quotes/${chatQuoteId}/messages`, {
+    method: "POST",
+    body: { body: "Hello, are you free?" },
+    cookie: customerCookie,
+  });
+  check("v2 messages: customer can send (201)", msgSend.status, 201);
+  const msgReply = await request(`/api/quotes/${chatQuoteId}/messages`, {
+    method: "POST",
+    body: { body: "Yes, I am." },
+    cookie: vendorCookie,
+  });
+  check("v2 messages: vendor owner can reply (201)", msgReply.status, 201);
+  const msgList = await request(`/api/quotes/${chatQuoteId}/messages`, { cookie: customerCookie });
+  check("v2 messages: thread has both messages", msgList.data?.messages?.length, 2);
+
+  // Notifications
+  const notifs = await request("/api/notifications", { cookie: customerCookie });
+  check("v2 notifications: list works (200)", notifs.status, 200);
+  checkTrue("v2 notifications: customer got the vendor reply notification", (notifs.data?.unread ?? 0) >= 1);
+  const notifsRead = await request("/api/notifications", { method: "POST", cookie: customerCookie });
+  check("v2 notifications: mark all read (200)", notifsRead.status, 200);
+  const notifsAfter = await request("/api/notifications", { cookie: customerCookie });
+  check("v2 notifications: unread is 0 after marking read", notifsAfter.data?.unread, 0);
+
+  // Admin
+  const adminNoAuth = await request(`/api/admin/vendors/${createdVendorId}`, {
+    method: "PATCH",
+    body: { featured: true },
+  });
+  check("v2 admin: no login gets 403", adminNoAuth.status, 403);
+  const adminAsVendor = await request(`/api/admin/vendors/${createdVendorId}`, {
+    method: "PATCH",
+    body: { featured: true },
+    cookie: vendorCookie,
+  });
+  check("v2 admin: vendor (not admin) gets 403", adminAsVendor.status, 403);
+
+  // Password change + reset
+  const pwWrong = await request("/api/account/password", {
+    method: "POST",
+    body: { currentPassword: "wrong-password", newPassword: "newpassword123" },
+    cookie: customerCookie,
+  });
+  check("v2 password: wrong current password rejected (403)", pwWrong.status, 403);
+  const pwShort = await request("/api/account/password", {
+    method: "POST",
+    body: { currentPassword: "password123", newPassword: "short" },
+    cookie: customerCookie,
+  });
+  check("v2 password: short new password rejected (400)", pwShort.status, 400);
+  const pwOk = await request("/api/account/password", {
+    method: "POST",
+    body: { currentPassword: "password123", newPassword: "newpassword123" },
+    cookie: customerCookie,
+  });
+  check("v2 password: change succeeds (200)", pwOk.status, 200);
+  const loginNewPw = await request("/api/auth/login", {
+    method: "POST",
+    body: { email: customerEmail, password: "newpassword123" },
+  });
+  check("v2 password: can log in with the new password", loginNewPw.status, 200);
+
+  const forgotUnknown = await request("/api/auth/forgot", {
+    method: "POST",
+    body: { email: `nobody-${RUN_ID}@example.com` },
+  });
+  check("v2 forgot: unknown email still returns 200 (no account leak)", forgotUnknown.status, 200);
+  const resetBadToken = await request("/api/auth/reset", {
+    method: "POST",
+    body: { token: "not-a-real-token", password: "newpassword123" },
+  });
+  check("v2 reset: invalid token rejected (400)", resetBadToken.status, 400);
+
+  // Delete account (uses the throwaway mixed-case account)
+  const delWrongPw = await request("/api/account", {
+    method: "DELETE",
+    body: { password: "wrong" },
+    cookie: lowerLogin.cookie,
+  });
+  check("v2 delete account: wrong password rejected (403)", delWrongPw.status, 403);
+  const delOk = await request("/api/account", {
+    method: "DELETE",
+    body: { password: "password123" },
+    cookie: lowerLogin.cookie,
+  });
+  check("v2 delete account: succeeds (200)", delOk.status, 200);
+  const loginDeleted = await request("/api/auth/login", {
+    method: "POST",
+    body: { email: `casetest-${RUN_ID}@example.com`, password: "password123" },
+  });
+  check("v2 delete account: cannot log in afterwards (401)", loginDeleted.status, 401);
 
   // ---------- Logout ----------
   const logout = await request("/api/auth/logout", { method: "POST", cookie: customerCookie });

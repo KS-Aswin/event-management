@@ -97,5 +97,103 @@ CREATE TABLE IF NOT EXISTS favorites (
 
 CREATE INDEX IF NOT EXISTS idx_favorites_customer ON favorites (customer_id);
 
+-- =====================================================================
+-- v2 additions: admin role, verification, packages, portfolio,
+-- availability, notifications, messages, tokens, view tracking.
+-- Everything is idempotent (safe to re-run).
+-- =====================================================================
 
+-- Admin role (created via `npm run db:make-admin -- email`, never via signup).
+-- NOTE: a new enum value can't be *used* in the same transaction that adds it,
+-- and nothing in this file uses it.
+ALTER TYPE user_role ADD VALUE IF NOT EXISTS 'admin';
 
+ALTER TABLE users ADD COLUMN IF NOT EXISTS email_verified BOOLEAN NOT NULL DEFAULT false;
+
+-- Vendors: verification/featuring are admin-controlled; price_unit lets
+-- catering say "per plate" instead of always "onwards".
+ALTER TABLE vendors ADD COLUMN IF NOT EXISTS verified BOOLEAN NOT NULL DEFAULT false;
+ALTER TABLE vendors ADD COLUMN IF NOT EXISTS featured BOOLEAN NOT NULL DEFAULT false;
+ALTER TABLE vendors ADD COLUMN IF NOT EXISTS price_unit TEXT NOT NULL DEFAULT 'onwards';
+UPDATE vendors SET price_unit = 'per plate' WHERE price_label LIKE '%per plate' AND price_unit = 'onwards';
+CREATE INDEX IF NOT EXISTS idx_vendors_published ON vendors (published);
+
+-- Real packages per vendor (replaces the old computed/fake packages).
+CREATE TABLE IF NOT EXISTS vendor_packages (
+  id SERIAL PRIMARY KEY,
+  vendor_id INTEGER NOT NULL REFERENCES vendors(id) ON DELETE CASCADE,
+  name TEXT NOT NULL,
+  price INTEGER NOT NULL CHECK (price > 0),
+  items TEXT[] NOT NULL DEFAULT '{}',
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS idx_vendor_packages_vendor ON vendor_packages (vendor_id);
+
+-- Portfolio images (URLs; usually Cloudinary, but any https image works).
+CREATE TABLE IF NOT EXISTS portfolio_items (
+  id SERIAL PRIMARY KEY,
+  vendor_id INTEGER NOT NULL REFERENCES vendors(id) ON DELETE CASCADE,
+  url TEXT NOT NULL,
+  caption TEXT,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS idx_portfolio_vendor ON portfolio_items (vendor_id);
+
+-- Dates a vendor can't take work. Booked quotes add their event date here.
+CREATE TABLE IF NOT EXISTS vendor_unavailable_dates (
+  vendor_id INTEGER NOT NULL REFERENCES vendors(id) ON DELETE CASCADE,
+  date DATE NOT NULL,
+  PRIMARY KEY (vendor_id, date)
+);
+
+-- In-app notifications (email copies are sent separately when enabled).
+CREATE TABLE IF NOT EXISTS notifications (
+  id SERIAL PRIMARY KEY,
+  user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  type TEXT NOT NULL,
+  title TEXT NOT NULL,
+  body TEXT,
+  link TEXT,
+  read BOOLEAN NOT NULL DEFAULT false,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS idx_notifications_user ON notifications (user_id, read, created_at DESC);
+
+-- A message thread hangs off each quote request.
+CREATE TABLE IF NOT EXISTS quote_messages (
+  id SERIAL PRIMARY KEY,
+  quote_id INTEGER NOT NULL REFERENCES quote_requests(id) ON DELETE CASCADE,
+  sender_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  body TEXT NOT NULL,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS idx_quote_messages_quote ON quote_messages (quote_id, created_at);
+
+-- One-time tokens for password reset and email verification. Only a hash of
+-- the token is stored.
+CREATE TABLE IF NOT EXISTS auth_tokens (
+  id SERIAL PRIMARY KEY,
+  user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  purpose TEXT NOT NULL CHECK (purpose IN ('reset', 'verify')),
+  token_hash TEXT NOT NULL UNIQUE,
+  expires_at TIMESTAMPTZ NOT NULL,
+  used BOOLEAN NOT NULL DEFAULT false,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+-- Profile views, so vendors can see real visitor numbers.
+CREATE TABLE IF NOT EXISTS vendor_views (
+  id SERIAL PRIMARY KEY,
+  vendor_id INTEGER NOT NULL REFERENCES vendors(id) ON DELETE CASCADE,
+  viewer_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS idx_vendor_views_vendor ON vendor_views (vendor_id, created_at);
+
+-- Quote status must be one of the known values.
+DO $$ BEGIN
+  ALTER TABLE quote_requests
+    ADD CONSTRAINT quote_status_valid CHECK (status IN ('pending','responded','booked','declined'));
+EXCEPTION
+  WHEN duplicate_object THEN null;
+END $$;
