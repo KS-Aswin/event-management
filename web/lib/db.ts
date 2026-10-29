@@ -24,7 +24,7 @@ if (process.env.NODE_ENV !== "production") {
   global._velaPgPool = pool;
 }
 
-export type UserRole = "customer" | "vendor";
+export type UserRole = "customer" | "vendor" | "admin";
 
 export interface UserRecord {
   id: number;
@@ -99,6 +99,14 @@ export interface VendorRecord {
   tags: string[];
   about: string;
   created_at: string;
+  // Profile fields added in migration 002.
+  vendor_type: "company" | "individual";
+  district_id: number | null;
+  phone: string | null;
+  whatsapp: string | null;
+  logo_url: string | null;
+  cover_image_url: string | null;
+  status: "pending" | "approved" | "rejected";
 }
 
 export interface VendorFilters {
@@ -190,13 +198,38 @@ export async function createQuoteRequest(params: {
   eventDate: string | null;
   budget: string | null;
   message: string | null;
+  // Optional: the specific services of this vendor the customer wants.
+  // Ids that don't belong to this vendor are ignored here as a safety net
+  // (the API route rejects them with a 400 before getting this far).
+  serviceIds?: number[];
 }) {
-  const result = await pool.query(
-    `INSERT INTO quote_requests (vendor_id, customer_id, name, phone, event_date, budget, message)
-     VALUES ($1,$2,$3,$4,$5,$6,$7) RETURNING id`,
-    [params.vendorId, params.customerId, params.name, params.phone, params.eventDate, params.budget, params.message]
-  );
-  return result.rows[0];
+  const serviceIds = params.serviceIds ?? [];
+  const client = await pool.connect();
+  try {
+    await client.query("BEGIN");
+    const result = await client.query(
+      `INSERT INTO quote_requests (vendor_id, customer_id, name, phone, event_date, budget, message)
+       VALUES ($1,$2,$3,$4,$5,$6,$7) RETURNING id`,
+      [params.vendorId, params.customerId, params.name, params.phone, params.eventDate, params.budget, params.message]
+    );
+    const quote = result.rows[0];
+    if (serviceIds.length > 0) {
+      await client.query(
+        `INSERT INTO quote_request_services (quote_request_id, service_id)
+         SELECT $1, s.id FROM services s
+         WHERE s.vendor_id = $2 AND s.id = ANY($3::int[])
+         ON CONFLICT DO NOTHING`,
+        [quote.id, params.vendorId, serviceIds]
+      );
+    }
+    await client.query("COMMIT");
+    return quote;
+  } catch (err) {
+    await client.query("ROLLBACK");
+    throw err;
+  } finally {
+    client.release();
+  }
 }
 
 export async function findVendorByOwner(ownerId: number): Promise<VendorRecord | null> {
@@ -218,10 +251,20 @@ export async function createVendorListing(params: {
   tags: string[];
   about: string;
 }): Promise<VendorRecord> {
+  // The vendor and its first service are created together in one statement
+  // (a data-modifying CTE), so a listing never exists without a service.
   const result = await pool.query<VendorRecord>(
-    `INSERT INTO vendors (owner_id, name, category, location, price, price_label, experience, tags, about, rating, reviews_count)
-     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,0,0)
-     RETURNING *`,
+    `WITH new_vendor AS (
+       INSERT INTO vendors (owner_id, name, category, location, price, price_label, experience, tags, about, rating, reviews_count)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,0,0)
+       RETURNING *
+     ), new_service AS (
+       INSERT INTO services (vendor_id, category_id, title, description, price_from, price_unit)
+       SELECT nv.id, c.id, nv.category, nv.about, nv.price, 'event'
+       FROM new_vendor nv
+       JOIN categories c ON c.name = nv.category
+     )
+     SELECT * FROM new_vendor`,
     [
       params.ownerId,
       params.name,
@@ -273,14 +316,24 @@ export interface LeadRecord {
   message: string | null;
   status: string;
   created_at: string;
+  // Titles of the services the customer asked for (empty = general enquiry).
+  // Optional because updateQuoteStatus's RETURNING doesn't include it.
+  services?: string[];
 }
 
 export async function findQuoteRequestsByVendor(vendorId: number): Promise<LeadRecord[]> {
   const result = await pool.query<LeadRecord>(
-    `SELECT id, name, phone, event_date, budget, message, status, created_at
-     FROM quote_requests
-     WHERE vendor_id = $1
-     ORDER BY created_at DESC`,
+    `SELECT q.id, q.name, q.phone, q.event_date, q.budget, q.message, q.status, q.created_at,
+            COALESCE(
+              (SELECT array_agg(s.title ORDER BY s.title)
+               FROM quote_request_services qs
+               JOIN services s ON s.id = qs.service_id
+               WHERE qs.quote_request_id = q.id),
+              '{}'
+            ) AS services
+     FROM quote_requests q
+     WHERE q.vendor_id = $1
+     ORDER BY q.created_at DESC`,
     [vendorId]
   );
   return result.rows;
@@ -496,4 +549,172 @@ export async function findSearchSuggestions(query: string): Promise<SearchSugges
     locations: locationsRes.rows.map((r) => r.location),
     vendors: vendorsRes.rows,
   };
+}
+
+// ---------------------------------------------------------------------------
+// Lookups: categories and districts (added in migration 002)
+// ---------------------------------------------------------------------------
+
+export async function findCategories(): Promise<string[]> {
+  const result = await pool.query<{ name: string }>(
+    "SELECT name FROM categories ORDER BY sort_order, name"
+  );
+  return result.rows.map((r) => r.name);
+}
+
+export interface DistrictRecord {
+  id: number;
+  state: string;
+  name: string;
+}
+
+export async function findDistricts(state = "Kerala"): Promise<DistrictRecord[]> {
+  const result = await pool.query<DistrictRecord>(
+    "SELECT id, state, name FROM districts WHERE state = $1 ORDER BY name",
+    [state]
+  );
+  return result.rows;
+}
+
+// ---------------------------------------------------------------------------
+// Services: what a vendor sells. One vendor, many services.
+// ---------------------------------------------------------------------------
+
+export const SERVICE_PRICE_UNITS = ["event", "day", "hour", "plate", "person", "package"] as const;
+export type ServicePriceUnit = (typeof SERVICE_PRICE_UNITS)[number];
+
+export interface ServiceRecord {
+  id: number;
+  vendor_id: number;
+  category_id: number;
+  category: string;
+  title: string;
+  description: string;
+  price_from: number;
+  price_unit: string;
+  active: boolean;
+  sort_order: number;
+  created_at: string;
+}
+
+const SERVICE_SELECT = `
+  SELECT s.id, s.vendor_id, s.category_id, c.name AS category, s.title, s.description,
+         s.price_from, s.price_unit, s.active, s.sort_order, s.created_at
+  FROM services s
+  JOIN categories c ON c.id = s.category_id`;
+
+export async function findServicesByVendor(
+  vendorId: number,
+  options: { includeInactive?: boolean } = {}
+): Promise<ServiceRecord[]> {
+  const result = await pool.query<ServiceRecord>(
+    `${SERVICE_SELECT}
+     WHERE s.vendor_id = $1 ${options.includeInactive ? "" : "AND s.active"}
+     ORDER BY s.sort_order, s.id`,
+    [vendorId]
+  );
+  return result.rows;
+}
+
+export async function findServiceById(id: number): Promise<ServiceRecord | null> {
+  const result = await pool.query<ServiceRecord>(`${SERVICE_SELECT} WHERE s.id = $1`, [id]);
+  return result.rows[0] ?? null;
+}
+
+export async function createService(params: {
+  vendorId: number;
+  ownerId: number;
+  category: string;
+  title: string;
+  description: string;
+  priceFrom: number;
+  priceUnit: string;
+}): Promise<ServiceRecord | null> {
+  // Ownership and category are checked inside the INSERT itself (it only
+  // inserts a row if the vendor belongs to this user and the category exists),
+  // so there is no gap between "check" and "write".
+  const result = await pool.query<{ id: number }>(
+    `INSERT INTO services (vendor_id, category_id, title, description, price_from, price_unit)
+     SELECT v.id, c.id, $3, $4, $5, $6
+     FROM vendors v, categories c
+     WHERE v.id = $1 AND v.owner_id = $2 AND c.name = $7
+     RETURNING id`,
+    [params.vendorId, params.ownerId, params.title, params.description, params.priceFrom, params.priceUnit, params.category]
+  );
+  const row = result.rows[0];
+  return row ? findServiceById(row.id) : null;
+}
+
+export async function updateService(
+  serviceId: number,
+  ownerId: number,
+  fields: {
+    category?: string;
+    title?: string;
+    description?: string;
+    priceFrom?: number;
+    priceUnit?: string;
+    active?: boolean;
+  }
+): Promise<ServiceRecord | null> {
+  const result = await pool.query<{ id: number }>(
+    `UPDATE services s SET
+       category_id = COALESCE((SELECT c.id FROM categories c WHERE c.name = $3), s.category_id),
+       title = COALESCE($4, s.title),
+       description = COALESCE($5, s.description),
+       price_from = COALESCE($6, s.price_from),
+       price_unit = COALESCE($7, s.price_unit),
+       active = COALESCE($8, s.active)
+     FROM vendors v
+     WHERE s.id = $1 AND s.vendor_id = v.id AND v.owner_id = $2
+     RETURNING s.id`,
+    [
+      serviceId,
+      ownerId,
+      fields.category ?? null,
+      fields.title ?? null,
+      fields.description ?? null,
+      fields.priceFrom ?? null,
+      fields.priceUnit ?? null,
+      fields.active ?? null,
+    ]
+  );
+  const row = result.rows[0];
+  return row ? findServiceById(row.id) : null;
+}
+
+export async function deleteService(serviceId: number, ownerId: number): Promise<boolean> {
+  const result = await pool.query(
+    `DELETE FROM services s
+     USING vendors v
+     WHERE s.id = $1 AND s.vendor_id = v.id AND v.owner_id = $2`,
+    [serviceId, ownerId]
+  );
+  return (result.rowCount ?? 0) > 0;
+}
+
+// ---------------------------------------------------------------------------
+// Portfolio: work samples. Read-only for now; uploads arrive in the next phase.
+// ---------------------------------------------------------------------------
+
+export interface PortfolioItemRecord {
+  id: number;
+  vendor_id: number;
+  service_id: number | null;
+  media_type: "image" | "video_link";
+  media_url: string;
+  caption: string;
+  sort_order: number;
+  created_at: string;
+}
+
+export async function findPortfolioByVendor(vendorId: number): Promise<PortfolioItemRecord[]> {
+  const result = await pool.query<PortfolioItemRecord>(
+    `SELECT id, vendor_id, service_id, media_type, media_url, caption, sort_order, created_at
+     FROM portfolio_items
+     WHERE vendor_id = $1
+     ORDER BY sort_order, id`,
+    [vendorId]
+  );
+  return result.rows;
 }
