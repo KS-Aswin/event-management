@@ -41,8 +41,18 @@ and temple events, chenda melam, WhatsApp click-to-chat, UPI payments later.
 
 ## 3. Business model
 
-Featured listings, per-lead charges, vendor subscriptions, booking commission,
-sponsored promotions. None are built yet. Start free for vendors to get supply.
+**Customers use Vela free. Vendors pay to be found and to reach customers**
+(the LinkedIn idea: free basic profile, paid reach). Full detail, prices,
+database design, rules and tests are in **`docs/MONETIZATION_SPEC.md`**.
+
+1. Lead unlock credits: inquiries arrive with contact details hidden; 1 credit reveals them.
+2. Vendor subscription plans: Starter (free), Pro, Premium (more services, photos, credits, badge, ranking).
+3. Featured placement by district + category (always labeled "Featured").
+4. Later: booking commission, sponsored ads.
+
+Launch plan: first about 3 months billing OFF ("Founding Vendor" offer) to build
+supply, then switch billing ON behind the `BILLING_ENABLED` flag. Nothing is
+built yet; it is Phase 6.
 
 ## 4. Real tech stack (decided, replaces the first draft)
 
@@ -127,17 +137,26 @@ Update the checkboxes as work completes.
 
 **Phase 5 - Trust and safety**
 - [ ] Phone OTP for vendors
-- [ ] Admin dashboard: approve vendors, remove listings, handle reports
+- [ ] Admin dashboard: approve vendors (enforce `vendors.status`), remove listings, handle reports
 - [ ] Email verification, password reset, report button
-- [ ] Rate limiting on login/signup
+- [ ] Rate limiting on login/signup/inquiry
 
-**Phase 6 - Go live**
+**Phase 6 - Revenue (see `docs/MONETIZATION_SPEC.md`)**
+- [ ] Migration 003: plans, subscriptions, credit ledger, lead unlocks, payments, webhooks, featured placements
+- [ ] Entitlements and plan limits enforced on the server
+- [ ] Locked leads + unlock with credits (transaction-safe)
+- [ ] Razorpay (test mode): credit packs, subscriptions, webhook
+- [ ] Featured placement and ranking rules
+- [ ] Billing page, public pricing page, admin revenue dashboard
+- [ ] `BILLING_ENABLED` flag, default OFF in production
+
+**Phase 7 - Go live**
 - [ ] Vercel + Supabase production setup, secrets in host settings
 - [ ] CI: lint, typecheck, build, API tests on every push
 - [ ] Browser (Playwright) tests for main flows
-- [ ] Error monitoring, DB backups, privacy + terms pages, domain
+- [ ] Error monitoring, DB backups, privacy + terms pages, domain, GST/CA check
 
-**Phase 7 - Later**
+**Phase 8 - Later**
 - [ ] Online booking and UPI payments, commission
 - [ ] Native mobile app, Malayalam, more states, AI recommendations
 
@@ -178,3 +197,5 @@ non-commercial only; Supabase free pauses after 1 week idle).
 
 - 2026-10-29: Rewrote this plan for Kerala-first launch and the real stack.
   Added migration 002 (profiles, services, portfolio, districts, categories).
+- 2026-10-29: Added revenue plan (`docs/MONETIZATION_SPEC.md`) as Phase 6 and the
+  agent prompt (`AGENT_PROMPT.md`).
