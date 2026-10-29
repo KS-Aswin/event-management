@@ -1,5 +1,11 @@
 import { NextResponse } from "next/server";
-import { findVendorById, findReviewsByVendor, updateVendorListing } from "@/lib/db";
+import {
+  findVendorById,
+  findReviewsByVendor,
+  findServicesByVendor,
+  findPortfolioByVendor,
+  updateVendorListing,
+} from "@/lib/db";
 import { getSession } from "@/lib/session";
 import { CATEGORIES } from "@/lib/vendorVisuals";
 
@@ -18,9 +24,13 @@ export async function GET(
     return NextResponse.json({ error: "Vendor not found." }, { status: 404 });
   }
 
-  const reviews = await findReviewsByVendor(vendorId);
+  const [reviews, services, portfolio] = await Promise.all([
+    findReviewsByVendor(vendorId),
+    findServicesByVendor(vendorId),
+    findPortfolioByVendor(vendorId),
+  ]);
 
-  return NextResponse.json({ vendor, reviews });
+  return NextResponse.json({ vendor, reviews, services, portfolio });
 }
 
 export async function PATCH(

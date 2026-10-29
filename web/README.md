@@ -36,7 +36,7 @@ Prisma needs to download a native query-engine binary from `binaries.prisma.sh` 
    ```bash
    node db/migrate.mjs
    ```
-   (This runs `db/schema.sql` against `DATABASE_URL`. Safe to re-run — it uses `CREATE TABLE IF NOT EXISTS`.)
+   (This applies the numbered SQL files in `db/migrations/` to `DATABASE_URL`, in order. Each file runs once and is recorded in a `schema_migrations` table, so it is safe to re-run.)
 
 5. **Run the dev server:**
    ```bash
@@ -69,7 +69,7 @@ Prisma needs to download a native query-engine binary from `binaries.prisma.sh` 
 
 ## Database schema
 
-See `db/schema.sql`. Tables: `users`, `vendors`, `vendor_reviews`, `quote_requests`. Run `node db/seed.mjs` after migrating to populate sample vendors (the same 9 used in the `/demo` mockup, so both stay consistent) — safe to re-run, it clears and re-inserts rather than duplicating.
+See `db/migrations/`. Tables: `users`, `vendors`, `vendor_reviews`, `quote_requests`, `favorites`, `districts`, `categories`, `services`, `portfolio_items`, `quote_request_services`. Run `node db/seed.mjs` after migrating to populate sample vendors (the same 9 used in the `/demo` mockup, so both stay consistent) — safe to re-run, it clears and re-inserts rather than duplicating.
 
 ## Testing
 

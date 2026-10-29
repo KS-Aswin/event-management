@@ -83,6 +83,9 @@ async function VendorDashboard({ userId }: { userId: number }) {
                   <span className="font-medium">{l.name}</span>
                   {l.event_date ? ` — event on ${new Date(l.event_date).toLocaleDateString("en-IN")}` : ""}
                   {l.budget ? ` — budget ₹${l.budget}` : ""}
+                  {l.services && l.services.length > 0 ? (
+                    <div className="text-xs mt-0.5">Wants: {l.services.join(", ")}</div>
+                  ) : null}
                   <div className="text-ink-soft text-xs mt-0.5">
                     {l.phone} · {new Date(l.created_at).toLocaleDateString("en-IN")}
                   </div>

@@ -1,6 +1,6 @@
 import { notFound } from "next/navigation";
 import Link from "next/link";
-import { findVendorById, findReviewsByVendor, isFavorited } from "@/lib/db";
+import { findVendorById, findReviewsByVendor, findServicesByVendor, isFavorited } from "@/lib/db";
 import { getSession } from "@/lib/session";
 import { VendorTile } from "@/lib/vendorVisuals";
 import FavoriteButton from "@/lib/favorite-button";
@@ -23,7 +23,11 @@ export default async function VendorProfilePage({
   const vendor = await findVendorById(vendorId);
   if (!vendor) notFound();
 
-  const [reviews, session] = await Promise.all([findReviewsByVendor(vendorId), getSession()]);
+  const [reviews, services, session] = await Promise.all([
+    findReviewsByVendor(vendorId),
+    findServicesByVendor(vendorId),
+    getSession(),
+  ]);
   const price = Number(vendor.price);
   const alreadyReviewed = session
     ? reviews.some((r) => r.customer_id === session.userId)
@@ -72,6 +76,29 @@ export default async function VendorProfilePage({
 
           <h2 className="text-base font-semibold mt-6.5 mb-3">About</h2>
           <p className="text-sm leading-relaxed">{vendor.about}</p>
+
+          {services.length > 0 && (
+            <>
+              <h2 className="text-base font-semibold mt-6.5 mb-3">Services</h2>
+              <div className="border border-line rounded-lg divide-y divide-line">
+                {services.map((s) => (
+                  <div key={s.id} className="flex items-start justify-between gap-4 p-4">
+                    <div className="min-w-0">
+                      <div className="text-sm font-semibold">{s.title}</div>
+                      <div className="text-xs text-ink-soft mt-0.5">{s.category}</div>
+                      {s.description ? (
+                        <p className="text-[13px] text-ink-soft mt-1.5 leading-relaxed">{s.description}</p>
+                      ) : null}
+                    </div>
+                    <div className="text-accent font-semibold text-sm shrink-0 text-right">
+                      {formatPrice(s.price_from)}
+                      <div className="text-xs text-ink-soft font-normal">onwards / {s.price_unit}</div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </>
+          )}
 
           <h2 className="text-base font-semibold mt-6.5 mb-3">Packages</h2>
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-3.5">
