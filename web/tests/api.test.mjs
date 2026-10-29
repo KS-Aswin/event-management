@@ -506,6 +506,95 @@ async function main() {
   });
   check("settings: email conflict with another account rejected (409)", settingsEmailConflict.status, 409);
 
+  // ---------- Kerala lookups, services, portfolio, modular inquiries ----------
+  const meta = await request("/api/meta");
+  check("meta: reachable (200)", meta.status, 200);
+  checkTrue("meta: includes new categories (Videography, Event Management)",
+    meta.data?.categories?.includes("Videography") && meta.data?.categories?.includes("Event Management"));
+  check("meta: all 14 Kerala districts present", meta.data?.districts?.length, 14);
+  checkTrue("meta: Ernakulam is a district", meta.data?.districts?.some((d) => d.name === "Ernakulam"));
+
+  const seededDetail = await request("/api/vendors/1");
+  checkTrue("vendor detail: includes a services array with at least one service",
+    Array.isArray(seededDetail.data?.services) && seededDetail.data.services.length >= 1);
+  checkTrue("vendor detail: includes a portfolio array", Array.isArray(seededDetail.data?.portfolio));
+  check("vendor detail: vendor has a type and approved status",
+    [seededDetail.data?.vendor?.vendor_type, seededDetail.data?.vendor?.status], ["company", "approved"]);
+
+  const seededServices = await request("/api/vendors/1/services");
+  const seededServiceId = seededServices.data?.services?.[0]?.id;
+  checkTrue("services: public list for a seeded vendor works", typeof seededServiceId === "number");
+
+  const newListingServices = await request(`/api/vendors/${createdVendorId}/services`);
+  check("services: a newly created listing gets one starting service",
+    [newListingServices.data?.services?.length, newListingServices.data?.services?.[0]?.category], [1, "Photography"]);
+
+  const svcBody = { category: "Videography", title: "Wedding highlight film", description: "3-minute film", priceFrom: 25000, priceUnit: "event" };
+  const svcNoAuth = await request(`/api/vendors/${createdVendorId}/services`, { method: "POST", body: svcBody });
+  check("services: create rejected without auth (401)", svcNoAuth.status, 401);
+  const svcAsCustomer = await request(`/api/vendors/${createdVendorId}/services`, { method: "POST", body: svcBody, cookie: customerCookie });
+  check("services: create rejected for customer role (403)", svcAsCustomer.status, 403);
+  const svcBadCategory = await request(`/api/vendors/${createdVendorId}/services`, { method: "POST", body: { ...svcBody, category: "Nope" }, cookie: vendorCookie });
+  check("services: invalid category rejected (400)", svcBadCategory.status, 400);
+  const svcBadPrice = await request(`/api/vendors/${createdVendorId}/services`, { method: "POST", body: { ...svcBody, priceFrom: -5 }, cookie: vendorCookie });
+  check("services: negative price rejected (400)", svcBadPrice.status, 400);
+  const svcBadUnit = await request(`/api/vendors/${createdVendorId}/services`, { method: "POST", body: { ...svcBody, priceUnit: "fortnight" }, cookie: vendorCookie });
+  check("services: invalid price unit rejected (400)", svcBadUnit.status, 400);
+
+  const otherVendorReg = await request("/api/auth/register", {
+    method: "POST",
+    body: { name: "Other Vendor", email: `other-vendor-${RUN_ID}@example.com`, password: "password123", role: "vendor" },
+  });
+  const otherVendorCookie = otherVendorReg.cookie;
+  const svcNotOwner = await request(`/api/vendors/${createdVendorId}/services`, { method: "POST", body: svcBody, cookie: otherVendorCookie });
+  check("services: create on someone else's listing rejected (404)", svcNotOwner.status, 404);
+
+  const svcCreate = await request(`/api/vendors/${createdVendorId}/services`, { method: "POST", body: svcBody, cookie: vendorCookie });
+  check("services: owner can create a service (201)", svcCreate.status, 201);
+  const newServiceId = svcCreate.data?.service?.id;
+  check("services: created service has the right category and price",
+    [svcCreate.data?.service?.category, svcCreate.data?.service?.price_from], ["Videography", 25000]);
+
+  const svcPatchNotOwner = await request(`/api/services/${newServiceId}`, { method: "PATCH", body: { title: "Hacked" }, cookie: otherVendorCookie });
+  check("services: edit by non-owner rejected (404)", svcPatchNotOwner.status, 404);
+  const svcPatchOk = await request(`/api/services/${newServiceId}`, { method: "PATCH", body: { title: "Wedding film (updated)", priceFrom: 30000 }, cookie: vendorCookie });
+  check("services: owner can edit (200)", svcPatchOk.status, 200);
+  check("services: edit changed title and price",
+    [svcPatchOk.data?.service?.title, svcPatchOk.data?.service?.price_from], ["Wedding film (updated)", 30000]);
+
+  // Modular inquiry: ask for only some services.
+  const quoteWithServices = await request(`/api/vendors/${createdVendorId}/quotes`, {
+    method: "POST",
+    body: { name: "Modular Customer", phone: "9999966666", serviceIds: [newServiceId] },
+  });
+  check("quote with services: accepted (201)", quoteWithServices.status, 201);
+  const quoteForeignService = await request(`/api/vendors/${createdVendorId}/quotes`, {
+    method: "POST",
+    body: { name: "Modular Customer", phone: "9999966666", serviceIds: [seededServiceId] },
+  });
+  check("quote with services: another vendor's service rejected (400)", quoteForeignService.status, 400);
+  const quoteBadIds = await request(`/api/vendors/${createdVendorId}/quotes`, {
+    method: "POST",
+    body: { name: "Modular Customer", phone: "9999966666", serviceIds: "all" },
+  });
+  check("quote with services: malformed serviceIds rejected (400)", quoteBadIds.status, 400);
+  const vendorDashWithLead = await request("/dashboard", { cookie: vendorCookie });
+  checkTrue("vendor dashboard: lead shows which service was asked for",
+    vendorDashWithLead.text.includes("Wedding film (updated)"));
+
+  // Deactivated services disappear from the public list; delete is owner-only.
+  const svcDeactivate = await request(`/api/services/${newServiceId}`, { method: "PATCH", body: { active: false }, cookie: vendorCookie });
+  check("services: owner can deactivate (200)", svcDeactivate.status, 200);
+  const afterDeactivate = await request(`/api/vendors/${createdVendorId}/services`);
+  check("services: deactivated service hidden from public list", afterDeactivate.data?.services?.length, 1);
+
+  const svcDeleteNotOwner = await request(`/api/services/${newServiceId}`, { method: "DELETE", cookie: otherVendorCookie });
+  check("services: delete by non-owner rejected (404)", svcDeleteNotOwner.status, 404);
+  const svcDeleteOk = await request(`/api/services/${newServiceId}`, { method: "DELETE", cookie: vendorCookie });
+  check("services: owner can delete (200)", svcDeleteOk.status, 200);
+  const svcDeleteAgain = await request(`/api/services/${newServiceId}`, { method: "DELETE", cookie: vendorCookie });
+  check("services: deleting twice returns 404", svcDeleteAgain.status, 404);
+
   // ---------- Logout ----------
   const logout = await request("/api/auth/logout", { method: "POST", cookie: customerCookie });
   check("logout: succeeds (200)", logout.status, 200);
