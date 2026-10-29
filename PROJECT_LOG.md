@@ -24,7 +24,7 @@
 
 **Working (built and tested against a real database):**
 - Next.js 16 (App Router, TypeScript) + Tailwind v4
-- PostgreSQL schema (`web/db/schema.sql`): `users`, `vendors`, `vendor_reviews`, `quote_requests` — see file for exact columns
+- PostgreSQL schema as numbered migrations (`web/db/migrations/`): `users`, `vendors`, `vendor_reviews`, `quote_requests`, `favorites`, plus (from migration 002) `districts`, `categories`, `services`, `portfolio_items`, `quote_request_services`
 - Full auth: `POST /api/auth/register` (validates, rejects duplicate emails/weak passwords), `POST /api/auth/login` (generic error on failure, no email enumeration), `POST /api/auth/logout`. JWT session cookie via `jose`, httpOnly, 7-day expiry.
 - **A single shared `<Header>`** (`app/header.tsx`), rendered once from the root layout — not duplicated per page. Handles back nav, logo, the search box (on `/search` only), and signed-in/out state everywhere consistently.
 - `/` — real home page (search + category chips, links into `/search`)
@@ -115,8 +115,8 @@
     session.ts                    ← JWT session cookie create/read/destroy
     vendorVisuals.tsx              ← category → gradient+icon mapping, <VendorTile> component
   db/
-    schema.sql                    ← the actual DB schema (source of truth) — users, vendors, vendor_reviews, quote_requests
-    migrate.mjs                   ← applies schema.sql to $DATABASE_URL — node db/migrate.mjs
+    migrations/                   ← numbered SQL files (001_baseline.sql, 002_profiles_services_portfolio.sql, ...) — source of truth for the schema
+    migrate.mjs                   ← applies new migrations in order to $DATABASE_URL, tracked in schema_migrations — node db/migrate.mjs
     seed.mjs                      ← populates sample vendors/reviews — node db/seed.mjs (idempotent)
   .env.example                    ← template for required env vars (DATABASE_URL, SESSION_SECRET)
 ```
@@ -159,6 +159,15 @@ npm run test:api             # in another terminal — should print "N passed, 0
 Both `npm run build` and `npm run test:api` should pass with zero failures before committing anything in `/web`. If you add a new API route or behavior, add a corresponding check to `web/tests/api.test.mjs` in the same commit — don't let the suite fall behind the code.
 
 ## 6. Session Log
+
+### 2026-10-29 — Session 11 (Kerala-first plan, Phase 1 data model)
+- **Product direction set** in `EVENT_PLATFORM_MASTER_CONTEXT.md` (new, repo root — read it first): LinkedIn-style marketplace for event services, Kerala first, then India. Vendors are companies or individuals; a customer can ask a company for only some of its services; customers can mix vendors. Stack stays Next.js + `pg` (not the first draft's Vite/Express/Prisma); hosting plan is Vercel + Supabase (Postgres + Storage).
+- **Migrations:** replaced the single `schema.sql` with numbered files in `web/db/migrations/` and a runner that records applied files in `schema_migrations`. `001_baseline.sql` is the old schema (idempotent, so existing local databases are fine). `002_profiles_services_portfolio.sql` adds: `admin` role, `vendor_type`, `vendor_status`, `media_type` enums; `districts` (14 Kerala districts, with a `state` column for later expansion); `categories` (12); vendor profile columns (type, district, phone, whatsapp, logo, cover, status); `services`; `portfolio_items`; `quote_request_services`. It also back-fills a district and one service for every existing vendor.
+- **Code:** `lib/db.ts` (services CRUD with ownership inside the SQL, categories, districts, portfolio read, quote requests that can name services, leads list the asked-for services, new listings get a starting service). New routes: `GET /api/meta`, `GET/POST /api/vendors/[id]/services`, `PATCH/DELETE /api/services/[id]`. `GET /api/vendors/[id]` now also returns `services` and `portfolio`. Quote route accepts optional `serviceIds`. Vendor page shows a Services list; vendor dashboard shows "Wants: ..." on leads. Seed now adds districts, vendor types and services (9 vendors, same as before).
+- **Tested for real:** migration 001+002 on a fresh Postgres 16 database, on an old-style database with existing vendors (back-fill checked), and re-run; every new SQL statement run against Postgres with inferred parameter types (ownership allow/deny, create/update/delete, quote services, lead aggregation, create-listing CTE).
+- **NOT run in this session (npm registry was blocked in the sandbox):** `npm run lint`, `npm run build`, `npm run test:api`, `npm run db:migrate`/`db:seed` through Node. New API tests were written in `web/tests/api.test.mjs` (section "Kerala lookups, services, portfolio, modular inquiries") but have not been executed. **First thing to do next session on a normal machine:** `npm run db:migrate && npm run db:seed && npm run lint && npx tsc --noEmit && npm run build`, then start the dev server and `npm run test:api`.
+- **Next:** vendor type chosen at signup; services management UI in the vendor dashboard; Phase 2 uploads (Supabase Storage). See the phase checklist in `EVENT_PLATFORM_MASTER_CONTEXT.md`.
+
 
 > Add a new dated entry each session, newest at the top. Keep entries short — a few lines of what changed and why, not a full diff.
 
