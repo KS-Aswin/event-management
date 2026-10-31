@@ -8,7 +8,7 @@ This repo has two parts:
 
 A real Next.js + PostgreSQL application. This is what's actively being built now. See [`web/README.md`](./web/README.md) for setup instructions, and [`PROJECT_LOG.md`](./PROJECT_LOG.md) for the full history of decisions and progress — **read that file first if you're picking this project up in a new session.**
 
-Currently working: signup/login (hashed passwords, session cookies), vendor search with filters and typeahead, vendor profiles with services and reviews, quote requests and lead management, vendor listing create/edit, favourites, settings, and role-specific dashboards, all on Postgres (schema in `web/db/migrations/`). Not yet built: Google OAuth, payments/monetization, notifications, and an admin moderation UI. See `web/README.md` for the full list.
+Currently working (clean setup from `web/README.md` checked on 2026-10-31: migrate, seed, build, 119 API checks and 50 Playwright e2e checks pass): signup/login (hashed passwords, session cookies), vendor search with filters and typeahead, vendor profiles with services and reviews, quote requests and lead management, vendor listing create/edit, vendor services, favourites, review reporting, settings, and role-specific dashboards, all on Postgres (schema in `web/db/migrations/`). Not yet built: Google OAuth, password reset, payments/monetization, email/SMS notifications, image uploads, and an admin moderation UI. See `web/README.md` for the full list, including the **"What a human still has to do"** section (credentials, production database, external services, deployment).
 
 ## `/demo` — the original front-end mockup
 
