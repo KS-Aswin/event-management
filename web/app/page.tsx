@@ -1,236 +1,166 @@
-"use client";
+import type { Metadata } from "next";
+import Link from "next/link";
+import { findVendors, type VendorRecord } from "@/lib/db";
+import { CATEGORIES, VendorTile } from "@/lib/vendorVisuals";
+import HomeSearch from "./home-search";
 
-import { useEffect, useRef, useState } from "react";
-import { useRouter } from "next/navigation";
-import { CATEGORIES } from "@/lib/vendorVisuals";
+export const metadata: Metadata = {
+  title: { absolute: "Vela: Wedding & event vendors in Kerala" },
+  description:
+    "Find and compare wedding and event vendors across Kerala: venues, photographers, caterers, decorators, makeup and mehendi artists.",
+};
 
-const EXAMPLES = [
-  "Photographer in Kochi under ₹50,000",
-  "Wedding venue for 600 guests, Kottayam",
-  "Caterer available on 10 January",
-  "Decorator, 4.8+ rating, Thrissur",
-  "Mehendi artist near Kozhikode",
-];
+// Reads live vendor data on every request.
+export const dynamic = "force-dynamic";
 
-interface Suggestions {
-  categories: string[];
-  locations: string[];
-  vendors: { id: number; name: string; category: string }[];
-}
-
-const EMPTY_SUGGESTIONS: Suggestions = { categories: [], locations: [], vendors: [] };
-
-export default function Home() {
-  const router = useRouter();
-  const [value, setValue] = useState("");
-  const [placeholder, setPlaceholder] = useState("");
-  const [focused, setFocused] = useState(false);
-  const [suggestions, setSuggestions] = useState<Suggestions>(EMPTY_SUGGESTIONS);
-  const [showSuggestions, setShowSuggestions] = useState(false);
-  const inputRef = useRef<HTMLInputElement>(null);
-  const wrapperRef = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    let exIndex = 0;
-    let charIndex = 0;
-    let deleting = false;
-    let timeoutId: ReturnType<typeof setTimeout>;
-
-    function tick() {
-      if (document.activeElement === inputRef.current) {
-        timeoutId = setTimeout(tick, 400);
-        return;
-      }
-      const full = EXAMPLES[exIndex];
-      if (!deleting) {
-        charIndex++;
-        setPlaceholder(full.slice(0, charIndex));
-        if (charIndex === full.length) {
-          deleting = true;
-          timeoutId = setTimeout(tick, 1400);
-          return;
-        }
-      } else {
-        charIndex--;
-        setPlaceholder(full.slice(0, charIndex));
-        if (charIndex === 0) {
-          deleting = false;
-          exIndex = (exIndex + 1) % EXAMPLES.length;
-        }
-      }
-      timeoutId = setTimeout(tick, deleting ? 25 : 55);
-    }
-    tick();
-    return () => clearTimeout(timeoutId);
-  }, []);
-
-  // Debounced fetch of suggestions as the person types.
-  useEffect(() => {
-    if (value.trim().length < 2) {
-      setSuggestions(EMPTY_SUGGESTIONS);
-      setShowSuggestions(false);
-      return;
-    }
-    const timeoutId = setTimeout(async () => {
-      try {
-        const res = await fetch(`/api/suggest?q=${encodeURIComponent(value)}`);
-        if (!res.ok) return;
-        const data = await res.json();
-        setSuggestions(data);
-        setShowSuggestions(true);
-      } catch {
-        // suggestions are a nice-to-have — silently ignore a failed fetch
-      }
-    }, 250);
-    return () => clearTimeout(timeoutId);
-  }, [value]);
-
-  // Close the dropdown on an outside click, rather than on input blur —
-  // blur fires before a click on a suggestion registers, which would close
-  // the dropdown before the click could be handled.
-  useEffect(() => {
-    function handleClickOutside(e: MouseEvent) {
-      if (wrapperRef.current && !wrapperRef.current.contains(e.target as Node)) {
-        setShowSuggestions(false);
-      }
-    }
-    document.addEventListener("mousedown", handleClickOutside);
-    return () => document.removeEventListener("mousedown", handleClickOutside);
-  }, []);
-
-  function search(category?: string, location?: string) {
-    const params = new URLSearchParams();
-    if (value) params.set("q", value);
-    if (category) params.set("category", category);
-    if (location) params.set("location", location);
-    setShowSuggestions(false);
-    router.push(`/search?${params.toString()}`);
+async function loadVendors(): Promise<VendorRecord[]> {
+  try {
+    const vendors = await findVendors({ sort: "rating" });
+    return vendors.filter((v) => !v.status || v.status === "approved");
+  } catch {
+    // Keep the home page usable even if the database is unavailable.
+    return [];
   }
+}
 
-  const hasSuggestions =
-    suggestions.categories.length + suggestions.locations.length + suggestions.vendors.length > 0;
+function countBy(vendors: VendorRecord[], key: "category" | "location") {
+  const counts = new Map<string, number>();
+  for (const v of vendors) counts.set(v[key], (counts.get(v[key]) ?? 0) + 1);
+  return counts;
+}
+
+export default async function Home() {
+  const vendors = await loadVendors();
+  const categoryCounts = countBy(vendors, "category");
+  const districtCounts = countBy(vendors, "location");
+
+  // Known categories first (stable order), then any others found in the data.
+  const known: readonly string[] = CATEGORIES;
+  const categories = [
+    ...CATEGORIES.map((c) => ({ name: c as string, count: categoryCounts.get(c) ?? 0 })),
+    ...[...categoryCounts.entries()]
+      .filter(([c]) => !known.includes(c))
+      .map(([name, count]) => ({ name, count })),
+  ];
+  const districts = [...districtCounts.entries()].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]));
+  const topRated = vendors.slice(0, 6);
 
   return (
-    <main className="flex-1 flex flex-col items-center justify-center px-5 py-14">
-      <h1 className="font-display text-[72px] font-semibold text-accent leading-none mb-1.5">
-        Vel<span className="text-gold">a</span>
-      </h1>
-      <p className="text-ink-soft mb-8 text-center text-base">
-        Kerala&apos;s marketplace for weddings &amp; events
-      </p>
+    <main className="flex-1 flex flex-col items-center w-full">
+      <section className="w-full flex flex-col items-center justify-start pt-10 pb-10 sm:justify-center sm:py-14 px-5">
+        <div className="font-display text-5xl sm:text-[72px] font-semibold text-accent leading-none mb-2" aria-hidden="true">
+          Vel<span className="text-gold">a</span>
+        </div>
+        <h1 className="text-ink-soft mb-8 text-center text-base sm:text-lg max-w-[520px]">
+          <span className="sr-only">Vela: </span>
+          Find and compare wedding &amp; event vendors across Kerala
+        </h1>
 
-      <div className="w-full max-w-[584px] relative" ref={wrapperRef}>
-        <form
-          onSubmit={(e) => {
-            e.preventDefault();
-            search();
-          }}
-          className={`flex items-center gap-3 border rounded-full px-5 py-3 transition-shadow relative z-10 bg-white ${
-            focused ? "shadow-[0_1px_6px_rgba(32,33,36,0.18)] border-transparent" : "border-line"
-          }`}
-        >
-          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="text-ink-soft shrink-0">
-            <circle cx="11" cy="11" r="8" />
-            <path d="m21 21-4.35-4.35" />
-          </svg>
-          <input
-            ref={inputRef}
-            value={value}
-            onChange={(e) => setValue(e.target.value)}
-            onFocus={() => {
-              setFocused(true);
-              if (hasSuggestions) setShowSuggestions(true);
-            }}
-            onBlur={() => setFocused(false)}
-            onKeyDown={(e) => {
-              if (e.key === "Escape") setShowSuggestions(false);
-            }}
-            placeholder={placeholder}
-            autoComplete="off"
-            className="flex-1 outline-none text-base bg-transparent"
-          />
-        </form>
+        <HomeSearch />
 
-        {showSuggestions && hasSuggestions && (
-          <div className="absolute top-full left-0 right-0 mt-1.5 bg-white border border-line rounded-2xl shadow-lg py-2 z-20 max-h-[360px] overflow-auto">
-            {suggestions.categories.length > 0 && (
-              <SuggestionGroup label="Categories">
-                {suggestions.categories.map((c) => (
-                  <SuggestionRow key={c} onClick={() => search(c)}>
-                    {c}
-                  </SuggestionRow>
-                ))}
-              </SuggestionGroup>
-            )}
-            {suggestions.locations.length > 0 && (
-              <SuggestionGroup label="Locations">
-                {suggestions.locations.map((l) => (
-                  <SuggestionRow key={l} onClick={() => search(undefined, l)}>
-                    {l}
-                  </SuggestionRow>
-                ))}
-              </SuggestionGroup>
-            )}
-            {suggestions.vendors.length > 0 && (
-              <SuggestionGroup label="Vendors">
-                {suggestions.vendors.map((v) => (
-                  <SuggestionRow key={v.id} onClick={() => router.push(`/vendors/${v.id}`)}>
-                    {v.name} <span className="text-ink-soft">· {v.category}</span>
-                  </SuggestionRow>
-                ))}
-              </SuggestionGroup>
-            )}
-          </div>
+        <nav aria-label="Browse by category" className="w-full max-w-[660px] mt-10">
+          <ul className="flex gap-2.5 flex-nowrap overflow-x-auto -mx-5 px-5 pb-1 sm:mx-0 sm:px-0 sm:pb-0 sm:flex-wrap sm:justify-center sm:overflow-visible">
+            {categories.map((c) => (
+              <li key={c.name} className="shrink-0">
+                <Link
+                  href={`/search?category=${encodeURIComponent(c.name)}`}
+                  className="inline-flex items-center gap-1.5 border border-line rounded-full px-4 py-2 text-[13px] text-ink-soft hover:bg-accent-tint hover:text-accent hover:border-accent-tint whitespace-nowrap"
+                >
+                  {c.name}
+                  <span className="text-[11.5px] opacity-75">{c.count}</span>
+                </Link>
+              </li>
+            ))}
+          </ul>
+        </nav>
+
+        {districts.length > 0 && (
+          <nav aria-label="Browse by district" className="w-full max-w-[660px] mt-4 text-[13px] text-ink-soft">
+            <ul className="flex gap-x-3 gap-y-1.5 flex-nowrap overflow-x-auto -mx-5 px-5 sm:mx-0 sm:px-0 sm:flex-wrap sm:justify-center sm:overflow-visible">
+              <li className="shrink-0">Districts:</li>
+              {districts.map(([name, count]) => (
+                <li key={name} className="shrink-0">
+                  <Link href={`/search?location=${encodeURIComponent(name)}`} className="hover:text-accent hover:underline whitespace-nowrap">
+                    {name} <span className="opacity-75">({count})</span>
+                  </Link>
+                </li>
+              ))}
+            </ul>
+          </nav>
         )}
-      </div>
+      </section>
 
-      <div className="flex gap-3 mt-6.5 flex-wrap justify-center">
-        <button
-          onClick={() => search()}
-          className="px-4.5 py-2.5 rounded-md bg-accent hover:bg-accent-hover text-white text-sm"
-        >
-          Search vendors
-        </button>
-        <button
-          onClick={() => search()}
-          className="px-4.5 py-2.5 rounded-md bg-gray-100 hover:bg-gray-200 text-sm"
-        >
-          Plan my event
-        </button>
-      </div>
+      {topRated.length > 0 && (
+        <section aria-labelledby="top-rated" className="w-full max-w-[1180px] px-5 sm:px-6 py-10 border-t border-line">
+          <div className="flex items-baseline justify-between gap-4 mb-5">
+            <h2 id="top-rated" className="text-xl font-semibold">
+              Top-rated vendors
+            </h2>
+            <Link href="/search" className="text-sm text-accent hover:underline whitespace-nowrap">
+              See all {vendors.length} vendors
+            </Link>
+          </div>
+          <ul className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+            {topRated.map((v) => (
+              <li key={v.id}>
+                <Link
+                  href={`/vendors/${v.id}`}
+                  className="flex gap-3.5 items-center border border-line rounded-xl p-3 hover:border-accent group h-full"
+                >
+                  <VendorTile category={v.category} size={28} className="w-16 h-16 rounded-lg" />
+                  <div className="min-w-0">
+                    <div className="font-semibold truncate group-hover:text-accent">{v.name}</div>
+                    <div className="text-[13px] text-ink-soft truncate">
+                      {v.category} · {v.location}
+                    </div>
+                    <div className="text-[13px] mt-0.5">
+                      <span className="text-gold" aria-hidden="true">★</span> {v.rating}{" "}
+                      <span className="text-ink-soft">({v.reviews_count} reviews)</span>
+                    </div>
+                  </div>
+                </Link>
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
 
-      <div className="flex gap-2.5 mt-10 flex-wrap justify-center max-w-[660px]">
-        {CATEGORIES.map((c) => (
-          <button
-            key={c}
-            onClick={() => search(c)}
-            className="border border-line rounded-full px-4 py-2 text-[13px] text-ink-soft hover:bg-accent-tint hover:text-accent hover:border-accent-tint whitespace-nowrap"
-          >
-            {c}
-          </button>
-        ))}
-      </div>
+      <section aria-labelledby="how-it-works" className="w-full max-w-[1180px] px-5 sm:px-6 py-10 border-t border-line">
+        <h2 id="how-it-works" className="text-xl font-semibold mb-5">
+          How Vela works
+        </h2>
+        <ol className="grid gap-4 sm:grid-cols-3">
+          {[
+            ["Search", "Look up vendors by category, district or name across Kerala."],
+            ["Compare", "Check ratings, reviews, experience and starting prices side by side."],
+            ["Request a quote", "Send your event details to the vendors you like and hear back directly."],
+          ].map(([title, body], i) => (
+            <li key={title} className="border border-line rounded-xl p-4">
+              <div className="w-7 h-7 rounded-full bg-accent-tint text-accent text-sm font-semibold flex items-center justify-center mb-2.5">
+                {i + 1}
+              </div>
+              <div className="font-semibold mb-1">{title}</div>
+              <p className="text-sm text-ink-soft">{body}</p>
+            </li>
+          ))}
+        </ol>
+      </section>
+
+      <section aria-labelledby="free-for-families" className="w-full max-w-[1180px] px-5 sm:px-6 pb-14">
+        <div className="bg-accent-tint rounded-xl p-5 sm:p-6 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+          <div>
+            <h2 id="free-for-families" className="text-lg font-semibold text-accent">
+              Free for families
+            </h2>
+            <p className="text-sm text-ink-soft mt-1">
+              Searching, comparing and requesting quotes costs you nothing.
+            </p>
+          </div>
+          <Link href="/for-vendors" className="text-sm text-accent hover:underline whitespace-nowrap">
+            Are you a vendor? List your business
+          </Link>
+        </div>
+      </section>
     </main>
-  );
-}
-
-function SuggestionGroup({ label, children }: { label: string; children: React.ReactNode }) {
-  return (
-    <div className="px-2 py-1">
-      <div className="text-[11px] uppercase tracking-wide text-ink-soft px-2.5 pt-1.5 pb-1">{label}</div>
-      {children}
-    </div>
-  );
-}
-
-function SuggestionRow({ children, onClick }: { children: React.ReactNode; onClick: () => void }) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      className="w-full text-left px-2.5 py-2 text-sm rounded-lg hover:bg-accent-tint hover:text-accent"
-    >
-      {children}
-    </button>
   );
 }

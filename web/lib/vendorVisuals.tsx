@@ -74,8 +74,15 @@ export const CATEGORY_VISUALS: Record<string, CategoryVisual> = {
   },
 };
 
+// Neutral visual for categories without their own artwork (instead of
+// borrowing the Venue look, which mislabels the vendor).
+const FALLBACK_VISUAL: CategoryVisual = {
+  gradient: "linear-gradient(135deg,#6b7280,#374151)",
+  icon: <path d="M12 3l2.5 5.5L20 9.3l-4 4 1 5.7-5-2.8-5 2.8 1-5.7-4-4 5.5-.8z" />,
+};
+
 function getVisual(category: string): CategoryVisual {
-  return CATEGORY_VISUALS[category] ?? CATEGORY_VISUALS.Venue;
+  return CATEGORY_VISUALS[category] ?? FALLBACK_VISUAL;
 }
 
 export function VendorTile({

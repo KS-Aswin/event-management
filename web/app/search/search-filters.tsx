@@ -1,26 +1,37 @@
 "use client";
 
 import { useRouter, useSearchParams } from "next/navigation";
-import { useState } from "react";
+import { useState, useTransition } from "react";
 import { CATEGORIES } from "@/lib/vendorVisuals";
 
-export default function SearchFilters({ locations }: { locations: string[] }) {
+export default function SearchFilters({
+  locations,
+  activeLocation,
+  activeMinRating,
+}: {
+  locations: string[];
+  /** Normalised by the server (canonical district or ""), so the select matches the results. */
+  activeLocation: string;
+  /** Normalised by the server to an offered threshold, or "0". */
+  activeMinRating: string;
+}) {
   const router = useRouter();
   const searchParams = useSearchParams();
   const [mobileOpen, setMobileOpen] = useState(false);
+  const [pending, startTransition] = useTransition();
 
   const activeCategories = searchParams.getAll("category");
-  const activeLocation = searchParams.get("location") ?? "";
-  const activeMinRating = searchParams.get("minRating") ?? "0";
-  const activeSort = searchParams.get("sort") ?? "rating";
 
   const activeCount =
     activeCategories.length + (activeLocation ? 1 : 0) + (parseFloat(activeMinRating) > 0 ? 1 : 0);
 
+  // replace (not push) so each filter click doesn't add a history entry.
   function updateParams(mutator: (params: URLSearchParams) => void) {
     const params = new URLSearchParams(searchParams.toString());
     mutator(params);
-    router.push(`/search?${params.toString()}`);
+    params.delete("page");
+    const qs = params.toString();
+    startTransition(() => router.replace(qs ? `/search?${qs}` : "/search"));
   }
 
   function toggleCategory(category: string) {
@@ -35,35 +46,36 @@ export default function SearchFilters({ locations }: { locations: string[] }) {
     });
   }
 
+  // Clears the filters only; keeps the query and sort order.
   function clearAll() {
-    router.push("/search");
+    updateParams((params) => {
+      params.delete("category");
+      params.delete("location");
+      params.delete("minRating");
+    });
   }
 
   const panel = (
     <>
-      <div className="flex items-center justify-between mb-1">
-        <h4 className="text-[13px] uppercase tracking-wide text-ink-soft mt-0 mb-2.5">Category</h4>
-        <button onClick={clearAll} className="text-[12.5px] text-accent hover:underline">
+      <fieldset className="mb-2 relative">
+        <legend className="text-[13px] uppercase tracking-wide text-ink-soft mt-0 mb-3.5">Category</legend>
+        <button type="button" onClick={clearAll} className="absolute right-0 top-0 text-[12.5px] text-accent hover:underline">
           Clear all
         </button>
-      </div>
-      <div className="mb-2">
         {CATEGORIES.map((c) => {
           const checked = activeCategories.includes(c);
           return (
             <label
               key={c}
-              onClick={(e) => {
-                e.preventDefault();
-                toggleCategory(c);
-              }}
-              className={`flex items-center gap-2.5 w-full text-sm px-3 py-2.5 border rounded-lg mb-2 cursor-pointer transition-colors ${
+              className={`flex items-center gap-2.5 w-full text-sm px-3 py-2.5 border rounded-lg mb-2 cursor-pointer transition-colors has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-accent ${
                 checked
                   ? "bg-accent-tint border-accent text-accent font-semibold"
                   : "border-line hover:border-accent"
               }`}
             >
+              <input type="checkbox" className="sr-only" checked={checked} onChange={() => toggleCategory(c)} />
               <span
+                aria-hidden="true"
                 className={`w-[18px] h-[18px] border rounded flex items-center justify-center shrink-0 ${
                   checked ? "bg-accent border-accent" : "border-line"
                 }`}
@@ -78,10 +90,13 @@ export default function SearchFilters({ locations }: { locations: string[] }) {
             </label>
           );
         })}
-      </div>
+      </fieldset>
 
-      <h4 className="text-[13px] uppercase tracking-wide text-ink-soft mt-5 mb-2.5">Location</h4>
+      <label htmlFor="filter-location" className="block text-[13px] uppercase tracking-wide text-ink-soft mt-5 mb-2.5">
+        Location
+      </label>
       <select
+        id="filter-location"
         value={activeLocation}
         onChange={(e) => updateParams((p) => (e.target.value ? p.set("location", e.target.value) : p.delete("location")))}
         className="w-full px-2.5 py-2 border border-line rounded-md text-sm"
@@ -94,10 +109,15 @@ export default function SearchFilters({ locations }: { locations: string[] }) {
         ))}
       </select>
 
-      <h4 className="text-[13px] uppercase tracking-wide text-ink-soft mt-5 mb-2.5">Minimum rating</h4>
+      <label htmlFor="filter-rating" className="block text-[13px] uppercase tracking-wide text-ink-soft mt-5 mb-2.5">
+        Minimum rating
+      </label>
       <select
+        id="filter-rating"
         value={activeMinRating}
-        onChange={(e) => updateParams((p) => p.set("minRating", e.target.value))}
+        onChange={(e) =>
+          updateParams((p) => (e.target.value !== "0" ? p.set("minRating", e.target.value) : p.delete("minRating")))
+        }
         className="w-full px-2.5 py-2 border border-line rounded-md text-sm"
       >
         <option value="0">Any</option>
@@ -106,27 +126,24 @@ export default function SearchFilters({ locations }: { locations: string[] }) {
         <option value="4.8">4.8+</option>
       </select>
 
-      <h4 className="text-[13px] uppercase tracking-wide text-ink-soft mt-5 mb-2.5">Sort by</h4>
-      <select
-        value={activeSort}
-        onChange={(e) => updateParams((p) => p.set("sort", e.target.value))}
-        className="w-full px-2.5 py-2 border border-line rounded-md text-sm"
-      >
-        <option value="rating">Highest rated</option>
-        <option value="reviews">Most reviewed</option>
-        <option value="priceLow">Price: low to high</option>
-        <option value="priceHigh">Price: high to low</option>
-      </select>
+      {pending && (
+        <p className="text-[12.5px] text-ink-soft mt-4" role="status">
+          Updating results…
+        </p>
+      )}
     </>
   );
 
   return (
     <>
       <button
+        type="button"
         onClick={() => setMobileOpen((v) => !v)}
+        aria-expanded={mobileOpen}
+        aria-controls="search-filters-panel"
         className="md:hidden flex items-center gap-2 border border-line rounded-lg px-3.5 py-2.5 text-sm mb-4"
       >
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
           <path d="M4 6h16M7 12h10M10 18h4" />
         </svg>
         Filters
@@ -135,7 +152,11 @@ export default function SearchFilters({ locations }: { locations: string[] }) {
         )}
       </button>
 
-      <aside className={`w-full md:w-[230px] shrink-0 ${mobileOpen ? "block" : "hidden"} md:block mb-5 md:mb-0`}>
+      <aside
+        id="search-filters-panel"
+        aria-label="Filters"
+        className={`w-full md:w-[230px] shrink-0 ${mobileOpen ? "block" : "hidden"} md:block mb-5 md:mb-0 ${pending ? "opacity-70" : ""}`}
+      >
         {panel}
       </aside>
     </>
