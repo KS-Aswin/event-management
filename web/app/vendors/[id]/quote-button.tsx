@@ -22,6 +22,7 @@ export default function QuoteButton({
   preselectServiceId,
   label = "Request quote",
   variant = "primary",
+  triggerClassName,
 }: {
   vendorId: number;
   vendorName: string;
@@ -31,6 +32,8 @@ export default function QuoteButton({
   preselectServiceId?: number;
   label?: string;
   variant?: "primary" | "link";
+  /** Overrides the trigger's classes (e.g. to stretch it in a sticky bar). */
+  triggerClassName?: string;
 }) {
   const [open, setOpen] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -99,14 +102,29 @@ export default function QuoteButton({
   }
 
   const triggerClass =
-    variant === "link"
-      ? "inline-flex items-center min-h-10 text-[13px] text-accent hover:underline font-medium"
-      : "px-5 py-2.5 rounded-md bg-accent hover:bg-accent-hover text-white text-sm font-medium";
+    triggerClassName ??
+    (variant === "link"
+      ? "group inline-flex items-center gap-1 min-h-11 text-sm text-accent font-medium underline-offset-2 hover:underline"
+      : "btn btn-primary");
 
   return (
     <>
       <button type="button" onClick={openDialog} className={triggerClass}>
         {label}
+        {variant === "link" ? (
+          <svg
+            aria-hidden="true"
+            viewBox="0 0 16 16"
+            className="w-3.5 h-3.5 motion-safe:transition-transform motion-safe:group-hover:translate-x-0.5"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="1.8"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          >
+            <path d="M3 8h10M9 4l4 4-4 4" />
+          </svg>
+        ) : null}
       </button>
 
       {open && (
@@ -121,31 +139,52 @@ export default function QuoteButton({
             // A click on the dialog element itself is a click on the backdrop.
             if (e.target === e.currentTarget) closeDialog();
           }}
-          className="p-0 m-0 mt-auto sm:m-auto w-full max-w-none sm:max-w-[420px] max-h-[92dvh] sm:max-h-[90dvh] overflow-auto bg-white text-foreground rounded-t-2xl rounded-b-none sm:rounded-xl backdrop:bg-black/50"
+          className="p-0 m-0 mt-auto sm:m-auto w-full max-w-none sm:max-w-[480px] max-h-[92dvh] sm:max-h-[90dvh] overflow-auto overscroll-contain bg-white text-foreground rounded-t-2xl rounded-b-none sm:rounded-card shadow-pop backdrop:bg-[rgb(32_33_36/0.55)]"
         >
-          <div className="p-5 sm:p-7 pb-[max(1.25rem,env(safe-area-inset-bottom))]">
-            <div className="flex items-start justify-between gap-3 mb-1">
-              <h3 id={titleId} className="text-[19px] font-semibold pt-2">
+          <div aria-hidden="true" className="sm:hidden mx-auto mt-2.5 h-1 w-10 rounded-full bg-line-strong" />
+          <div className="px-5 sm:px-7 pt-3 sm:pt-6">
+            <div className="flex items-start justify-between gap-3">
+              <h3
+                id={titleId}
+                className="min-w-0 pt-1.5 font-display text-title sm:text-[20px] font-semibold leading-snug break-words"
+              >
                 Request a quote from {vendorName}
               </h3>
               <button
                 type="button"
                 onClick={closeDialog}
                 aria-label="Close"
-                className="shrink-0 -mr-2 -mt-1 w-11 h-11 flex items-center justify-center rounded-md text-xl text-ink-soft hover:bg-gray-100 focus-visible:outline-2 focus-visible:outline-accent"
+                className="shrink-0 -mr-2.5 w-11 h-11 flex items-center justify-center rounded-full text-ink-soft hover:bg-surface-muted hover:text-foreground focus-visible:outline-2 focus-visible:outline-accent"
               >
-                &times;
+                <svg
+                  aria-hidden="true"
+                  viewBox="0 0 16 16"
+                  className="w-4 h-4"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="1.8"
+                  strokeLinecap="round"
+                >
+                  <path d="M4 4l8 8M12 4l-8 8" />
+                </svg>
               </button>
             </div>
 
             {success ? (
-              <div className="mt-3 space-y-4">
-                <div role="status" className="text-sm text-accent bg-accent-tint rounded-md px-3.5 py-3">
-                  Quote request sent to {vendorName}.
+              <div className="mt-4 space-y-5 pb-[max(1.5rem,env(safe-area-inset-bottom))] sm:pb-7">
+                <div role="status" className="alert-success flex items-start gap-2.5 py-3">
+                  <svg aria-hidden="true" viewBox="0 0 20 20" className="w-5 h-5 shrink-0" fill="currentColor">
+                    <path
+                      fillRule="evenodd"
+                      d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.7-9.3a1 1 0 00-1.4-1.4L9 10.6 7.7 9.3a1 1 0 00-1.4 1.4l2 2a1 1 0 001.4 0l4-4z"
+                      clipRule="evenodd"
+                    />
+                  </svg>
+                  <span>Quote request sent to {vendorName}.</span>
                 </div>
-                <div className="text-[13px] text-ink-soft leading-relaxed">
-                  <p className="font-medium text-foreground mb-1">What happens next</p>
-                  <ul className="list-disc pl-5 space-y-1">
+                <div className="text-sm text-ink-soft leading-relaxed">
+                  <p className="font-semibold text-foreground mb-1.5">What happens next</p>
+                  <ul className="list-disc pl-5 space-y-1.5 marker:text-line-strong">
                     <li>The vendor will contact you on the phone number you gave.</li>
                     {loggedIn ? (
                       <li>
@@ -158,71 +197,64 @@ export default function QuoteButton({
                     ) : null}
                   </ul>
                 </div>
-                <button
-                  type="button"
-                  onClick={closeDialog}
-                  className="min-h-11 px-4 py-2 rounded-md bg-accent hover:bg-accent-hover text-white text-sm"
-                >
+                <button type="button" onClick={closeDialog} className="btn btn-primary btn-block sm:w-auto sm:px-8">
                   Done
                 </button>
               </div>
             ) : (
-              <form onSubmit={handleSubmit} className="space-y-3.5 mt-3">
-                {error && (
-                  <div role="alert" className="text-sm text-red-700 bg-red-50 border border-red-100 rounded-md px-3 py-2">
-                    {error}
-                  </div>
-                )}
-                <FormField label="Your name" name="name" required defaultValue={defaultName} autoComplete="name" />
-                <FormField label="Phone number" name="phone" type="tel" required autoComplete="tel" />
-                <FormField label="Event date" name="eventDate" type="date" required min={minDate} />
-                <FormField label="Budget (₹)" name="budget" placeholder="e.g. 1,50,000" />
-                {services.length > 0 && (
-                  <fieldset>
-                    <legend className="block text-[13px] text-ink-soft mb-1.5">
-                      Services you&apos;re interested in (optional)
-                    </legend>
-                    <div className="space-y-1.5">
-                      {services.map((s) => (
-                        <label key={s.id} className="flex items-center gap-2 min-h-10 text-sm">
-                          <input
-                            type="checkbox"
-                            name="serviceIds"
-                            value={s.id}
-                            defaultChecked={s.id === preselectServiceId}
-                            className="accent-[var(--color-accent)]"
-                          />
-                          {s.title}
-                        </label>
-                      ))}
+              <form onSubmit={handleSubmit} className="mt-4">
+                <div className="space-y-4">
+                  {error && (
+                    <div role="alert" className="alert-error">
+                      {error}
                     </div>
-                  </fieldset>
-                )}
-                <div>
-                  <label htmlFor={`${uid}-message`} className="block text-[13px] text-ink-soft mb-1.5">
-                    Message
-                  </label>
-                  <textarea
-                    id={`${uid}-message`}
-                    name="message"
-                    rows={3}
-                    placeholder="Tell them about your event..."
-                    className="w-full px-3 py-2.5 border border-line rounded-md text-sm outline-none focus:border-accent"
-                  />
+                  )}
+                  <FormField label="Your name" name="name" required defaultValue={defaultName} autoComplete="name" />
+                  <div className="grid gap-4 sm:grid-cols-2">
+                    <FormField label="Phone number" name="phone" type="tel" required autoComplete="tel" />
+                    <FormField label="Event date" name="eventDate" type="date" required min={minDate} />
+                  </div>
+                  <FormField label="Budget (₹)" name="budget" placeholder="e.g. 1,50,000" inputMode="numeric" />
+                  {services.length > 0 && (
+                    <fieldset>
+                      <legend className="label">Services you&apos;re interested in (optional)</legend>
+                      <div className="flex flex-wrap gap-2">
+                        {services.map((s) => (
+                          <label
+                            key={s.id}
+                            className="inline-flex items-center gap-2.5 min-h-11 px-3.5 rounded-control border border-line-strong text-sm cursor-pointer hover:bg-surface-muted has-[:checked]:border-accent has-[:checked]:bg-accent-tint has-[:focus-visible]:outline-2 has-[:focus-visible]:outline-accent"
+                          >
+                            <input
+                              type="checkbox"
+                              name="serviceIds"
+                              value={s.id}
+                              defaultChecked={s.id === preselectServiceId}
+                              className="w-[18px] h-[18px] accent-[var(--color-accent)]"
+                            />
+                            {s.title}
+                          </label>
+                        ))}
+                      </div>
+                    </fieldset>
+                  )}
+                  <div>
+                    <label htmlFor={`${uid}-message`} className="label">
+                      Message
+                    </label>
+                    <textarea
+                      id={`${uid}-message`}
+                      name="message"
+                      rows={3}
+                      placeholder="Tell them about your event..."
+                      className="field resize-y min-h-[96px]"
+                    />
+                  </div>
                 </div>
-                <div className="flex gap-2.5 mt-2">
-                  <button
-                    type="button"
-                    onClick={closeDialog}
-                    className="min-h-11 px-4 py-2 rounded-md bg-gray-100 hover:bg-gray-200 text-sm"
-                  >
+                <div className="sticky bottom-0 -mx-5 sm:-mx-7 mt-5 px-5 sm:px-7 pt-3 pb-[max(1rem,env(safe-area-inset-bottom))] sm:pb-6 bg-white border-t border-line flex gap-2.5 sm:justify-end">
+                  <button type="button" onClick={closeDialog} className="btn btn-secondary">
                     Cancel
                   </button>
-                  <button
-                    type="submit"
-                    disabled={loading}
-                    className="min-h-11 px-4 py-2 rounded-md bg-accent hover:bg-accent-hover text-white text-sm disabled:opacity-70"
-                  >
+                  <button type="submit" disabled={loading} className="btn btn-primary flex-1 sm:flex-none sm:px-6">
                     {loading ? "Sending…" : "Send request"}
                   </button>
                 </div>
@@ -244,6 +276,7 @@ function FormField({
   defaultValue,
   min,
   autoComplete,
+  inputMode,
 }: {
   label: string;
   name: string;
@@ -253,11 +286,12 @@ function FormField({
   defaultValue?: string;
   min?: string;
   autoComplete?: string;
+  inputMode?: React.HTMLAttributes<HTMLInputElement>["inputMode"];
 }) {
   const id = useId();
   return (
     <div>
-      <label htmlFor={id} className="block text-[13px] text-ink-soft mb-1.5">
+      <label htmlFor={id} className="label">
         {label}
       </label>
       <input
@@ -269,7 +303,8 @@ function FormField({
         defaultValue={defaultValue}
         min={min || undefined}
         autoComplete={autoComplete}
-        className="w-full px-3 py-2.5 border border-line rounded-md text-sm outline-none focus:border-accent"
+        inputMode={inputMode}
+        className="field"
       />
     </div>
   );
