@@ -165,7 +165,7 @@ export default function HomeSearch() {
   const groups: Option["group"][] = ["Categories", "Locations", "Vendors"];
 
   return (
-    <div className="w-full max-w-[584px] flex flex-col items-center">
+    <div className="w-full max-w-[620px] flex flex-col items-center">
       <div className="w-full relative" ref={wrapperRef}>
         <form
           role="search"
@@ -173,8 +173,10 @@ export default function HomeSearch() {
             e.preventDefault();
             search({ q: value });
           }}
-          className={`flex items-center gap-3 border rounded-full px-5 py-1 transition-shadow relative z-10 bg-white ${
-            focused ? "shadow-[0_1px_6px_rgba(32,33,36,0.18)] border-transparent" : "border-line"
+          className={`flex items-center gap-3 border rounded-full pl-5 pr-4 min-h-[52px] sm:min-h-14 transition-[box-shadow,border-color] relative z-10 bg-white ${
+            focused
+              ? "border-accent shadow-[0_0_0_3px_var(--color-accent-tint),0_1px_6px_rgba(32,33,36,0.14)]"
+              : "border-line-strong shadow-[0_1px_2px_rgba(32,33,36,0.06)] hover:shadow-[0_1px_6px_rgba(32,33,36,0.14)]"
           }`}
         >
           <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="text-ink-soft shrink-0" aria-hidden="true">
@@ -204,7 +206,10 @@ export default function HomeSearch() {
               aria-activedescendant={active >= 0 ? options[active].id : undefined}
               autoComplete="off"
               enterKeyHint="search"
-              className="w-full min-h-10 outline-none text-base bg-transparent relative"
+              className="w-full min-h-11 outline-none text-base bg-transparent relative"
+              // The pill shows focus (green border + ring); a second square
+              // outline inside it looked broken.
+              style={{ outline: "none" }}
             />
           </div>
         </form>
@@ -218,14 +223,14 @@ export default function HomeSearch() {
             id={listId}
             role="listbox"
             aria-label="Search suggestions"
-            className="absolute top-full left-0 right-0 mt-1.5 bg-white border border-line rounded-2xl shadow-lg py-2 z-20 max-h-[360px] overflow-auto"
+            className="absolute top-full left-0 right-0 mt-2 bg-white border border-line rounded-card shadow-pop py-2 z-20 max-h-[min(360px,55dvh)] overflow-auto overscroll-contain"
           >
             {groups.map((g) => {
               const items = options.filter((o) => o.group === g);
               if (items.length === 0) return null;
               return (
                 <div key={g} role="group" aria-label={g} className="px-2 py-1">
-                  <div className="text-[11px] uppercase tracking-wide text-ink-soft px-2.5 pt-1.5 pb-1" aria-hidden="true">
+                  <div className="eyebrow px-3 pt-1.5 pb-1" aria-hidden="true">
                     {g}
                   </div>
                   {items.map((o) => (
@@ -235,7 +240,7 @@ export default function HomeSearch() {
               );
             })}
             {loading && (
-              <div className="px-4.5 py-2 text-sm text-ink-soft" aria-hidden="true">
+              <div className="px-5 py-2.5 text-sm text-ink-soft" aria-hidden="true">
                 Searching…
               </div>
             )}
@@ -249,7 +254,7 @@ export default function HomeSearch() {
       <button
         type="button"
         onClick={() => search({ q: value })}
-        className="mt-6.5 px-4.5 py-2.5 rounded-md bg-accent hover:bg-accent-hover text-white text-sm"
+        className="btn btn-primary btn-lg mt-5 sm:mt-6 w-full max-w-[320px] sm:w-auto sm:min-w-[180px]"
       >
         Search vendors
       </button>
@@ -266,7 +271,7 @@ function SuggestionRow({ option, active }: { option: Option; active: boolean }) 
       tabIndex={-1}
       onMouseDown={(e) => e.preventDefault()}
       onClick={option.run}
-      className={`w-full text-left px-2.5 py-2 text-sm rounded-lg cursor-pointer hover:bg-accent-tint hover:text-accent ${
+      className={`w-full text-left block px-3 py-[11px] leading-[22px] text-[15px] sm:text-sm rounded-control cursor-pointer hover:bg-accent-tint hover:text-accent ${
         active ? "bg-accent-tint text-accent" : ""
       }`}
     >

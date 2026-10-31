@@ -47,27 +47,27 @@ export default async function Home() {
 
   return (
     <main className="flex-1 flex flex-col items-center w-full">
-      <section className="w-full flex flex-col items-center justify-start pt-10 pb-10 sm:justify-center sm:py-14 px-5">
-        <div className="font-display text-5xl sm:text-[72px] font-semibold text-accent leading-none mb-2" aria-hidden="true">
+      <section className="w-full flex flex-col items-center justify-start pt-10 pb-8 sm:justify-center sm:pt-16 sm:pb-12 px-4 sm:px-7 bg-[radial-gradient(ellipse_70%_60%_at_50%_0%,var(--color-accent-tint),transparent_70%)]">
+        <div className="font-display text-[56px] sm:text-[80px] font-semibold text-accent leading-none mb-3 tracking-tight" aria-hidden="true">
           Vel<span className="text-gold">a</span>
         </div>
-        <h1 className="text-ink-soft mb-8 text-center text-base sm:text-lg max-w-[520px]">
+        <h1 className="text-ink-soft mb-7 sm:mb-9 text-center text-[17px] sm:text-xl leading-snug max-w-[34ch] sm:max-w-[560px]">
           <span className="sr-only">Vela: </span>
           Find and compare wedding &amp; event vendors across Kerala
         </h1>
 
         <HomeSearch />
 
-        <nav aria-label="Browse by category" className="w-full max-w-[660px] mt-10">
-          <ul className="flex gap-2.5 flex-nowrap overflow-x-auto -mx-5 px-5 pb-1 sm:mx-0 sm:px-0 sm:pb-0 sm:flex-wrap sm:justify-center sm:overflow-visible">
+        <nav aria-label="Browse by category" className="w-full max-w-[720px] mt-9 sm:mt-11">
+          <ul className="flex gap-2 flex-nowrap overflow-x-auto overscroll-x-contain snap-x scroll-px-4 -mx-4 px-4 pb-1 [scrollbar-width:none] [mask-image:linear-gradient(to_right,#000_calc(100%-40px),transparent)] sm:[mask-image:none] sm:mx-0 sm:px-0 sm:pb-0 sm:flex-wrap sm:justify-center sm:overflow-visible">
             {categories.map((c) => (
-              <li key={c.name} className="shrink-0">
+              <li key={c.name} className="shrink-0 snap-start">
                 <Link
                   href={`/search?category=${encodeURIComponent(c.name)}`}
-                  className="inline-flex items-center min-h-10 gap-1.5 border border-line rounded-full px-4 py-2 text-[13px] text-ink-soft hover:bg-accent-tint hover:text-accent hover:border-accent-tint whitespace-nowrap"
+                  className="group inline-flex items-center min-h-11 gap-2 border border-line bg-white rounded-full pl-4 pr-2 text-sm text-foreground transition-colors hover:bg-accent-tint hover:text-accent hover:border-accent/30 whitespace-nowrap"
                 >
                   {c.name}
-                  <span className="text-[11.5px] opacity-75">{c.count}</span>
+                  <span className="min-w-6 h-6 px-1.5 inline-flex items-center justify-center rounded-full bg-surface-muted text-xs text-ink-soft tabular-nums group-hover:bg-white group-hover:text-accent">{c.count}</span>
                 </Link>
               </li>
             ))}
@@ -75,13 +75,13 @@ export default async function Home() {
         </nav>
 
         {districts.length > 0 && (
-          <nav aria-label="Browse by district" className="w-full max-w-[660px] mt-4 text-[13px] text-ink-soft">
-            <ul className="flex gap-x-3 gap-y-1.5 flex-nowrap overflow-x-auto -mx-5 px-5 sm:mx-0 sm:px-0 sm:flex-wrap sm:justify-center sm:overflow-visible">
-              <li className="shrink-0 inline-flex items-center min-h-10">Districts:</li>
+          <nav aria-label="Browse by district" className="w-full max-w-[720px] mt-3 text-sm text-ink-soft">
+            <ul className="flex gap-x-4 flex-nowrap overflow-x-auto overscroll-x-contain -mx-4 px-4 [scrollbar-width:none] [mask-image:linear-gradient(to_right,#000_calc(100%-40px),transparent)] sm:[mask-image:none] sm:mx-0 sm:px-0 sm:flex-wrap sm:justify-center sm:overflow-visible">
+              <li className="shrink-0 inline-flex items-center min-h-11 eyebrow">Districts</li>
               {districts.map(([name, count]) => (
                 <li key={name} className="shrink-0">
-                  <Link href={`/search?location=${encodeURIComponent(name)}`} className="inline-flex items-center min-h-10 hover:text-accent hover:underline whitespace-nowrap">
-                    {name} <span className="opacity-75">({count})</span>
+                  <Link href={`/search?location=${encodeURIComponent(name)}`} className="inline-flex items-center gap-1 min-h-11 text-foreground underline-offset-4 hover:text-accent hover:underline whitespace-nowrap">
+                    {name} <span className="text-ink-soft tabular-nums">({count})</span>
                   </Link>
                 </li>
               ))}
@@ -91,30 +91,31 @@ export default async function Home() {
       </section>
 
       {topRated.length > 0 && (
-        <section aria-labelledby="top-rated" className="w-full max-w-[1180px] px-5 sm:px-6 py-10 border-t border-line">
-          <div className="flex items-baseline justify-between gap-4 mb-5">
-            <h2 id="top-rated" className="text-xl font-semibold">
+        <section aria-labelledby="top-rated" className="page py-10 sm:py-14 border-t border-line">
+          <div className="flex items-center justify-between gap-4 mb-5 sm:mb-6">
+            <h2 id="top-rated" className="text-title sm:text-heading font-semibold">
               Top-rated vendors
             </h2>
-            <Link href="/search" className="inline-flex items-center min-h-10 text-sm text-accent hover:underline whitespace-nowrap">
+            <Link href="/search" className="btn btn-ghost btn-sm -mr-2 whitespace-nowrap">
               See all {vendors.length} vendors
+              <span aria-hidden="true">&rarr;</span>
             </Link>
           </div>
-          <ul className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+          <ul className="grid gap-3 sm:gap-4 sm:grid-cols-2 lg:grid-cols-3">
             {topRated.map((v) => (
               <li key={v.id}>
                 <Link
                   href={`/vendors/${v.id}`}
-                  className="flex gap-3.5 items-center border border-line rounded-xl p-3 hover:border-accent group h-full"
+                  className="card card-link flex gap-4 items-center p-3 sm:p-3.5 group h-full"
                 >
-                  <VendorTile category={v.category} size={28} className="w-16 h-16 rounded-lg" />
+                  <VendorTile category={v.category} size={28} className="w-16 h-16 rounded-control shrink-0" />
                   <div className="min-w-0">
                     <div className="font-semibold truncate group-hover:text-accent">{v.name}</div>
-                    <div className="text-[13px] text-ink-soft truncate">
+                    <div className="text-[13px] text-ink-soft truncate mt-0.5">
                       {v.category} · {v.location}
                     </div>
-                    <div className="text-[13px] mt-0.5">
-                      <span className="text-gold" aria-hidden="true">★</span> {v.rating}{" "}
+                    <div className="text-[13px] mt-1 tabular-nums">
+                      <span className="text-gold" aria-hidden="true">★</span> <span className="font-semibold">{v.rating}</span>{" "}
                       <span className="text-ink-soft">({v.reviews_count} reviews)</span>
                     </div>
                   </div>
@@ -125,38 +126,40 @@ export default async function Home() {
         </section>
       )}
 
-      <section aria-labelledby="how-it-works" className="w-full max-w-[1180px] px-5 sm:px-6 py-10 border-t border-line">
-        <h2 id="how-it-works" className="text-xl font-semibold mb-5">
+      <section aria-labelledby="how-it-works" className="page pt-2 pb-10 sm:pb-14">
+        <h2 id="how-it-works" className="text-title sm:text-heading font-semibold mb-5 sm:mb-6">
           How Vela works
         </h2>
-        <ol className="grid gap-4 sm:grid-cols-3">
+        <ol className="grid gap-3 sm:gap-4 sm:grid-cols-3">
           {[
             ["Search", "Look up vendors by category, district or name across Kerala."],
             ["Compare", "Check ratings, reviews, experience and starting prices side by side."],
             ["Request a quote", "Send your event details to the vendors you like and hear back directly."],
           ].map(([title, body], i) => (
-            <li key={title} className="border border-line rounded-xl p-4">
-              <div className="w-7 h-7 rounded-full bg-accent-tint text-accent text-sm font-semibold flex items-center justify-center mb-2.5">
+            <li key={title} className="rounded-card bg-surface-muted p-5 flex gap-4 sm:flex-col sm:gap-3">
+              <div className="w-9 h-9 shrink-0 rounded-full bg-white border border-line text-accent font-semibold flex items-center justify-center tabular-nums">
                 {i + 1}
               </div>
-              <div className="font-semibold mb-1">{title}</div>
-              <p className="text-sm text-ink-soft">{body}</p>
+              <div>
+                <div className="font-semibold text-title mb-1">{title}</div>
+                <p className="text-sm text-ink-soft max-w-[40ch]">{body}</p>
+              </div>
             </li>
           ))}
         </ol>
       </section>
 
-      <section aria-labelledby="free-for-families" className="w-full max-w-[1180px] px-5 sm:px-6 pb-14">
-        <div className="bg-accent-tint rounded-xl p-5 sm:p-6 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+      <section aria-labelledby="free-for-families" className="page pb-12 sm:pb-16">
+        <div className="bg-accent-tint rounded-card p-5 sm:px-8 sm:py-7 flex flex-col sm:flex-row sm:items-center justify-between gap-4 sm:gap-8">
           <div>
-            <h2 id="free-for-families" className="text-lg font-semibold text-accent">
+            <h2 id="free-for-families" className="text-title font-semibold text-accent">
               Free for families
             </h2>
             <p className="text-sm text-ink-soft mt-1">
               Searching, comparing and requesting quotes costs you nothing.
             </p>
           </div>
-          <Link href="/for-vendors" className="inline-flex items-center min-h-10 text-sm text-accent hover:underline whitespace-nowrap">
+          <Link href="/for-vendors" className="btn btn-secondary w-full sm:w-auto whitespace-nowrap">
             Are you a vendor? List your business
           </Link>
         </div>
