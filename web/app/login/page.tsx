@@ -20,6 +20,7 @@ export default async function LoginPage({
   const session = await getSession();
   if (session) redirect(next);
 
-  const email = typeof params.email === "string" ? params.email.slice(0, 254) : "";
+  const email =
+    typeof params.email === "string" ? params.email.slice(0, 254) : "";
   return <LoginForm next={next} initialEmail={email} />;
 }

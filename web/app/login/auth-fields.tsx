@@ -6,8 +6,8 @@ import { useId, useState } from "react";
 // stable id from useId() so the <label> is linked to its input, and a name
 // attribute so password managers can pair email and password correctly.
 
-export const inputClass =
-  "w-full px-3 py-2.5 border border-line rounded-md text-base sm:text-sm outline-none focus:border-accent focus-visible:ring-2 focus-visible:ring-accent/40";
+// Shared .field look from globals.css, a touch taller on desktop for auth.
+export const inputClass = "field sm:min-h-11";
 
 export function Field({
   label,
@@ -35,7 +35,7 @@ export function Field({
   const isEmail = type === "email";
   return (
     <div>
-      <label htmlFor={id} className="block text-[13px] text-ink-soft mb-1.5">
+      <label htmlFor={id} className="label">
         {label}
       </label>
       <input
@@ -53,7 +53,7 @@ export function Field({
         className={inputClass}
       />
       {hint && (
-        <p id={hintId} className="text-xs text-ink-soft mt-1">
+        <p id={hintId} className="hint">
           {hint}
         </p>
       )}
@@ -79,7 +79,7 @@ export function PasswordField({
   const [show, setShow] = useState(false);
   return (
     <div>
-      <label htmlFor={id} className="block text-[13px] text-ink-soft mb-1.5">
+      <label htmlFor={id} className="label">
         Password
       </label>
       <div className="relative">
@@ -93,7 +93,7 @@ export function PasswordField({
           minLength={minLength}
           autoComplete={autoComplete}
           aria-describedby={hint ? hintId : undefined}
-          className={`${inputClass} pr-16`}
+          className={`${inputClass} pr-[4.5rem]`}
         />
         <button
           type="button"
@@ -101,13 +101,13 @@ export function PasswordField({
           aria-pressed={show}
           aria-label="Show password"
           aria-controls={id}
-          className="absolute right-0 top-0 h-full min-h-11 px-3 text-xs text-ink-soft hover:text-foreground rounded-r-md outline-none focus-visible:ring-2 focus-visible:ring-accent/40"
+          className="absolute right-1 top-1/2 -translate-y-1/2 min-h-11 sm:min-h-9 min-w-14 px-3 text-[13px] font-medium text-accent hover:bg-accent-tint rounded-control transition-colors"
         >
           {show ? "Hide" : "Show"}
         </button>
       </div>
       {hint && (
-        <p id={hintId} className="text-xs text-ink-soft mt-1">
+        <p id={hintId} className="hint">
           {hint}
         </p>
       )}
