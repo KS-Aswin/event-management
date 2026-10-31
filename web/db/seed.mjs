@@ -1,17 +1,54 @@
-// Seeds sample vendors, reviews and services (Kerala) using the same vendors
-// as /demo, so both versions of the app show consistent data.
+// Seeds sample vendors (Kerala) with offerings, packages, add-ons, service
+// areas, reviews and media. The first 9 vendors are the same as /demo, so both
+// versions of the app show consistent data; 3 more complete the P0-16
+// archetypes (event company, chenda troupe, rental). Data: db/seed-data.mjs.
+//
+// Media: placeholder photos are drawn by db/fixtures/make-media.mjs (our own
+// gradients and text, license-free, each < 60 KB, committed under
+// db/fixtures/media) and imported through the storage adapter
+// (lib/storage, STORAGE_DRIVER, default local -> web/uploads/), with the same
+// thumb/card/full WebP variants as a real upload (lib/media/image.ts).
+//
 // DESTRUCTIVE: it deletes ALL vendors, quote requests, reviews, services,
-// portfolio items and favourites, then re-inserts the 9 sample vendors (vendor
-// ids restart at 1). To protect real data it refuses to run when the database
-// holds anything the seed did not create (owned or extra vendors, quote
-// requests, user-written reviews, favourites), unless the database name ends
-// in "_test" or you pass --force (or set SEED_CONFIRM=1).
+// media and favourites, then re-inserts the sample vendors (vendor ids restart
+// at 1). Users are kept. To protect real data it refuses to run when the
+// database holds anything the seed did not create (owned or extra vendors,
+// quote requests, user-written reviews, favourites), unless the database name
+// ends in "_test" or you pass --force (or set SEED_CONFIRM=1).
 // Requires migrations first: npm run db:migrate
 //
 // Run with: npm run db:seed            (reads DATABASE_URL from .env.local)
 //           npm run db:seed -- --force (wipe even if non-seed data exists)
 
+import { registerHooks } from "node:module";
+import { createHash, randomUUID } from "node:crypto";
+import { existsSync, readFileSync } from "node:fs";
+import path from "node:path";
+import { fileURLToPath, pathToFileURL } from "node:url";
 import pg from "pg";
+import { vendors, reviewsByVendor, mediaPlan, fixtureSpecs } from "./seed-data.mjs";
+import { ensureFixtures, FIXTURE_DIR } from "./fixtures/make-media.mjs";
+
+const WEB = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
+
+// Load the app's TypeScript helpers (Node >= 22.18 strips types). Maps "@/..."
+// and extensionless relative imports inside .ts files to the .ts source.
+registerHooks({
+  resolve(specifier, context, next) {
+    let base = null;
+    if (specifier.startsWith("@/")) base = path.join(WEB, specifier.slice(2));
+    else if ((specifier.startsWith("./") || specifier.startsWith("../")) && context.parentURL?.endsWith(".ts")) {
+      base = path.resolve(path.dirname(fileURLToPath(context.parentURL)), specifier);
+    }
+    if (base && !path.extname(base)) {
+      for (const cand of [`${base}.ts`, path.join(base, "index.ts")]) {
+        if (existsSync(cand)) return next(pathToFileURL(cand).href, context);
+      }
+    }
+    return next(specifier, context);
+  },
+});
+const tsImport = (rel) => import(pathToFileURL(path.join(WEB, rel)).href);
 
 const connectionString = process.env.DATABASE_URL;
 if (!connectionString) {
@@ -19,210 +56,11 @@ if (!connectionString) {
   process.exit(1);
 }
 
-const vendors = [
-  { name: "Backwater Grand Palace", category: "Venue", location: "Kochi", price: 300000, priceLabel: "₹3,00,000 onwards", rating: 4.8, reviewsCount: 142, experience: "12 yrs", tags: ["Banquet Hall", "AC", "1000+ capacity"], about: "A full-service banquet hall on the Kochi backwaters, hosting weddings and receptions for up to 1,200 guests with in-house catering and decor partners." },
-  { name: "Studio Frames by Arun", category: "Photography", location: "Kochi", price: 45000, priceLabel: "₹45,000 onwards", rating: 4.9, reviewsCount: 98, experience: "8 yrs", tags: ["Candid", "Drone", "Cinematic"], about: "Candid wedding photography and cinematic films, with drone coverage and same-week previews. Shot 300+ Kerala weddings since 2018." },
-  { name: "Malabar Spice Caterers", category: "Catering", location: "Kozhikode", price: 600, priceLabel: "₹600 per plate", rating: 4.7, reviewsCount: 210, experience: "15 yrs", tags: ["Sadya", "North Indian", "Live Counters"], about: "Traditional Kerala sadya and multi-cuisine catering for weddings and functions, with live counters and custom menu planning." },
-  { name: "Petal & Palm Decor", category: "Decoration", location: "Thrissur", price: 80000, priceLabel: "₹80,000 onwards", rating: 4.6, reviewsCount: 76, experience: "6 yrs", tags: ["Floral", "Stage", "LED Wall"], about: "Floral and stage decor studio specialising in themed mandaps, LED backdrops, and entrance arches." },
-  { name: "DJ Rhythm Kerala", category: "DJ & Music", location: "Ernakulam", price: 25000, priceLabel: "₹25,000 onwards", rating: 4.5, reviewsCount: 54, experience: "5 yrs", tags: ["Live Band", "Sound System", "Lighting"], about: "DJ and live band services for weddings and sangeet nights, with full sound and stage lighting setup." },
-  { name: "Glow Bridal Studio", category: "Makeup", location: "Kottayam", price: 15000, priceLabel: "₹15,000 onwards", rating: 4.9, reviewsCount: 189, experience: "10 yrs", tags: ["Bridal", "HD Makeup", "Hairstyling"], about: "Bridal makeup and hairstyling artists trained in HD and airbrush techniques, with trial sessions included." },
-  { name: "Henna Dreams", category: "Mehendi", location: "Kozhikode", price: 8000, priceLabel: "₹8,000 onwards", rating: 4.7, reviewsCount: 63, experience: "7 yrs", tags: ["Bridal Mehendi", "Arabic", "Traditional"], about: "Bridal and guest mehendi artists offering Arabic, traditional Kerala, and Indo-Arabic designs." },
-  { name: "Grand Vista Convention Centre", category: "Venue", location: "Thiruvananthapuram", price: 250000, priceLabel: "₹2,50,000 onwards", rating: 4.4, reviewsCount: 88, experience: "9 yrs", tags: ["Indoor", "Outdoor Lawn", "Valet"], about: "Indoor and outdoor lawn venue with valet parking, suited for weddings, receptions and corporate events." },
-  { name: "Momentz Cinematics", category: "Photography", location: "Thrissur", price: 55000, priceLabel: "₹55,000 onwards", rating: 4.8, reviewsCount: 120, experience: "9 yrs", tags: ["Cinematic", "Same Day Edit"], about: "Cinematic wedding films with same-day edits and drone coverage, working across Kerala and South India." },
-];
-
-// Per-vendor profile fields and services (see migration 002).
-const vendorExtras = {
-  "Backwater Grand Palace": {
-    "district": "Ernakulam",
-    "vendorType": "company",
-    "services": [
-      {
-        "category": "Venue",
-        "title": "Banquet hall (up to 1,200 guests)",
-        "description": "Full hall with AC, stage and parking.",
-        "priceFrom": 300000,
-        "priceUnit": "event"
-      },
-      {
-        "category": "Decoration",
-        "title": "Stage and entrance decoration",
-        "description": "In-house decor partners for the hall.",
-        "priceFrom": 80000,
-        "priceUnit": "event"
-      },
-      {
-        "category": "Catering",
-        "title": "In-house catering",
-        "description": "Veg and non-veg menus, sadya on request.",
-        "priceFrom": 600,
-        "priceUnit": "plate"
-      }
-    ]
-  },
-  "Studio Frames by Arun": {
-    "district": "Ernakulam",
-    "vendorType": "individual",
-    "services": [
-      {
-        "category": "Photography",
-        "title": "Wedding photography",
-        "description": "Candid photography for the full wedding day.",
-        "priceFrom": 45000,
-        "priceUnit": "event"
-      },
-      {
-        "category": "Videography",
-        "title": "Cinematic wedding film",
-        "description": "Highlight film with drone shots.",
-        "priceFrom": 35000,
-        "priceUnit": "event"
-      }
-    ]
-  },
-  "Malabar Spice Caterers": {
-    "district": "Kozhikode",
-    "vendorType": "company",
-    "services": [
-      {
-        "category": "Catering",
-        "title": "Traditional sadya",
-        "description": "Banana-leaf sadya with live counters.",
-        "priceFrom": 600,
-        "priceUnit": "plate"
-      },
-      {
-        "category": "Catering",
-        "title": "North Indian and multi-cuisine buffet",
-        "description": "Custom menu planning included.",
-        "priceFrom": 750,
-        "priceUnit": "plate"
-      }
-    ]
-  },
-  "Petal & Palm Decor": {
-    "district": "Thrissur",
-    "vendorType": "company",
-    "services": [
-      {
-        "category": "Decoration",
-        "title": "Floral mandap",
-        "description": "Themed floral mandap and entrance arch.",
-        "priceFrom": 80000,
-        "priceUnit": "event"
-      },
-      {
-        "category": "Decoration",
-        "title": "Stage with LED backdrop",
-        "description": "Stage design with LED wall.",
-        "priceFrom": 60000,
-        "priceUnit": "event"
-      }
-    ]
-  },
-  "DJ Rhythm Kerala": {
-    "district": "Ernakulam",
-    "vendorType": "company",
-    "services": [
-      {
-        "category": "DJ & Music",
-        "title": "DJ and sound system",
-        "description": "Full sound system with lighting.",
-        "priceFrom": 25000,
-        "priceUnit": "event"
-      },
-      {
-        "category": "DJ & Music",
-        "title": "Live band",
-        "description": "Live band for sangeet and receptions.",
-        "priceFrom": 60000,
-        "priceUnit": "event"
-      }
-    ]
-  },
-  "Glow Bridal Studio": {
-    "district": "Kottayam",
-    "vendorType": "individual",
-    "services": [
-      {
-        "category": "Makeup",
-        "title": "Bridal makeup and hairstyling",
-        "description": "HD and airbrush, trial session included.",
-        "priceFrom": 15000,
-        "priceUnit": "event"
-      }
-    ]
-  },
-  "Henna Dreams": {
-    "district": "Kozhikode",
-    "vendorType": "individual",
-    "services": [
-      {
-        "category": "Mehendi",
-        "title": "Bridal mehendi",
-        "description": "Arabic, traditional Kerala and Indo-Arabic designs.",
-        "priceFrom": 8000,
-        "priceUnit": "event"
-      },
-      {
-        "category": "Mehendi",
-        "title": "Guest mehendi",
-        "description": "Per-person designs for guests.",
-        "priceFrom": 300,
-        "priceUnit": "person"
-      }
-    ]
-  },
-  "Grand Vista Convention Centre": {
-    "district": "Thiruvananthapuram",
-    "vendorType": "company",
-    "services": [
-      {
-        "category": "Venue",
-        "title": "Indoor hall and outdoor lawn",
-        "description": "Indoor and outdoor venue with valet parking.",
-        "priceFrom": 250000,
-        "priceUnit": "event"
-      }
-    ]
-  },
-  "Momentz Cinematics": {
-    "district": "Thrissur",
-    "vendorType": "company",
-    "services": [
-      {
-        "category": "Photography",
-        "title": "Wedding photography",
-        "description": "Candid and traditional photography.",
-        "priceFrom": 55000,
-        "priceUnit": "event"
-      },
-      {
-        "category": "Videography",
-        "title": "Cinematic wedding film with same-day edit",
-        "description": "Same-day edit shown at the reception.",
-        "priceFrom": 65000,
-        "priceUnit": "event"
-      }
-    ]
-  }
-};
-
-const reviewsByVendorIndex = {
-  0: [{ name: "Anjali R.", rating: 5, body: "Beautiful venue, staff coordinated everything smoothly on the day." }, { name: "Vishnu K.", rating: 5, body: "Spacious hall, parking was never an issue even with 800 guests." }],
-  1: [{ name: "Meera S.", rating: 5, body: "Arun captured moments we didn't even know were happening. Loved the drone shots." }, { name: "Rahul P.", rating: 4, body: "Great photos, delivery took a little longer than promised." }],
-  2: [{ name: "Devika N.", rating: 5, body: "The sadya was authentic and the live counters were a huge hit with guests." }],
-  3: [{ name: "Sona T.", rating: 4, body: "Loved the floral mandap design, exactly what we asked for." }],
-  4: [{ name: "Arjun M.", rating: 5, body: "Great song selection, kept the dance floor full all night." }],
-  5: [{ name: "Nithya V.", rating: 5, body: "The trial session helped a lot, bridal look was perfect." }],
-  6: [{ name: "Fathima A.", rating: 5, body: "Intricate designs, finished quickly even with 20 guests waiting." }],
-  7: [{ name: "Kiran J.", rating: 4, body: "Nice outdoor lawn option, would have liked more shaded seating." }],
-  8: [{ name: "Anu B.", rating: 5, body: "The same-day edit at the reception made everyone emotional." }],
-};
-
 const force = process.argv.includes("--force") || process.env.SEED_CONFIRM === "1";
-
 const client = new pg.Client({ connectionString });
+
+// Sample contact numbers (not real), one per vendor.
+const phoneFor = (i) => `+9198950${String(10001 + i).padStart(5, "0")}`;
 
 try {
   await client.connect();
@@ -249,40 +87,196 @@ try {
     }
   }
 
+  const { getStorage, currentStorageDriver } = await tsImport("lib/storage/index.ts");
+  const { processImage } = await tsImport("lib/media/image.ts");
+  const { formatVendorPriceLabel } = await tsImport("lib/offering-validation.ts");
+  const storage = getStorage();
+  const driver = currentStorageDriver();
+
+  await ensureFixtures(fixtureSpecs());
+
+  // Lookups
+  const cats = new Map((await client.query("SELECT id, name FROM categories")).rows.map((r) => [r.name, r.id]));
+  const districts = new Map((await client.query("SELECT id, name FROM districts WHERE state = 'Kerala'")).rows.map((r) => [r.name, r.id]));
+  const templates = new Map(
+    (await client.query("SELECT id, code, category_id, kind, default_price_unit, allowed_price_units FROM offering_templates")).rows
+      .map((r) => [`${r.category_id}:${r.code}`, r])
+  );
+  const need = (map, key, what) => {
+    const v = map.get(key);
+    if (v === undefined) throw new Error(`Unknown ${what}: ${key}`);
+    return v;
+  };
+
+  const oldIds = (await client.query("SELECT id FROM vendors")).rows.map((r) => r.id);
+
   await client.query("BEGIN");
 
   // Wipe and re-insert rather than trying to upsert-match by name.
   await client.query("DELETE FROM vendor_reviews");
   await client.query("DELETE FROM quote_requests");
-  await client.query("DELETE FROM vendors"); // services and portfolio cascade
+  await client.query("DELETE FROM favorites");
+  await client.query("DELETE FROM vendors"); // services, media, albums, areas cascade
   await client.query("ALTER SEQUENCE vendors_id_seq RESTART WITH 1");
+
+  // Old files of the wiped vendors (ids restart, so clear before writing new ones).
+  for (const id of new Set([...oldIds, ...vendors.map((_, i) => i + 1)])) {
+    await storage.deletePrefix(`vendors/${id}`);
+  }
+
+  let offeringCount = 0;
+  let mediaCount = 0;
 
   for (let i = 0; i < vendors.length; i++) {
     const v = vendors[i];
-    const extra = vendorExtras[v.name];
-    const result = await client.query(
-      `INSERT INTO vendors (name, category, location, price, price_label, rating, reviews_count, experience, tags, about, vendor_type, district_id, status)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,
-               (SELECT id FROM districts WHERE state = 'Kerala' AND name = $12),
-               'approved')
+    const primaryId = need(cats, v.category, "category");
+    const districtId = need(districts, v.district, "district");
+    const phone = phoneFor(i);
+    const { rows: [{ id: vendorId }] } = await client.query(
+      `INSERT INTO vendors (name, category, location, price, price_label, rating, reviews_count, experience, tags, about,
+                            vendor_type, district_id, status, phone, whatsapp, primary_category_id, legal_name,
+                            years_experience, team_size, languages, max_guests, max_events_per_day, fssai_no,
+                            travel_outside_kerala, onboarding_step, onboarding_completed_at, submitted_at, reviewed_at)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,'approved',$13,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,6,
+               now(), now(), now())
        RETURNING id`,
-      [v.name, v.category, v.location, v.price, v.priceLabel, v.rating, v.reviewsCount, v.experience, v.tags, v.about, extra.vendorType, extra.district]
+      [
+        v.name, v.category, v.location, v.price ?? 0, v.priceLabel ?? "Price on request", v.rating, v.reviewsCount, v.experience,
+        v.tags, v.about, v.vendorType, districtId, phone, primaryId, v.legalName ?? null, v.years, v.team ?? null,
+        v.languages ?? ["Malayalam", "English"], v.maxGuests ?? null, v.perDay ?? 1, v.fssai ?? null, !!v.travelOutside,
+      ]
     );
-    const vendorId = result.rows[0].id;
-    for (let j = 0; j < extra.services.length; j++) {
-      const sv = extra.services[j];
+
+    // Categories: primary + extras, plus any category an offering uses.
+    const catIds = new Set([primaryId, ...(v.extraCategories ?? []).map((c) => need(cats, c, "category"))]);
+    for (const o of v.offerings) catIds.add(need(cats, o.category, "category"));
+    for (const c of catIds) {
+      await client.query("INSERT INTO vendor_categories (vendor_id, category_id) VALUES ($1,$2) ON CONFLICT DO NOTHING", [vendorId, c]);
+    }
+
+    for (const [d, fee, note] of v.areas) {
       await client.query(
-        `INSERT INTO services (vendor_id, category_id, title, description, price_from, price_unit, sort_order)
-         VALUES ($1, (SELECT id FROM categories WHERE name = $2), $3, $4, $5, $6, $7)`,
-        [vendorId, sv.category, sv.title, sv.description, sv.priceFrom, sv.priceUnit, j]
+        "INSERT INTO vendor_service_areas (vendor_id, district_id, travel_fee, travel_note) VALUES ($1,$2,$3,$4)",
+        [vendorId, need(districts, d, "district"), fee, note]
       );
     }
-    const reviews = reviewsByVendorIndex[i] ?? [];
-    for (const r of reviews) {
-      await client.query(
-        `INSERT INTO vendor_reviews (vendor_id, reviewer_name, rating, body) VALUES ($1,$2,$3,$4)`,
-        [vendorId, r.name, r.rating, r.body]
+
+    // Offerings (units, then their add-ons), then packages built from them.
+    const byKey = new Map();
+    let sort = 0;
+    const insertService = async (o, kind, parentId) => {
+      const categoryId = need(cats, o.category, "category");
+      const t = o.template && !o.asUnit ? need(templates, `${categoryId}:${o.template}`, `template (${o.category})`) : null;
+      const unit = t && !t.allowed_price_units.includes(o.unit) ? t.default_price_unit : o.unit;
+      const { rows: [s] } = await client.query(
+        `INSERT INTO services (vendor_id, category_id, title, description, price_from, price_unit, sort_order, template_id,
+                               custom_name, kind, sale_mode, fulfilment, parent_service_id, price_mode, unit_label, min_qty, inclusions)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17) RETURNING id`,
+        [
+          vendorId, categoryId, o.title, o.description, o.price, unit, sort++, t?.id ?? null,
+          t || o.asUnit ? null : o.title, kind, kind === "package" ? "separate" : o.saleMode ?? "separate",
+          o.fulfilment ?? "in_house", parentId, o.mode ?? "from", o.unitLabel ?? null, o.minQty ?? null, o.inclusions ?? [],
+        ]
       );
+      offeringCount++;
+      return s.id;
+    };
+    for (const o of v.offerings) {
+      const id = await insertService(o, "unit", null);
+      if (o.key) byKey.set(o.key, id);
+      for (const a of o.addons ?? []) await insertService(a, "addon", id);
+    }
+    for (const p of v.packages ?? []) {
+      const pkgId = await insertService({ ...p, category: v.category, unit: "package", template: null, asUnit: true }, "package", null);
+      for (const [n, [key, qty]] of p.items.entries()) {
+        await client.query("INSERT INTO package_items (package_id, item_id, qty, sort_order) VALUES ($1,$2,$3,$4)", [
+          pkgId, need(byKey, key, "package item"), qty, n,
+        ]);
+      }
+    }
+
+    // Vendors outside /demo get their displayed price from the offerings, like a real listing.
+    if (v.price === undefined) {
+      const { rows: [best] } = await client.query(
+        `SELECT price_from, price_unit, unit_label FROM services
+          WHERE vendor_id = $1 AND kind IN ('unit','package') AND sale_mode = 'separate' AND price_from > 0
+          ORDER BY price_from, id LIMIT 1`,
+        [vendorId]
+      );
+      await client.query("UPDATE vendors SET price = $2, price_label = $3 WHERE id = $1", [
+        vendorId, best?.price_from ?? 0, formatVendorPriceLabel(best ?? null),
+      ]);
+    }
+
+    // Media: one album for the archetypes, then logo, cover and gallery.
+    let albumId = null;
+    if (v.album) {
+      const { rows: [a] } = await client.query(
+        "INSERT INTO media_albums (vendor_id, title, description, consent_confirmed_at) VALUES ($1,$2,$3,now()) RETURNING id",
+        [vendorId, v.album.title, v.album.caption]
+      );
+      albumId = a.id;
+    }
+    const roles = {};
+    let gallerySort = 0;
+    for (const m of mediaPlan(v)) {
+      const buf = readFileSync(path.join(FIXTURE_DIR, m.file));
+      const uuid = randomUUID();
+      const baseKey = `vendors/${vendorId}/${uuid}`;
+      const processed = await processImage(buf, m.purpose);
+      const variants = {};
+      if (processed.fallback) {
+        const key = `${baseKey}/full.jpg`;
+        await storage.put(key, buf, { contentType: "image/jpeg" });
+        variants.full = { key };
+      } else {
+        for (const pv of processed.variants) {
+          const key = `${baseKey}/${pv.name}.webp`;
+          await storage.put(key, pv.body, { contentType: "image/webp", cacheControl: "public, max-age=31536000, immutable" });
+          variants[pv.name] = { key, w: pv.width, h: pv.height };
+        }
+      }
+      const gallery = m.purpose === "gallery";
+      // The first two gallery photos of an archetype go in its album.
+      const inAlbum = gallery && albumId && gallerySort < 2;
+      const { rows: [row] } = await client.query(
+        `INSERT INTO media_assets (uuid, vendor_id, album_id, purpose, kind, storage_driver, storage_key, variants, mime, bytes,
+                                   width, height, sha256, placeholder_color, caption, alt_text, status, is_featured, sort_order)
+         VALUES ($1,$2,$3,$4,'image',$5,$6,$7,'image/jpeg',$8,$9,$10,$11,$12,$13,$14,'approved',$15,$16) RETURNING id`,
+        [
+          uuid, vendorId, inAlbum ? albumId : null, m.purpose, driver, baseKey, JSON.stringify(variants), buf.byteLength,
+          processed.width || null, processed.height || null, createHash("sha256").update(buf).digest("hex"),
+          processed.placeholderColor, m.caption, m.alt, gallery && gallerySort === 0, gallery ? gallerySort : 0,
+        ]
+      );
+      if (gallery) gallerySort++;
+      else roles[m.purpose] = row.id;
+      mediaCount++;
+    }
+    if (albumId) {
+      await client.query(
+        "UPDATE media_albums SET cover_media_id = (SELECT id FROM media_assets WHERE album_id = $1 ORDER BY sort_order LIMIT 1) WHERE id = $1",
+        [albumId]
+      );
+    }
+    if (v.videoLink) {
+      const id = v.videoLink.match(/v=([A-Za-z0-9_-]{6,})/)?.[1] ?? null;
+      await client.query(
+        `INSERT INTO media_assets (vendor_id, purpose, kind, storage_driver, external_url, external_provider, external_id,
+                                   caption, alt_text, status, sort_order)
+         VALUES ($1,'gallery','video_link','url',$2,'youtube',$3,'Wedding highlights film','Wedding highlights film','approved',$4)`,
+        [vendorId, v.videoLink, id, gallerySort++]
+      );
+      mediaCount++;
+    }
+    await client.query("UPDATE vendors SET logo_media_id = $2, cover_media_id = $3 WHERE id = $1", [
+      vendorId, roles.logo ?? null, roles.cover ?? null,
+    ]);
+
+    for (const r of reviewsByVendor[v.name] ?? []) {
+      await client.query("INSERT INTO vendor_reviews (vendor_id, reviewer_name, rating, body) VALUES ($1,$2,$3,$4)", [
+        vendorId, r.name, r.rating, r.body,
+      ]);
     }
   }
 
@@ -300,11 +294,13 @@ try {
   );
 
   await client.query("COMMIT");
-  console.log(`✓ Seeded ${vendors.length} vendors with reviews and services.`);
+  console.log(
+    `✓ Seeded ${vendors.length} vendors with ${offeringCount} offerings/packages/add-ons, ${mediaCount} media items (${driver} storage) and reviews.`
+  );
 } catch (err) {
-  await client.query("ROLLBACK");
+  await client.query("ROLLBACK").catch(() => {});
   console.error("✗ Seed failed:", err.message);
   process.exit(1);
 } finally {
-  await client.end();
+  await client.end().catch(() => {});
 }

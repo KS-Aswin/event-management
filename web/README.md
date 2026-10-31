@@ -107,7 +107,7 @@ npm run start            # serves the build on http://localhost:3000 (add -- -p 
 
 ## Database schema
 
-See `db/migrations/`. Tables: `users`, `vendors`, `vendor_reviews`, `quote_requests`, `favorites`, `districts`, `categories`, `services`, `portfolio_items`, `quote_request_services`, `review_reports`, `quote_status_events` (plus `schema_migrations`, written by the migration runner). Run `npm run db:seed` after migrating to populate sample vendors (the same 9 used in the `/demo` mockup, so both stay consistent).
+See `db/migrations/`. Tables: `users`, `vendors`, `vendor_reviews`, `quote_requests`, `favorites`, `districts`, `categories`, `services`, `portfolio_items`, `quote_request_services`, `review_reports`, `quote_status_events` (plus `schema_migrations`, written by the migration runner). Run `npm run db:seed` after migrating to populate 12 sample vendors: the 9 used in the `/demo` mockup (so both stay consistent) plus an event company, a chenda troupe and a rental firm. Data lives in `db/seed-data.mjs`. Each vendor gets taxonomy offerings (package-only units, packages, add-ons), service areas, reviews and a logo, cover and gallery photos. The photos are generated placeholders in `db/fixtures/media` (license-free, each under 60 KB; redraw them with `node db/fixtures/make-media.mjs --force`), imported through the storage adapter into `uploads/` with the same WebP variants as real uploads.
 
 **`db:seed` is destructive:** it deletes all vendors, reviews, quotes and favourites and re-inserts the samples. It refuses to run when the database holds non-seed data (extra or owned listings, quotes, real reviews, favourites) unless the database name ends in `_test` or you pass `npm run db:seed -- --force` (or set `SEED_CONFIRM=1`). Never point it at a database you care about.
 
@@ -118,7 +118,7 @@ There's a real automated test suite now: `web/tests/api.test.mjs` — about 120 
 To run it:
 ```bash
 npm run db:migrate   # if you haven't already
-npm run db:seed      # ensures the 9 sample vendors exist
+npm run db:seed      # ensures the 12 sample vendors exist
 npm run dev           # in one terminal, leave running
 npm run test:api      # in another terminal
 ```

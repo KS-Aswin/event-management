@@ -976,6 +976,8 @@ Every item ends with **acceptance criteria (AC)** that can be checked by API tes
 
 ### P0: Vendor workspace
 
+> **Status (2026-10-31, local commits on `ui-fixes-aswin`):** P0-1 to P0-16 built. Wave 1 (f13472f): migration 004, taxonomy, storage and media API, role guards, vendor nav. Wave 2: onboarding wizard (P0-10), offerings and packages (P0-11), vendor home (P0-12), profile and service areas (P0-13), leads inbox at `/vendor/leads` (P0-14), public gallery/lightbox/offerings and search-card covers (P0-15), seed archetypes with generated media in `db/fixtures/media` plus API and e2e tests (P0-16). Open follow-ups: cover/logo crop, multi-thumbnail search cards, "Report photo", offering-detail media, search by offering/district, `media:cleanup`, switching the remaining `CATEGORIES` users to `getTaxonomy()`, the plan's 6 lead tabs (DB has 4 statuses), and a "Small team" business type.
+
 **P0-1 Migration 004 and seeds.** Write `004_vendor_workspace.sql` per section 5, with seeds for 19 categories, offering templates (all of 3.4), 15 event types and their bundles.
 AC:
 - Migration applies on a fresh DB and on the current dev DB.

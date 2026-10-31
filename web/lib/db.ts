@@ -2081,10 +2081,16 @@ export async function removeOffering(
       await client.query("UPDATE services SET active = false, updated_at = now() WHERE id = $1", [offeringId]);
       mode = "deactivated";
     } else {
-      await client.query("UPDATE services SET incomplete = true WHERE id IN (SELECT package_id FROM package_items WHERE item_id = $1)", [
+      // The package_items rows cascade away (and the trigger recomputes
+      // `incomplete` from the remaining items), so mark the packages after
+      // the delete: a package that lost an item must be reviewed by the vendor.
+      const pk = await client.query<{ package_id: number }>("SELECT package_id FROM package_items WHERE item_id = $1", [
         offeringId,
       ]);
       await client.query("DELETE FROM services WHERE id = $1", [offeringId]);
+      if (pk.rowCount) {
+        await client.query("UPDATE services SET incomplete = true WHERE id = ANY($1::int[])", [pk.rows.map((x) => x.package_id)]);
+      }
       mode = "deleted";
     }
     await recomputeVendorPrice(vendorId, client);

@@ -9,10 +9,10 @@
     "lint": "eslint",
     "typecheck": "tsc --noEmit",
     "db:migrate": "node --env-file-if-exists=.env.local db/migrate.mjs",
-    "db:seed": "node --env-file-if-exists=.env.local db/seed.mjs",
+    "db:seed": "node --env-file-if-exists=.env.local --disable-warning=MODULE_TYPELESS_PACKAGE_JSON db/seed.mjs",
     "test:api": "node --env-file-if-exists=.env.local tests/api.test.mjs",
     "test:e2e": "playwright test",
-    "test:unit": "node --test tests/offering-validation.test.mjs",
+    "test:unit": "node --test tests/offering-validation.test.mjs tests/profile-validation.test.mjs",
     "test:storage": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON tests/storage.test.mjs"
   },
   "dependencies": {

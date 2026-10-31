@@ -21,6 +21,11 @@
 // Both BASE_URL and DATABASE_URL must point at localhost.
 
 import pg from "pg";
+import { readFileSync, rmSync } from "node:fs";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
+
+const WEB_DIR = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 
 const BASE_URL = process.env.BASE_URL ?? "http://localhost:3000";
 const RUN_ID = Date.now();
@@ -41,7 +46,7 @@ if (!isLocalHost(BASE_URL)) {
 
 // Users this suite creates: <prefix>-<digits>@example.com
 const TEST_EMAIL_REGEX =
-  "^(test-customer|test-vendor|other-vendor|weak|badrole|nobody|ratelimit)-[0-9]+@example[.]com$";
+  "^(test-customer|test-vendor|other-vendor|weak|badrole|nobody|ratelimit|wiz-vendor|wiz-other)-[0-9]+@example[.]com$";
 
 async function cleanupTestData(label) {
   if (!DATABASE_URL || !isLocalHost(DATABASE_URL)) {
@@ -54,8 +59,11 @@ async function cleanupTestData(label) {
     await client.query("BEGIN");
     const users = await client.query("SELECT id FROM users WHERE email ~ $1", [TEST_EMAIL_REGEX]);
     const ids = users.rows.map((r) => r.id);
-    // Owned listings first (their services, reviews and quotes cascade), then users.
-    const v = await client.query("DELETE FROM vendors WHERE owner_id = ANY($1::int[])", [ids]);
+    // Owned listings first (their services, reviews, media rows and quotes
+    // cascade), then users. Uploaded files live under uploads/vendors/<id>.
+    const v = await client.query("DELETE FROM vendors WHERE owner_id = ANY($1::int[]) RETURNING id", [ids]);
+    const uploadsRoot = path.resolve(process.env.UPLOADS_DIR || path.join(WEB_DIR, "uploads"));
+    for (const row of v.rows) rmSync(path.join(uploadsRoot, "vendors", String(row.id)), { recursive: true, force: true });
     const q = await client.query(
       "DELETE FROM quote_requests WHERE message LIKE 'Automated test run %' OR customer_id = ANY($1::int[])",
       [ids]
@@ -753,6 +761,8 @@ async function main() {
   const adminAsVendor = await request("/admin", { cookie: vendorCookie });
   check("role guard: /admin is 404 for a vendor", adminAsVendor.status, 404);
 
+  await p0VendorWorkspace({ customerCookie, vendorCookie, legacyLeadId: quoteWithServices.data?.quote?.id ?? quoteWithServices.data?.id });
+
   await cleanupTestData("post-run");
 
   // ---------- Summary ----------
@@ -762,6 +772,247 @@ async function main() {
     process.exit(1);
   }
   process.exit(0);
+}
+
+// ---------- P0 vendor workspace (PRODUCT_PLAN section 8, P0-16) ----------
+// Role guards, onboarding save/resume/submit, uploads (type, size, duplicate,
+// ownership), video links, offerings ("Other" + contact masking), package-only
+// enquiries, unit-only enquiries and own-leads-only.
+
+/** Raw-body request (uploads): no JSON content type, body sent as-is. */
+async function rawRequest(url, { method = "PUT", body, cookie, contentType = "application/octet-stream" } = {}) {
+  const res = await fetch(new URL(url, BASE_URL), {
+    method,
+    headers: { "Content-Type": contentType, "X-Forwarded-For": TEST_IP, ...(cookie ? { Cookie: cookie } : {}) },
+    body,
+    redirect: "manual",
+  });
+  const text = await res.text();
+  let data = null;
+  try {
+    data = JSON.parse(text);
+  } catch {
+    // not JSON
+  }
+  return { status: res.status, data };
+}
+
+const fixture = (name) => readFileSync(path.join(WEB_DIR, "db", "fixtures", "media", name));
+
+/** Reserve -> PUT bytes -> complete. Returns the last response. */
+async function uploadImage(cookie, buf, { contentType = "image/jpeg", purpose = "gallery", albumId } = {}) {
+  const r = await request("/api/vendor/media/uploads", {
+    method: "POST",
+    cookie,
+    body: { kind: "image", purpose, contentType, bytes: buf.byteLength, ...(albumId ? { albumId } : {}) },
+  });
+  if (r.status !== 201) return r;
+  const put = await rawRequest(r.data.uploadUrl, { body: buf, cookie, contentType });
+  if (put.status !== 200) return put;
+  return request(`/api/vendor/media/uploads/${r.data.assetId}/complete`, { method: "POST", cookie, body: {} });
+}
+
+async function p0VendorWorkspace({ vendorCookie, legacyLeadId }) {
+  const reg = async (prefix, role, name) =>
+    (await request("/api/auth/register", {
+      method: "POST",
+      body: { name, email: `${prefix}-${RUN_ID}@example.com`, password: "password123", role },
+    })).cookie;
+  const wiz = await reg("wiz-vendor", "vendor", "Wizard Vendor");
+  const other = await reg("wiz-other", "vendor", "Other Wizard Vendor");
+  const customer = (await request("/api/auth/register", {
+    method: "POST",
+    body: { name: "P0 Customer", email: `test-customer-${RUN_ID + 1}@example.com`, password: "password123", role: "customer" },
+  })).cookie;
+  checkTrue("p0 setup: test accounts registered", !!(wiz && other && customer));
+
+  // Role guards: customers and anonymous callers never reach /api/vendor/*.
+  for (const p of ["/api/vendor/listing", "/api/vendor/offerings", "/api/vendor/media", "/api/vendor/leads", "/api/vendor/home", "/api/vendor/profile"]) {
+    check(`role guard: customer on ${p} is 403`, (await request(p, { cookie: customer })).status, 403);
+  }
+  check("role guard: anonymous /api/vendor/listing is 401", (await request("/api/vendor/listing")).status, 401);
+  check("role guard: customer upload reserve is 403",
+    (await request("/api/vendor/media/uploads", { method: "POST", cookie: customer, body: { kind: "image", contentType: "image/jpeg", bytes: 100 } })).status, 403);
+
+  // ---- Onboarding: draft at step 1, save each step, resume, submit minimum ----
+  const tax = (await request("/api/meta/taxonomy")).data;
+  checkTrue("taxonomy: categories and templates load", Array.isArray(tax?.categories) && Array.isArray(tax?.templates));
+  const cat = (slug) => tax.categories.find((c) => c.slug === slug);
+  const tpl = (code) => tax.templates.find((t) => t.code === code);
+  const em = cat("event-management");
+  const ernakulam = tax.districts.find((d) => d.name === "Ernakulam") ?? tax.districts[0];
+
+  check("onboarding: no listing yet", (await request("/api/vendor/listing", { cookie: wiz })).data?.listing, null);
+  check("onboarding: media before a listing is 409 NO_LISTING",
+    (await request("/api/vendor/media", { cookie: wiz })).data?.code, "NO_LISTING");
+  let r = await request("/api/vendor/listing", {
+    method: "POST",
+    cookie: wiz,
+    body: { name: `Wizard Events ${RUN_ID}`, vendorType: "company", primaryCategoryId: em.id, districtId: ernakulam.id, phone: "98470 12345" },
+  });
+  check("onboarding: step 1 creates a draft (201)", [r.status, r.data?.listing?.status], [201, "draft"]);
+  check("onboarding: phone stored as E.164", r.data?.listing?.phone, "+919847012345");
+  r = await request("/api/vendor/listing", {
+    method: "PATCH",
+    cookie: wiz,
+    body: {
+      about: "Wedding planners in Kochi. We run decor, photography and the day itself for families across Kerala.",
+      languages: ["Malayalam", "English"], yearsExperience: 7, onboardingStep: 3,
+      serviceAreas: [{ districtId: ernakulam.id, travelFee: null, travelNote: "" }],
+    },
+  });
+  check("onboarding: a step saves (200) and moves the step forward", [r.status, r.data?.listing?.onboardingStep], [200, 3]);
+  r = await request("/api/vendor/listing", { method: "PATCH", cookie: wiz, body: { onboardingStep: 2 } });
+  check("onboarding: the saved step never goes back", r.data?.listing?.onboardingStep, 3);
+  r = await request("/api/vendor/listing", { cookie: wiz });
+  check("onboarding: resume returns the saved step and fields", [r.data?.listing?.onboardingStep, r.data?.listing?.yearsExperience], [3, 7]);
+  check("onboarding: bad GSTIN rejected with its field",
+    (await request("/api/vendor/listing", { method: "PATCH", cookie: wiz, body: { gstin: "123" } })).data?.field, "gstin");
+
+  r = await request("/api/vendor/listing/submit", { method: "POST", cookie: wiz });
+  check("submit: blocked without offerings and photos (400 INCOMPLETE)",
+    [r.status, r.data?.code, r.data?.missing?.includes("images"), r.data?.missing?.includes("offering")], [400, "INCOMPLETE", true, true]);
+
+  // ---- Offerings: units, "Other" with contact masking, package-only ----
+  r = await request("/api/vendor/offerings", {
+    method: "POST",
+    cookie: wiz,
+    body: { templateId: tpl("day-of-coordination").id, priceMode: "from", priceFrom: 25000, priceUnit: "event", saleMode: "separate" },
+  });
+  check("offerings: unit from the taxonomy created (201)", r.status, 201);
+  const dayOfId = r.data?.offering?.id;
+  r = await request("/api/vendor/offerings", {
+    method: "POST",
+    cookie: wiz,
+    body: { templateId: tpl("theme-design").id, priceMode: "from", priceFrom: 40000, priceUnit: "event", saleMode: "package_only" },
+  });
+  check("offerings: package-only unit created", [r.status, r.data?.offering?.sale_mode], [201, "package_only"]);
+  const themeId = r.data?.offering?.id;
+  r = await request("/api/vendor/offerings", {
+    method: "POST",
+    cookie: wiz,
+    body: { categoryId: cat("traditional-music").id, customName: "Kolkali team call 98470 12345", priceMode: "fixed", priceFrom: 15000, priceUnit: "event" },
+  });
+  check("offerings: 'Other' creates the unit and a custom request", [r.status, typeof r.data?.customRequestId], [201, "number"]);
+  check("offerings: phone number in a custom name is flagged", r.data?.flaggedContact, true);
+  checkTrue("offerings: phone number in a custom name is masked", !/98470/.test(r.data?.offering?.title ?? "98470"));
+  r = await request("/api/vendor/packages", {
+    method: "POST",
+    cookie: wiz,
+    body: { title: "Signature package", priceMode: "fixed", priceFrom: 60000, items: [{ serviceId: dayOfId, qty: 1 }, { serviceId: themeId, qty: 1 }] },
+  });
+  check("packages: built from own units (201)", [r.status, r.data?.items?.length], [201, 2]);
+
+  // ---- Uploads: type, size, duplicate, ownership; logo/cover; video links ----
+  const photos = ["kerala-celebrations-co-1.jpg", "kerala-celebrations-co-2.jpg", "kerala-celebrations-co-3.jpg"].map(fixture);
+  r = await uploadImage(wiz, photos[0]);
+  check("upload: a JPEG goes through reserve, PUT and complete (201)", r.status, 201);
+  const firstAsset = r.data?.asset;
+  checkTrue("upload: thumb, card and full variants are served from /media",
+    ["thumb", "card", "full"].every((k) => typeof firstAsset?.urls?.[k] === "string" && firstAsset.urls[k].startsWith("/media/")));
+  check("upload: a draft vendor's photo waits for review", firstAsset?.status, "pending_review");
+  if (firstAsset?.urls?.thumb) {
+    const media = await fetch(new URL(firstAsset.urls.thumb, BASE_URL));
+    check("upload: /media serves the variant as WebP", [media.status, media.headers.get("content-type")], [200, "image/webp"]);
+  }
+  r = await uploadImage(wiz, photos[0]);
+  check("upload: the same file twice is a duplicate, not a second row", [r.status, r.data?.duplicate, r.data?.asset?.id], [200, true, firstAsset?.id]);
+  const pdf = Buffer.concat([Buffer.from("%PDF-1.4\n"), Buffer.alloc(4000, 32)]);
+  check("upload: a PDF named as JPEG is refused by magic bytes (415)", (await uploadImage(wiz, pdf)).status, 415);
+  check("upload: a declared GIF type is refused (415)",
+    (await request("/api/vendor/media/uploads", { method: "POST", cookie: wiz, body: { kind: "image", contentType: "image/gif", bytes: 1000 } })).status, 415);
+  check("upload: over 15 MB declared is refused (413)",
+    (await request("/api/vendor/media/uploads", { method: "POST", cookie: wiz, body: { kind: "image", contentType: "image/jpeg", bytes: 16 * 1024 * 1024 } })).status, 413);
+  const small = await request("/api/vendor/media/uploads", { method: "POST", cookie: wiz, body: { kind: "image", contentType: "image/jpeg", bytes: 1000 } });
+  check("upload: a body bigger than the cap is refused (413)",
+    (await rawRequest(small.data?.uploadUrl ?? "/api/vendor/media/uploads/0/file", { body: Buffer.alloc(16 * 1024 * 1024 + 1, 1), cookie: wiz })).status, 413);
+  for (const buf of photos.slice(1)) await uploadImage(wiz, buf);
+  const cover = await uploadImage(wiz, fixture("kerala-celebrations-co-cover.jpg"), { purpose: "cover" });
+  check("upload: cover photo (201)", cover.status, 201);
+  r = await request("/api/vendor/media/cover", { method: "PUT", cookie: wiz, body: { mediaId: cover.data?.asset?.id } });
+  check("media: set as cover", [r.status, r.data?.mediaId], [200, cover.data?.asset?.id]);
+
+  r = await request("/api/vendor/media/links", { method: "POST", cookie: wiz, body: { url: "https://youtu.be/aqz-KE-bpKQ" } });
+  check("video link: YouTube link parsed (201)", [r.status, r.data?.asset?.provider ?? r.data?.asset?.externalProvider, r.data?.asset?.externalId], [201, "youtube", "aqz-KE-bpKQ"]);
+  check("video link: other sites refused (400)",
+    (await request("/api/vendor/media/links", { method: "POST", cookie: wiz, body: { url: "https://example.com/video.mp4" } })).status, 400);
+
+  // Ownership: another vendor can't see, edit or delete these assets.
+  await request("/api/vendor/listing", {
+    method: "POST",
+    cookie: other,
+    body: { name: `Other Wizard ${RUN_ID}`, vendorType: "individual", primaryCategoryId: cat("photography").id, districtId: ernakulam.id, phone: "+919847000001" },
+  });
+  check("ownership: other vendor GET of this asset is 404", (await request(`/api/vendor/media/${firstAsset?.id}`, { cookie: other })).status, 404);
+  check("ownership: other vendor PATCH of this asset is 404",
+    (await request(`/api/vendor/media/${firstAsset?.id}`, { method: "PATCH", cookie: other, body: { caption: "mine" } })).status, 404);
+  check("ownership: other vendor DELETE of this asset is 404", (await request(`/api/vendor/media/${firstAsset?.id}`, { method: "DELETE", cookie: other })).status, 404);
+  check("ownership: other vendor can't PUT bytes into this upload (404)",
+    (await rawRequest(`/api/vendor/media/uploads/${firstAsset?.id}/file`, { body: photos[1], cookie: other })).status, 404);
+  check("ownership: other vendor can't set it as their cover (404)",
+    (await request("/api/vendor/media/cover", { method: "PUT", cookie: other, body: { mediaId: firstAsset?.id } })).status, 404);
+  check("ownership: other vendor's offering is 404", (await request(`/api/vendor/offerings/${dayOfId}`, { cookie: other })).status, 404);
+
+  // Submit now that the minimum is there: pending, not public.
+  r = await request("/api/vendor/listing/submit", { method: "POST", cookie: wiz });
+  check("submit: with a priced unit, cover and 3 photos -> pending", [r.status, r.data?.listing?.status], [200, "pending"]);
+  const wizId = r.data?.listing?.id;
+  check("submit: a pending listing is not public (404)", (await request(`/api/vendors/${wizId}`)).status, 404);
+  check("submit: submitting twice is 409", (await request("/api/vendor/listing/submit", { method: "POST", cookie: wiz })).status, 409);
+
+  // ---- Enquiries on a seeded event company (db/seed.mjs) ----
+  const seeded = await dbQuery(
+    `SELECT s.id, s.title, s.sale_mode, s.kind FROM services s JOIN vendors v ON v.id = s.vendor_id
+      WHERE v.name = 'Kerala Celebrations Co.' AND v.owner_id IS NULL ORDER BY s.id`
+  );
+  if (seeded?.length) {
+    const vendorId = (await dbQuery("SELECT id FROM vendors WHERE name = 'Kerala Celebrations Co.'"))[0].id;
+    const pkgOnly = seeded.find((s) => s.sale_mode === "package_only" && s.kind === "unit");
+    const separate = seeded.find((s) => s.sale_mode === "separate" && s.kind === "unit");
+    const quote = (body) => request(`/api/vendors/${vendorId}/quotes`, {
+      method: "POST",
+      body: { name: "P0 Customer", phone: "9999955555", message: `Automated test run ${RUN_ID}`, ...body },
+    });
+    r = await quote({ serviceIds: [pkgOnly.id] });
+    check("enquiry: a package-only unit alone is 400 PACKAGE_ONLY", [r.status, r.data?.code], [400, "PACKAGE_ONLY"]);
+    r = await quote({ units: [{ serviceId: separate.id, qty: 2 }] });
+    check("enquiry: a separately bookable unit alone is accepted (201)", r.status, 201);
+    const rows = await dbQuery(
+      "SELECT service_id, qty::float AS qty FROM quote_request_services WHERE quote_request_id = $1",
+      [r.data?.quote?.id ?? r.data?.id ?? -1]
+    );
+    check("enquiry: the lead stores only that unit with its quantity", rows?.map((x) => [x.service_id, x.qty]), [[separate.id, 2]]);
+  } else {
+    check("enquiry: seeded event company present (run npm run db:seed)", false, true);
+  }
+
+  // ---- Leads: a vendor only ever sees their own ----
+  if (legacyLeadId) {
+    r = await request("/api/vendor/leads", { cookie: vendorCookie });
+    const own = r.data?.leads?.find((l) => l.id === legacyLeadId);
+    checkTrue("leads: owner sees the lead with its requested units", !!own && Array.isArray(own.units) && own.units.length >= 1);
+    r = await request("/api/vendor/leads", { cookie: other });
+    checkTrue("leads: another vendor's list doesn't include it", Array.isArray(r.data?.leads) && !r.data.leads.some((l) => l.id === legacyLeadId));
+    check("leads: another vendor opening it is 403", (await request(`/api/vendor/leads/${legacyLeadId}`, { cookie: other })).status, 403);
+    check("leads: another vendor changing its status is 403",
+      (await request(`/api/vendor/leads/${legacyLeadId}`, { method: "PATCH", cookie: other, body: { status: "booked" } })).status, 403);
+    check("leads: a customer can't list vendor leads (403)", (await request("/api/vendor/leads", { cookie: customer })).status, 403);
+  }
+
+  // ---- Pages: vendor workspace renders for its vendor, guards for others ----
+  for (const p of ["/vendor", "/vendor/onboarding", "/vendor/offerings", "/vendor/media", "/vendor/leads", "/vendor/profile", "/vendor/areas", "/vendor/reviews", "/vendor/settings"]) {
+    check(`page: ${p} renders for its vendor (200)`, (await request(p, { cookie: wiz })).status, 200);
+  }
+  r = await request("/vendor/media", { cookie: customer });
+  checkTrue("page: customer on /vendor/media is redirected away", [307, 308].includes(r.status) && !isVendorPath(r.headers.location));
+  r = await request("/vendor/media");
+  checkTrue("page: signed-out /vendor/media goes to login with next",
+    [307, 308].includes(r.status) && (r.headers.location ?? "").includes("/login") && (r.headers.location ?? "").includes("next=%2Fvendor%2Fmedia"));
+
+  // Delete by the owner removes the asset.
+  r = await request(`/api/vendor/media/${firstAsset?.id}`, { method: "DELETE", cookie: wiz });
+  check("media: owner can delete (200)", r.status, 200);
+  check("media: deleted asset is gone (404)", (await request(`/api/vendor/media/${firstAsset?.id}`, { cookie: wiz })).status, 404);
 }
 
 main().catch((err) => {

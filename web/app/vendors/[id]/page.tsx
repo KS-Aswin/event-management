@@ -3,19 +3,15 @@ import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import Link from "next/link";
 import Image from "next/image";
-import {
-  findVendorById,
-  findReviewsByVendor,
-  findServicesByVendor,
-  findPortfolioByVendor,
-  isFavorited,
-  type VendorRecord,
-} from "@/lib/db";
+import { findVendorById, findReviewsByVendor, isFavorited, type VendorRecord } from "@/lib/db";
 import { getSession, type SessionPayload } from "@/lib/session";
 import { VendorTile } from "@/lib/vendorVisuals";
 import FavoriteButton from "@/lib/favorite-button";
 import QuoteButton from "./quote-button";
 import ReviewForm from "./review-form";
+import Gallery from "./gallery";
+import OfferingsSection from "./offerings";
+import { loadProfileMedia, loadProfileOfferings } from "./profile-data";
 
 const MAX_INT4 = 2147483647;
 
@@ -24,10 +20,6 @@ function parseId(raw: string): number | null {
   if (!/^[1-9]\d{0,9}$/.test(raw)) return null;
   const n = Number(raw);
   return n <= MAX_INT4 ? n : null;
-}
-
-function formatPrice(n: number) {
-  return "₹" + Math.round(Number(n)).toLocaleString("en-IN");
 }
 
 function formatDate(d: string) {
@@ -91,20 +83,24 @@ export default async function VendorProfilePage({
   if (!vendor) notFound();
   const vendorId = vendor.id;
 
-  const [reviews, services, portfolio, session] = await Promise.all([
-    findReviewsByVendor(vendorId),
-    findServicesByVendor(vendorId),
-    findPortfolioByVendor(vendorId),
-    getSession(),
-  ]);
+  const session = await getSession();
   if (!canView(vendor, session)) notFound();
+
+  const isOwnListing = session ? vendor.owner_id === session.userId : false;
+  // Owner (and admin) preview also sees media still under review, badged.
+  const preview = isOwnListing || session?.role === "admin";
+  const [reviews, media, offerings] = await Promise.all([
+    findReviewsByVendor(vendorId),
+    loadProfileMedia(vendor, preview),
+    loadProfileOfferings(vendorId),
+  ]);
 
   const publicListing = isPublic(vendor);
   const myReview = session ? reviews.find((r) => r.customer_id === session.userId) : undefined;
-  const isOwnListing = session ? vendor.owner_id === session.userId : false;
   const favorited = session && !isOwnListing ? await isFavorited(session.userId, vendorId) : false;
-  const images = portfolio.filter((p) => p.media_type === "image");
-  const quoteServices = services.map((s) => ({ id: s.id, title: s.title }));
+  const quoteServices = offerings.quoteable;
+  const hasMedia = media.photos.length > 0 || media.videos.length > 0;
+  const languages = (vendor.languages ?? []).filter(Boolean);
   const loginHref = `/login?next=${encodeURIComponent(`/vendors/${vendorId}`)}`;
   const ratingNum = Number(vendor.rating);
 
@@ -127,7 +123,7 @@ export default async function VendorProfilePage({
         "@type": "LocalBusiness",
         name: vendor.name,
         description: vendor.about || undefined,
-        image: vendor.cover_image_url || vendor.logo_url || undefined,
+        image: media.coverUrl || media.logoUrl || undefined,
         priceRange: vendor.price_label || undefined,
         address: {
           "@type": "PostalAddress",
@@ -156,7 +152,7 @@ export default async function VendorProfilePage({
       .join("");
 
   const ownerBadge = (
-    <span className="chip">{publicListing ? "Preview of your listing" : `Preview · ${vendor.status}`}</span>
+    <span className="chip">{publicListing ? "Preview of your listing" : "Preview, not public yet"}</span>
   );
 
   // Heart in a bordered square so it reads as a second action beside the CTA.
@@ -187,10 +183,29 @@ export default async function VendorProfilePage({
         />
       ) : null}
 
-      <div className="relative h-[168px] sm:h-[240px] flex items-center justify-center overflow-hidden">
-        {vendor.cover_image_url ? (
+      {isOwnListing ? (
+        <div className="bg-gold-ink text-white text-[13px]">
+          <div className="page py-2 flex items-center justify-between gap-x-3 gap-y-1 flex-wrap">
+            <span>
+              {publicListing
+                ? "This is how customers see your profile."
+                : "Preview, not public yet. Only you can see this page."}
+              {media.hasPending ? " Items marked \u201cUnder review\u201d stay hidden from customers until approved." : ""}
+            </span>
+            <Link href="/vendor/media" className="font-medium underline underline-offset-2 min-h-11 sm:min-h-0 inline-flex items-center">
+              Manage photos
+            </Link>
+          </div>
+        </div>
+      ) : null}
+
+      <div
+        className="relative h-[168px] sm:h-[240px] flex items-center justify-center overflow-hidden"
+        style={media.coverColor ? { backgroundColor: media.coverColor } : undefined}
+      >
+        {media.coverUrl ? (
           <Image
-            src={vendor.cover_image_url}
+            src={media.coverUrl}
             alt=""
             fill
             priority
@@ -211,9 +226,9 @@ export default async function VendorProfilePage({
       <div className="page relative z-10 -mt-12 sm:-mt-[72px] mb-8 sm:mb-16 lg:grid lg:grid-cols-[minmax(0,1fr)_320px] lg:gap-8 lg:items-start">
         <div className="card p-5 sm:p-8 shadow-pop">
           <div className="flex items-start gap-4 min-w-0">
-            {vendor.logo_url ? (
+            {media.logoUrl ? (
               <Image
-                src={vendor.logo_url}
+                src={media.logoUrl}
                 alt={`${vendor.name} logo`}
                 width={64}
                 height={64}
@@ -227,8 +242,20 @@ export default async function VendorProfilePage({
                 {vendor.name}
               </h1>
               <p className="text-ink-soft text-body mt-1.5">
-                {vendor.category} · {vendor.location} · {vendor.experience} experience
+                {vendor.category} · {vendor.location}
+                {vendor.years_experience
+                  ? ` · ${vendor.years_experience}+ years`
+                  : vendor.experience
+                    ? ` · ${vendor.experience} experience`
+                    : ""}
               </p>
+              {vendor.verified_at || vendor.founding_vendor || languages.length ? (
+                <ul className="flex flex-wrap gap-1.5 mt-2.5" aria-label="Highlights">
+                  {vendor.verified_at ? <li className="chip bg-accent-tint text-accent-hover">Verified business</li> : null}
+                  {vendor.founding_vendor ? <li className="chip">Founding vendor</li> : null}
+                  {languages.length ? <li className="chip">Speaks {languages.join(", ")}</li> : null}
+                </ul>
+              ) : null}
               <div className="flex items-center gap-x-4 gap-y-1.5 mt-3 flex-wrap">
                 {ratingRow}
                 {vendor.price_label ? (
@@ -252,7 +279,7 @@ export default async function VendorProfilePage({
 
           <div className="lg:hidden mt-5 flex items-center gap-3">
             {isOwnListing ? (
-              <Link href="/dashboard/edit-listing" className="btn btn-primary flex-1 sm:flex-none">
+              <Link href="/vendor/profile" className="btn btn-primary flex-1 sm:flex-none">
                 Edit listing
               </Link>
             ) : (
@@ -263,30 +290,29 @@ export default async function VendorProfilePage({
             )}
           </div>
 
-          {images.length > 0 && (
+          {hasMedia ? (
             <section aria-labelledby="gallery-heading" className="mt-7">
               <h2 id="gallery-heading" className="sr-only">
-                Portfolio
+                Photos and videos
               </h2>
-              <ul className="grid grid-cols-2 sm:grid-cols-3 gap-2">
-                {images.map((p) => (
-                  <li
-                    key={p.id}
-                    className="relative aspect-[4/3] rounded-control overflow-hidden bg-surface-muted"
-                  >
-                    <Image
-                      src={p.media_url}
-                      alt={p.caption || `${vendor.name} portfolio photo`}
-                      fill
-                      unoptimized
-                      sizes="(min-width: 640px) 33vw, 50vw"
-                      className="object-cover"
-                    />
-                  </li>
-                ))}
-              </ul>
+              <Gallery photos={media.photos} videos={media.videos} albums={media.albums} vendorName={vendor.name} />
             </section>
-          )}
+          ) : isOwnListing ? (
+            <section aria-labelledby="gallery-heading" className="mt-7">
+              <h2 id="gallery-heading" className="sr-only">
+                Photos and videos
+              </h2>
+              <div className="rounded-card border border-dashed border-line-strong bg-surface-muted px-5 py-8 text-center">
+                <p className="font-semibold">No photos yet</p>
+                <p className="text-sm text-ink-soft mt-1 max-w-[44ch] mx-auto">
+                  Profiles with 6 or more photos get far more enquiries. Customers will see your work here.
+                </p>
+                <Link href="/vendor/media" className="btn btn-primary btn-sm mt-4">
+                  Add photos
+                </Link>
+              </div>
+            </section>
+          ) : null}
 
           <section aria-labelledby="about-heading" className="mt-7 pt-7 border-t border-line">
             <h2 id="about-heading" className="font-display text-title font-semibold mb-2.5">
@@ -297,44 +323,17 @@ export default async function VendorProfilePage({
 
           <section aria-labelledby="services-heading" className="mt-7 pt-7 border-t border-line">
             <h2 id="services-heading" className="font-display text-title font-semibold mb-3.5">
-              Services &amp; pricing
+              Offerings &amp; pricing
             </h2>
-            <ul className="border border-line rounded-card divide-y divide-line overflow-hidden">
-              {services.length > 0 ? (
-                services.map((s) => (
-                  <li key={s.id} className="p-4 sm:p-5">
-                    <div className="flex items-start justify-between gap-4">
-                      <div className="min-w-0">
-                        <h3 className="text-[15px] font-semibold">{s.title}</h3>
-                        <div className="text-caption text-ink-soft mt-0.5">{s.category}</div>
-                      </div>
-                      <div className="shrink-0 text-right">
-                        <div className="text-accent font-semibold text-[15px]">{formatPrice(s.price_from)}</div>
-                        <div className="text-caption text-ink-soft">onwards / {s.price_unit}</div>
-                      </div>
-                    </div>
-                    {s.description ? (
-                      <p className="text-sm text-ink-soft mt-2 leading-relaxed max-w-[68ch]">{s.description}</p>
-                    ) : null}
-                    {!isOwnListing ? (
-                      <div className="mt-2 -mb-1.5">
-                        <QuoteButton
-                          {...quoteProps}
-                          preselectServiceId={s.id}
-                          variant="link"
-                          label="Request quote"
-                        />
-                      </div>
-                    ) : null}
-                  </li>
-                ))
-              ) : (
-                <li className="flex items-start justify-between gap-4 p-4 sm:p-5">
-                  <span className="text-sm text-ink-soft">Starting from</span>
-                  <span className="text-accent font-semibold text-sm text-right">{vendor.price_label}</span>
-                </li>
-              )}
-            </ul>
+            <OfferingsSection
+              data={offerings}
+              fallbackPrice={vendor.price_label}
+              quote={
+                isOwnListing
+                  ? undefined
+                  : (sid) => <QuoteButton {...quoteProps} preselectServiceId={sid} variant="link" label="Request quote" />
+              }
+            />
           </section>
 
           <section aria-labelledby="reviews-heading" className="mt-7 pt-7 border-t border-line">
@@ -445,7 +444,7 @@ export default async function VendorProfilePage({
             {isOwnListing ? (
               <div className="space-y-3">
                 {ownerBadge}
-                <Link href="/dashboard/edit-listing" className="btn btn-primary btn-lg btn-block">
+                <Link href="/vendor/profile" className="btn btn-primary btn-lg btn-block">
                   Edit listing
                 </Link>
               </div>
@@ -466,7 +465,7 @@ export default async function VendorProfilePage({
             <div className="text-accent font-semibold text-[15px] truncate">{vendor.price_label}</div>
           </div>
           {isOwnListing ? (
-            <Link href="/dashboard/edit-listing" className="btn btn-primary shrink-0 px-6">
+            <Link href="/vendor/profile" className="btn btn-primary shrink-0 px-6">
               Edit listing
             </Link>
           ) : (
