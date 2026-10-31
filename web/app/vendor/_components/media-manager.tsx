@@ -58,7 +58,10 @@ const STATUS_PILL: Record<string, { label: string; cls: string } | undefined> = 
 };
 
 function statusText(a: ClientAsset): string | null {
-  if (a.status === "hidden") return a.statusReason === "plan_limit" ? "Hidden: over plan limit" : "Hidden from your profile";
+  if (a.status === "hidden") {
+    if (a.statusReason?.startsWith("admin:")) return `Hidden by Vela: ${a.statusReason.slice(6).trim()}`;
+    return a.statusReason === "plan_limit" ? "Hidden: over plan limit" : "Hidden from your profile";
+  }
   if (a.status === "rejected") return `Rejected${a.statusReason ? `: ${a.statusReason}` : ""}`;
   if (a.status === "pending_review") return "Under review: customers see it once approved";
   return null;

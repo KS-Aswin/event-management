@@ -101,6 +101,104 @@ function VideoCard({ item, vendorName }: { item: GalleryItem; vendorName: string
   );
 }
 
+const REPORT_REASONS = ["Not this vendor's work", "Inappropriate or offensive", "Copyright or privacy problem", "Spam or misleading"];
+
+/** "Report photo" form inside the lightbox (POST /api/media/[id]/report). */
+function ReportPhoto({ mediaId, onDone }: { mediaId: number; onDone: () => void }) {
+  const [reason, setReason] = useState(REPORT_REASONS[0]);
+  const [details, setDetails] = useState("");
+  const [state, setState] = useState<"idle" | "sending" | "sent" | "signin" | "error">("idle");
+  const [error, setError] = useState<string | null>(null);
+
+  async function submit(e: React.FormEvent) {
+    e.preventDefault();
+    setState("sending");
+    setError(null);
+    const text = details.trim() ? `${reason}: ${details.trim()}` : reason;
+    try {
+      const res = await fetch(`/api/media/${mediaId}/report`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ reason: text.slice(0, 500) }),
+      });
+      if (res.status === 401) return setState("signin");
+      if (res.ok || res.status === 409) return setState("sent");
+      const data = (await res.json().catch(() => null)) as { error?: string } | null;
+      setError(data?.error ?? "Could not send the report. Please try again.");
+      setState("error");
+    } catch {
+      setError("Network error. Please try again.");
+      setState("error");
+    }
+  }
+
+  const next = typeof window !== "undefined" ? window.location.pathname : "/";
+  return (
+    <div className="mx-auto w-full max-w-md rounded-card bg-[#1f2328] p-4 text-left text-white shadow-pop">
+      {state === "sent" ? (
+        <div role="status">
+          <p className="font-medium">Thanks, we&apos;ll take a look.</p>
+          <p className="mt-1 text-sm text-white/75">Our team checks reported photos and removes anything that breaks the content policy.</p>
+          <button type="button" onClick={onDone} className="btn btn-sm mt-3 border-white/20 bg-white/10 text-white">
+            Close
+          </button>
+        </div>
+      ) : state === "signin" ? (
+        <div role="status">
+          <p className="font-medium">Sign in to report a photo</p>
+          <p className="mt-1 text-sm text-white/75">This helps us stop fake reports.</p>
+          <div className="mt-3 flex gap-2">
+            <a href={`/login?next=${encodeURIComponent(next)}`} className="btn btn-sm btn-primary">
+              Sign in
+            </a>
+            <button type="button" onClick={onDone} className="btn btn-sm border-white/20 bg-white/10 text-white">
+              Cancel
+            </button>
+          </div>
+        </div>
+      ) : (
+        <form onSubmit={submit}>
+          <fieldset>
+            <legend className="font-medium">What&apos;s wrong with this photo?</legend>
+            <div className="mt-2 grid gap-1">
+              {REPORT_REASONS.map((r) => (
+                <label key={r} className="flex min-h-11 cursor-pointer items-center gap-3 rounded-control px-2 hover:bg-white/5">
+                  <input type="radio" name="report-reason" value={r} checked={reason === r} onChange={() => setReason(r)} className="h-4 w-4 accent-[#0f6d52]" />
+                  <span className="text-sm">{r}</span>
+                </label>
+              ))}
+            </div>
+          </fieldset>
+          <label htmlFor={`report-details-${mediaId}`} className="mt-2 block text-sm text-white/80">
+            Details (optional)
+          </label>
+          <textarea
+            id={`report-details-${mediaId}`}
+            value={details}
+            onChange={(e) => setDetails(e.target.value)}
+            maxLength={400}
+            rows={2}
+            className="mt-1 w-full rounded-control border border-white/20 bg-black/30 p-2 text-[16px] text-white placeholder:text-white/40"
+          />
+          {error ? (
+            <p role="alert" className="mt-2 text-sm text-[#f6b8b3]">
+              {error}
+            </p>
+          ) : null}
+          <div className="mt-3 flex gap-2">
+            <button type="submit" disabled={state === "sending"} className="btn btn-sm btn-primary">
+              {state === "sending" ? "Sending..." : "Send report"}
+            </button>
+            <button type="button" onClick={onDone} className="btn btn-sm border-white/20 bg-white/10 text-white">
+              Cancel
+            </button>
+          </div>
+        </form>
+      )}
+    </div>
+  );
+}
+
 function Lightbox({
   items,
   index,
@@ -118,7 +216,14 @@ function Lightbox({
   const touch = useRef<{ x: number; y: number } | null>(null);
   const item = items[index];
   const n = items.length;
-  const go = useCallback((d: number) => onIndex((index + d + n) % n), [index, n, onIndex]);
+  const [reporting, setReporting] = useState<number | null>(null);
+  const go = useCallback(
+    (d: number) => {
+      setReporting(null);
+      onIndex((index + d + n) % n);
+    },
+    [index, n, onIndex]
+  );
 
   useEffect(() => {
     const el = ref.current;
@@ -150,6 +255,8 @@ function Lightbox({
       aria-label={`Photo ${index + 1} of ${n}`}
       className="m-0 h-dvh max-h-none w-screen max-w-none bg-[#0d0f12] p-0 text-white backdrop:bg-black/80"
       onKeyDown={(e) => {
+        const tag = (e.target as HTMLElement).tagName;
+        if (tag === "TEXTAREA" || tag === "INPUT") return;
         if (e.key === "ArrowRight") {
           e.preventDefault();
           go(1);
@@ -180,6 +287,20 @@ function Lightbox({
           <span className="text-sm tabular-nums text-white/80" aria-live="polite">
             {index + 1} / {n}
           </span>
+          <div className="flex items-center gap-1">
+          {!item.pending ? (
+            <button
+              type="button"
+              onClick={() => setReporting(reporting === item.id ? null : item.id)}
+              aria-expanded={reporting === item.id}
+              className="inline-flex h-11 items-center gap-1.5 rounded-full px-3 text-sm text-white/80 hover:bg-white/10"
+            >
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                <path d="M4 22V4m0 0h12l-2 4 2 4H4" />
+              </svg>
+              Report photo
+            </button>
+          ) : null}
           <button
             type="button"
             onClick={onClose}
@@ -191,6 +312,7 @@ function Lightbox({
               <path d="M18 6 6 18M6 6l12 12" />
             </svg>
           </button>
+          </div>
         </div>
 
         <figure className="relative min-h-0 flex-1 px-2 sm:px-16">
@@ -210,7 +332,11 @@ function Lightbox({
         </figure>
 
         <div className="safe-bottom px-4 pt-3 text-center sm:px-6">
-          <p className="mx-auto min-h-5 max-w-[60ch] text-sm text-white/85">{item.caption}</p>
+          {reporting === item.id ? (
+            <ReportPhoto key={item.id} mediaId={item.id} onDone={() => setReporting(null)} />
+          ) : (
+            <p className="mx-auto min-h-5 max-w-[60ch] text-sm text-white/85">{item.caption}</p>
+          )}
         </div>
 
         {n > 1 ? (
