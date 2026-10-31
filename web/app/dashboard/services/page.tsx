@@ -21,12 +21,12 @@ export default async function ServicesPage() {
   ]);
 
   return (
-    <main className="max-w-[600px] mx-auto px-4 sm:px-6 py-10 w-full">
-      <Link href="/dashboard" className="text-[13px] text-accent hover:underline">
+    <main className="page-narrow max-w-[680px] py-8 sm:py-12">
+      <Link href="/dashboard" className="btn btn-ghost btn-sm -ml-3.5">
         ← Dashboard
       </Link>
-      <h1 className="text-2xl font-semibold mt-2 mb-1">Your services</h1>
-      <p className="text-ink-soft text-sm mb-6">
+      <h1 className="text-2xl sm:text-[28px] font-semibold tracking-tight mt-1">Your services</h1>
+      <p className="text-ink-soft mt-1.5 mb-8 max-w-[56ch]">
         What you offer and where your prices start. Customers can pick these when they ask for a quote.
       </p>
       <ServicesManager

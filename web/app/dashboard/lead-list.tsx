@@ -31,13 +31,19 @@ export function StatusPill({ status, audience }: { status: string; audience: "ve
 export function LeadRow({ lead: l, last }: { lead: LeadRecord; last: boolean }) {
   const digits = phoneDigits(l.phone);
   return (
-    <div className={`flex items-start justify-between gap-2.5 py-3 text-sm ${last ? "" : "border-b border-line"}`}>
-      <div className="min-w-0">
-        <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
-          <span className="font-medium">{l.name}</span>
-          <StatusPill status={l.status} audience="vendor" />
+    <div className={`py-4 text-sm ${last ? "pb-1" : "border-b border-line"}`}>
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0 pt-1">
+          <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+            <span className="font-semibold text-[15px]">{l.name}</span>
+            <StatusPill status={l.status} audience="vendor" />
+          </div>
+          <div className="text-ink-soft text-xs mt-1">Received {formatDate(l.created_at)}</div>
         </div>
-        <div className="text-[13px] mt-0.5">
+        <LeadStatusControl quoteId={l.id} status={l.status} leadName={l.name} />
+      </div>
+      <div className="mt-2 max-w-[62ch]">
+        <div className="text-[13.5px]">
           {l.event_date ? `Event on ${formatEventDate(l.event_date)}` : "No event date given"}
           {l.budget ? ` · budget ${formatBudget(l.budget)}` : ""}
         </div>
@@ -45,7 +51,6 @@ export function LeadRow({ lead: l, last }: { lead: LeadRecord; last: boolean }) 
           <div className="text-xs mt-0.5">Wants: {l.services.join(", ")}</div>
         ) : null}
         {l.message ? <LeadMessage message={l.message} /> : null}
-        <div className="text-ink-soft text-xs mt-1">Received {formatDate(l.created_at)}</div>
         {digits ? (
           <LeadContact
             quoteId={l.id}
@@ -58,7 +63,6 @@ export function LeadRow({ lead: l, last }: { lead: LeadRecord; last: boolean }) 
           <div className="text-ink-soft text-xs mt-0.5">{l.phone}</div>
         )}
       </div>
-      <LeadStatusControl quoteId={l.id} status={l.status} leadName={l.name} />
     </div>
   );
 }
@@ -77,9 +81,9 @@ export function MyRequestsAndFavorites({
   const H = headingLevel;
   return (
     <>
-      <H className="text-[15px] font-semibold mb-2.5">Your quote requests</H>
+      <H className="text-base font-semibold mb-3">Your quote requests</H>
       {quotes.length === 0 ? (
-        <div className="border border-line rounded-xl p-5.5 mb-6 text-sm text-ink-soft">
+        <div className="card sm:px-6 mb-8 text-sm text-ink-soft">
           You haven&apos;t sent any quote requests yet.{" "}
           <Link href="/search" className="text-accent hover:underline">
             Browse vendors
@@ -87,14 +91,14 @@ export function MyRequestsAndFavorites({
           to get started.
         </div>
       ) : (
-        <div className="border border-line rounded-xl p-5.5 mb-6">
+        <div className="card py-2 sm:px-6 mb-8">
           {quotes.map((q, i) => (
             <div
               key={q.id}
               className={`py-2.5 text-sm ${i < quotes.length - 1 ? "border-b border-line" : ""}`}
             >
               <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
-                <Link href={`/vendors/${q.vendor_id}`} className="inline-flex items-center min-h-10 font-medium hover:underline">
+                <Link href={`/vendors/${q.vendor_id}`} className="inline-flex items-center min-h-11 font-medium hover:underline">
                   {q.vendor_name}
                 </Link>
                 <span className="text-ink-soft">({q.vendor_category})</span>
@@ -117,13 +121,13 @@ export function MyRequestsAndFavorites({
         </div>
       )}
 
-      <H className="text-[15px] font-semibold mb-2.5">Your favorites</H>
+      <H className="text-base font-semibold mb-3">Your favorites</H>
       {favorites.length === 0 ? (
-        <p className="text-sm text-ink-soft mb-6">
+        <p className="card sm:px-6 text-sm text-ink-soft mb-8">
           No saved vendors yet. Tap the heart icon on a vendor to save them here for later.
         </p>
       ) : (
-        <div className="border border-line rounded-xl p-5.5 mb-6">
+        <div className="card py-2 sm:px-6 mb-8">
           {favorites.map((f, i) => (
             <div
               key={f.id}
@@ -131,15 +135,15 @@ export function MyRequestsAndFavorites({
                 i < favorites.length - 1 ? "border-b border-line" : ""
               }`}
             >
-              <div>
-                <Link href={`/vendors/${f.id}`} className="inline-flex items-center min-h-10 font-medium hover:underline">
+              <div className="min-w-0">
+                <Link href={`/vendors/${f.id}`} className="inline-flex items-center min-h-11 font-medium hover:underline">
                   {f.name}
                 </Link>{" "}
                 <span className="text-ink-soft">
                   ({f.category} · {f.location})
                 </span>
               </div>
-              <span className="text-xs text-ink-soft">{f.price_label}</span>
+              <span className="text-[13px] text-ink-soft whitespace-nowrap tabular-nums">{f.price_label}</span>
             </div>
           ))}
         </div>

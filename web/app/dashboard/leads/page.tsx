@@ -37,13 +37,13 @@ export default async function LeadsPage({
     key === "all" ? leads.length : leads.filter((l) => l.status === key).length;
 
   return (
-    <main className="max-w-2xl mx-auto px-4 sm:px-6 py-10 w-full">
-      <Link href="/dashboard" className="text-[13px] text-accent hover:underline">
+    <main className="page-narrow py-8 sm:py-12">
+      <Link href="/dashboard" className="btn btn-ghost btn-sm -ml-3.5">
         ← Dashboard
       </Link>
-      <h1 className="text-2xl font-semibold mt-2 mb-4">Enquiries</h1>
+      <h1 className="text-2xl sm:text-[28px] font-semibold tracking-tight mt-1 mb-5">Enquiries</h1>
 
-      <nav aria-label="Filter enquiries by status" className="flex flex-wrap gap-2 mb-4">
+      <nav aria-label="Filter enquiries by status" className="flex flex-wrap gap-2 mb-5">
         {TABS.map((t) => {
           const isActive = t.key === active;
           return (
@@ -51,8 +51,8 @@ export default async function LeadsPage({
               key={t.key}
               href={t.key === "all" ? "/dashboard/leads" : `/dashboard/leads?status=${t.key}`}
               aria-current={isActive ? "page" : undefined}
-              className={`inline-flex items-center min-h-10 px-3 rounded-full border text-[13px] ${
-                isActive ? "bg-accent text-white border-accent" : "border-line hover:border-accent"
+              className={`inline-flex items-center shrink-0 whitespace-nowrap min-h-11 sm:min-h-9 px-3.5 rounded-full border text-[13px] font-medium transition-colors ${
+                isActive ? "bg-accent text-white border-accent" : "bg-white border-line-strong hover:border-accent hover:text-accent"
               }`}
             >
               {t.label} ({countFor(t.key)})
@@ -61,7 +61,7 @@ export default async function LeadsPage({
         })}
       </nav>
 
-      <div className="border border-line rounded-xl p-5.5">
+      <div className="card sm:px-6">
         {shown.length === 0 ? (
           <p className="text-sm text-ink-soft">
             {leads.length === 0

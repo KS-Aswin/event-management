@@ -20,9 +20,8 @@ interface InitialValues {
 
 type FieldKey = "name" | "category" | "location" | "phone" | "whatsapp" | "price" | "experience" | "about";
 
-// Darker than --color-line so input edges meet the 3:1 non-text contrast minimum.
-const inputClass =
-  "w-full px-3 py-2.5 border border-[#80868b] rounded-md text-sm outline-none focus:border-accent bg-white aria-[invalid=true]:border-red-600";
+// Shared .field, with a darker edge so inputs meet the 3:1 non-text contrast minimum.
+const inputClass = "field border-[#80868b] focus:border-accent aria-[invalid=true]:border-danger";
 
 const PHONE_RE = /^\+?[\d\s-]{10,15}$/;
 
@@ -136,10 +135,10 @@ export default function ListingForm({
   const fid = (k: string) => `${uid}-${k}`;
 
   return (
-    <form onSubmit={handleSubmit} noValidate className="space-y-3.5 border border-line rounded-xl p-5.5">
-      <div aria-live="polite">
+    <form onSubmit={handleSubmit} noValidate className="card sm:p-7 space-y-5">
+      <div aria-live="polite" className="empty:absolute">
         {error && (
-          <div className="text-sm text-red-700 bg-red-50 border border-red-100 rounded-md px-3 py-2">{error}</div>
+          <div className="alert-error">{error}</div>
         )}
       </div>
       <Field
@@ -152,7 +151,7 @@ export default function ListingForm({
         error={fieldErrors.name}
       />
       <div>
-        <label htmlFor={fid("category")} className="block text-[13px] text-ink-soft mb-1.5">
+        <label htmlFor={fid("category")} className="label">
           Category
         </label>
         <select
@@ -172,14 +171,14 @@ export default function ListingForm({
           ))}
         </select>
         {fieldErrors.category && (
-          <p id={`${fid("category")}-err`} className="text-xs text-red-700 mt-1">
+          <p id={`${fid("category")}-err`} className="text-[13px] text-danger mt-1.5">
             {fieldErrors.category}
           </p>
         )}
       </div>
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-5 sm:gap-4">
         <div>
-          <label htmlFor={fid("district")} className="block text-[13px] text-ink-soft mb-1.5">
+          <label htmlFor={fid("district")} className="label">
             District
           </label>
           <select
@@ -207,7 +206,7 @@ export default function ListingForm({
           error={fieldErrors.location}
         />
       </div>
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-5 sm:gap-4">
         <Field
           id={fid("phone")}
           label="Phone (optional)"
@@ -230,7 +229,7 @@ export default function ListingForm({
           error={fieldErrors.whatsapp}
         />
       </div>
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-5 sm:gap-4">
         <Field
           id={fid("price")}
           label="Starting price (₹)"
@@ -256,24 +255,24 @@ export default function ListingForm({
         />
       </div>
       <div>
-        <label htmlFor={fid("tags")} className="block text-[13px] text-ink-soft mb-1.5">
+        <label htmlFor={fid("tags")} className="label">
           Tags (optional)
         </label>
-        <p id={`${fid("tags")}-hint`} className="text-xs text-ink-soft -mt-1 mb-1.5">
+        <p id={`${fid("tags")}-hint`} className="hint mt-0 mb-2">
           Press Enter or comma after each, e.g. Candid, Drone, Cinematic
         </p>
-        <div className="flex flex-wrap items-center gap-1.5 w-full px-2 py-1.5 border border-[#80868b] rounded-md focus-within:border-accent bg-white">
+        <div className="flex flex-wrap items-center gap-1.5 w-full min-h-11 sm:min-h-10 px-2 py-0.5 border border-[#80868b] rounded-control bg-white transition-shadow focus-within:border-accent focus-within:shadow-[0_0_0_3px_var(--color-accent-tint)]">
           {tags.map((t) => (
             <span
               key={t}
-              className="inline-flex items-center gap-1 text-[13px] bg-accent-tint text-accent rounded-full pl-2.5 pr-1 py-0.5"
+              className="inline-flex items-center gap-0.5 text-[13px] font-medium bg-accent-tint text-accent-hover rounded-full pl-3 pr-0.5"
             >
               {t}
               <button
                 type="button"
                 onClick={() => setTags((prev) => prev.filter((x) => x !== t))}
                 aria-label={`Remove tag ${t}`}
-                className="-my-2 -mr-1 w-10 h-10 rounded-full hover:bg-white/70 leading-none"
+                className="w-8 h-8 sm:w-7 sm:h-7 rounded-full text-base hover:bg-white/70 leading-none"
               >
                 ×
               </button>
@@ -297,12 +296,12 @@ export default function ListingForm({
               }
             }}
             onBlur={() => addTag(tagDraft)}
-            className="flex-1 min-w-[120px] min-h-10 px-1 py-1 text-sm outline-none bg-transparent"
+            className="flex-1 min-w-[120px] min-h-11 sm:min-h-8 px-1.5 py-1 text-sm outline-none bg-transparent"
           />
         </div>
       </div>
       <div>
-        <label htmlFor={fid("about")} className="block text-[13px] text-ink-soft mb-1.5">
+        <label htmlFor={fid("about")} className="label">
           About your business
         </label>
         <textarea
@@ -317,20 +316,16 @@ export default function ListingForm({
           className={inputClass}
         />
         {fieldErrors.about && (
-          <p id={`${fid("about")}-err`} className="text-xs text-red-700 mt-1">
+          <p id={`${fid("about")}-err`} className="text-[13px] text-danger mt-1.5">
             {fieldErrors.about}
           </p>
         )}
       </div>
-      <div className="flex flex-wrap items-center gap-3">
-        <button
-          type="submit"
-          disabled={loading}
-          className="px-4.5 py-2.5 rounded-md bg-accent hover:bg-accent-hover text-white text-sm font-medium disabled:opacity-70"
-        >
+      <div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-3 pt-5 border-t border-line">
+        <button type="submit" disabled={loading} className="btn btn-primary btn-lg w-full sm:w-auto">
           {loading ? (mode === "edit" ? "Saving…" : "Creating…") : mode === "edit" ? "Save changes" : "Create listing"}
         </button>
-        <Link href="/dashboard" className="inline-flex items-center min-h-10 px-3 py-2.5 text-sm text-ink-soft hover:text-accent">
+        <Link href="/dashboard" className="btn btn-ghost w-full sm:w-auto text-ink-soft hover:text-accent">
           Cancel
         </Link>
       </div>
@@ -366,11 +361,11 @@ function Field({
   const describedBy = [hint ? `${id}-hint` : null, error ? `${id}-err` : null].filter(Boolean).join(" ");
   return (
     <div>
-      <label htmlFor={id} className="block text-[13px] text-ink-soft mb-1.5">
+      <label htmlFor={id} className="label">
         {label}
       </label>
       {hint && (
-        <p id={`${id}-hint`} className="text-xs text-ink-soft -mt-1 mb-1.5">
+        <p id={`${id}-hint`} className="hint mt-0 mb-2">
           {hint}
         </p>
       )}
@@ -389,7 +384,7 @@ function Field({
         className={inputClass}
       />
       {error && (
-        <p id={`${id}-err`} className="text-xs text-red-700 mt-1">
+        <p id={`${id}-err`} className="text-[13px] text-danger mt-1.5">
           {error}
         </p>
       )}
