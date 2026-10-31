@@ -1,19 +1,22 @@
 "use client";
 
 import { useRouter, useSearchParams } from "next/navigation";
-import { useState, useTransition } from "react";
+import { useState, useTransition, type ReactNode } from "react";
 import { CATEGORIES } from "@/lib/vendorVisuals";
 
 export default function SearchFilters({
   locations,
   activeLocation,
   activeMinRating,
+  mobileToolbar,
 }: {
   locations: string[];
   /** Normalised by the server (canonical district or ""), so the select matches the results. */
   activeLocation: string;
   /** Normalised by the server to an offered threshold, or "0". */
   activeMinRating: string;
+  /** Rendered beside the Filters toggle on phones (the sort control). */
+  mobileToolbar?: ReactNode;
 }) {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -57,27 +60,36 @@ export default function SearchFilters({
 
   const panel = (
     <>
-      <fieldset className="mb-2 relative">
-        <legend className="text-[13px] uppercase tracking-wide text-ink-soft mt-0 mb-6">Category</legend>
-        <button type="button" onClick={clearAll} className="absolute right-0 -top-9 min-h-10 px-1 text-[12.5px] text-accent hover:underline">
+      <div className="flex items-center justify-between gap-3 mb-3 md:mb-4 min-h-10">
+        <h2 className="text-[15px] font-semibold">Refine results</h2>
+        <button
+          type="button"
+          onClick={clearAll}
+          disabled={activeCount === 0}
+          className="btn btn-ghost btn-sm -mr-2 disabled:invisible"
+        >
           Clear all
         </button>
+      </div>
+      <fieldset>
+        <legend className="eyebrow mb-2.5">Category</legend>
+        <div className="grid grid-cols-2 md:grid-cols-1 gap-2 md:gap-1.5">
         {CATEGORIES.map((c) => {
           const checked = activeCategories.includes(c);
           return (
             <label
               key={c}
-              className={`flex items-center gap-2.5 w-full text-sm px-3 py-2.5 border rounded-lg mb-2 cursor-pointer transition-colors has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-accent ${
+              className={`flex items-center gap-2.5 w-full min-h-11 md:min-h-10 text-sm px-3 border rounded-control cursor-pointer select-none transition-colors has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-accent has-[:focus-visible]:ring-offset-1 ${
                 checked
                   ? "bg-accent-tint border-accent text-accent font-semibold"
-                  : "border-line hover:border-accent"
+                  : "bg-surface border-line text-foreground hover:border-line-strong hover:bg-surface-muted"
               }`}
             >
               <input type="checkbox" className="sr-only" checked={checked} onChange={() => toggleCategory(c)} />
               <span
                 aria-hidden="true"
                 className={`w-[18px] h-[18px] border rounded flex items-center justify-center shrink-0 ${
-                  checked ? "bg-accent border-accent" : "border-line"
+                  checked ? "bg-accent border-accent" : "bg-surface border-line-strong"
                 }`}
               >
                 {checked && (
@@ -90,16 +102,17 @@ export default function SearchFilters({
             </label>
           );
         })}
+        </div>
       </fieldset>
 
-      <label htmlFor="filter-location" className="block text-[13px] uppercase tracking-wide text-ink-soft mt-5 mb-2.5">
+      <label htmlFor="filter-location" className="eyebrow block mt-6 mb-2.5">
         Location
       </label>
       <select
         id="filter-location"
         value={activeLocation}
         onChange={(e) => updateParams((p) => (e.target.value ? p.set("location", e.target.value) : p.delete("location")))}
-        className="w-full min-h-11 px-2.5 py-2 border border-line rounded-md text-sm"
+        className="field"
       >
         <option value="">All Kerala</option>
         {locations.map((l) => (
@@ -109,7 +122,7 @@ export default function SearchFilters({
         ))}
       </select>
 
-      <label htmlFor="filter-rating" className="block text-[13px] uppercase tracking-wide text-ink-soft mt-5 mb-2.5">
+      <label htmlFor="filter-rating" className="eyebrow block mt-6 mb-2.5">
         Minimum rating
       </label>
       <select
@@ -118,7 +131,7 @@ export default function SearchFilters({
         onChange={(e) =>
           updateParams((p) => (e.target.value !== "0" ? p.set("minRating", e.target.value) : p.delete("minRating")))
         }
-        className="w-full min-h-11 px-2.5 py-2 border border-line rounded-md text-sm"
+        className="field"
       >
         <option value="0">Any</option>
         <option value="4.5">4.5+</option>
@@ -136,26 +149,32 @@ export default function SearchFilters({
 
   return (
     <>
+      <div className="md:hidden flex items-center justify-between gap-2 mb-3">
       <button
         type="button"
         onClick={() => setMobileOpen((v) => !v)}
         aria-expanded={mobileOpen}
         aria-controls="search-filters-panel"
-        className="md:hidden flex items-center gap-2 border border-line rounded-lg px-3.5 py-2.5 text-sm mb-4"
+        className={`btn btn-secondary px-3.5 ${mobileOpen || activeCount > 0 ? "border-accent text-accent" : ""}`}
       >
         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
           <path d="M4 6h16M7 12h10M10 18h4" />
         </svg>
         Filters
         {activeCount > 0 && (
-          <span className="bg-accent text-white rounded-full text-[11px] px-1.5">{activeCount}</span>
+          <span className="bg-accent text-white rounded-full text-[12px] font-semibold min-w-5 h-5 px-1.5 inline-flex items-center justify-center">{activeCount}</span>
         )}
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" aria-hidden="true" className={`transition-transform ${mobileOpen ? "rotate-180" : ""}`}>
+          <path d="m6 9 6 6 6-6" />
+        </svg>
       </button>
+      {mobileToolbar}
+      </div>
 
       <aside
         id="search-filters-panel"
         aria-label="Filters"
-        className={`w-full md:w-[230px] shrink-0 ${mobileOpen ? "block" : "hidden"} md:block mb-5 md:mb-0 ${pending ? "opacity-70" : ""}`}
+        className={`w-full md:w-[240px] shrink-0 ${mobileOpen ? "block" : "hidden"} md:block mb-5 md:mb-0 rounded-card border border-line bg-surface p-4 md:p-0 md:border-0 md:bg-transparent md:sticky md:top-[calc(var(--header-h)+24px)] transition-opacity ${pending ? "opacity-70" : ""}`}
       >
         {panel}
       </aside>
