@@ -1,35 +1,58 @@
 import { NextResponse } from "next/server";
-import { findVendors, findVendorByOwner, createVendorListing } from "@/lib/db";
-import { getSession } from "@/lib/session";
+import {
+  findVendors,
+  countVendors,
+  findVendorByOwner,
+  createVendorListing,
+  districtExists,
+  toPublicVendor,
+} from "@/lib/db";
 import { CATEGORIES } from "@/lib/vendorVisuals";
+import { getLiveSession } from "../_lib/auth";
+import { parseId, validateListingFields } from "../_lib/validation";
 
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
 
-  const query = searchParams.get("q") ?? undefined;
+  // searchParams.get() takes the first value when a param is repeated.
+  const query = searchParams.get("q")?.trim().replace(/\s+/g, " ") || undefined;
   const categories = searchParams.getAll("category").filter(Boolean);
-  const location = searchParams.get("location") ?? undefined;
-  const minRatingRaw = searchParams.get("minRating");
-  const minRating = minRatingRaw ? parseFloat(minRatingRaw) : undefined;
+  const location = searchParams.get("location")?.trim() || undefined;
+  const minRatingRaw = parseFloat(searchParams.get("minRating") ?? "");
+  const minRating = Number.isFinite(minRatingRaw) && minRatingRaw > 0 && minRatingRaw <= 5 ? minRatingRaw : undefined;
+  const maxPriceRaw = parseInt(searchParams.get("maxPrice") ?? "", 10);
+  const maxPrice = Number.isFinite(maxPriceRaw) && maxPriceRaw > 0 ? maxPriceRaw : undefined;
+  const districtId = parseId(searchParams.get("district") ?? "") ?? undefined;
   const sortRaw = searchParams.get("sort");
   const sort =
     sortRaw === "reviews" || sortRaw === "priceLow" || sortRaw === "priceHigh"
       ? sortRaw
       : "rating";
+  const limitRaw = parseInt(searchParams.get("limit") ?? "", 10);
+  const limit = Number.isFinite(limitRaw) && limitRaw > 0 ? Math.min(limitRaw, 100) : undefined;
+  const offsetRaw = parseInt(searchParams.get("offset") ?? "", 10);
+  const offset = limit && Number.isFinite(offsetRaw) && offsetRaw > 0 ? offsetRaw : undefined;
 
-  const vendors = await findVendors({
+  const filters = {
     query,
     categories: categories.length > 0 ? categories : undefined,
     location,
     minRating,
+    maxPrice,
+    districtId,
     sort,
-  });
+  } as const;
 
-  return NextResponse.json({ vendors });
+  const [vendors, total] = await Promise.all([
+    findVendors({ ...filters, limit, offset }),
+    countVendors(filters),
+  ]);
+
+  return NextResponse.json({ vendors: vendors.map(toPublicVendor), total });
 }
 
 export async function POST(request: Request) {
-  const session = await getSession();
+  const session = await getLiveSession();
   if (!session) {
     return NextResponse.json({ error: "Not signed in." }, { status: 401 });
   }
@@ -52,49 +75,33 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Invalid request body." }, { status: 400 });
   }
 
-  const { name, category, location, price, experience, tags, about } = (body ?? {}) as Record<
-    string,
-    unknown
-  >;
-
-  if (typeof name !== "string" || name.trim().length < 2) {
-    return NextResponse.json({ error: "Please enter a business name." }, { status: 400 });
+  const parsed = validateListingFields(body, { partial: false, categories: CATEGORIES });
+  if (!parsed.ok) {
+    return NextResponse.json({ field: parsed.field, error: parsed.error }, { status: 400 });
   }
-  if (typeof category !== "string" || !CATEGORIES.includes(category as (typeof CATEGORIES)[number])) {
-    return NextResponse.json({ error: "Please choose a valid category." }, { status: 400 });
-  }
-  if (typeof location !== "string" || location.trim().length < 2) {
-    return NextResponse.json({ error: "Please enter a location." }, { status: 400 });
-  }
-  const priceNum = typeof price === "number" ? price : parseInt(String(price), 10);
-  if (!priceNum || priceNum <= 0) {
-    return NextResponse.json({ error: "Please enter a valid starting price." }, { status: 400 });
-  }
-  if (typeof experience !== "string" || experience.trim().length < 1) {
-    return NextResponse.json({ error: "Please enter your years of experience." }, { status: 400 });
-  }
-  if (typeof about !== "string" || about.trim().length < 10) {
-    return NextResponse.json(
-      { error: "Please write at least a short description (10+ characters)." },
-      { status: 400 }
-    );
+  const f = parsed.fields;
+  if (f.districtId !== undefined && !(await districtExists(f.districtId))) {
+    return NextResponse.json({ field: "districtId", error: "Please choose a valid district." }, { status: 400 });
   }
 
-  const tagList = Array.isArray(tags)
-    ? tags.filter((t): t is string => typeof t === "string" && t.trim().length > 0)
-    : [];
-
+  const price = f.price as number;
   const vendor = await createVendorListing({
     ownerId: session.userId,
-    name: name.trim(),
-    category,
-    location: location.trim(),
-    price: priceNum,
-    priceLabel: `₹${priceNum.toLocaleString("en-IN")} onwards`,
-    experience: experience.trim(),
-    tags: tagList,
-    about: about.trim(),
+    name: f.name as string,
+    category: f.category as string,
+    location: f.location as string,
+    price,
+    priceLabel: `₹${price.toLocaleString("en-IN")} onwards`,
+    experience: f.experience as string,
+    tags: f.tags ?? [],
+    about: f.about as string,
+    districtId: f.districtId,
   });
+
+  // null = a concurrent request created this owner's listing first.
+  if (!vendor) {
+    return NextResponse.json({ error: "You already have a listing." }, { status: 409 });
+  }
 
   return NextResponse.json({ vendor }, { status: 201 });
 }

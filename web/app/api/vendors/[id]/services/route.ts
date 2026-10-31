@@ -1,6 +1,8 @@
 import { NextResponse } from "next/server";
 import { createService, findCategories, findServicesByVendor, findVendorById } from "@/lib/db";
 import { getSession } from "@/lib/session";
+import { getLiveSession } from "../../../_lib/auth";
+import { parseId } from "../../../_lib/validation";
 import { parseServiceBody } from "@/lib/service-validation";
 
 export async function GET(
@@ -8,11 +10,12 @@ export async function GET(
   { params }: { params: Promise<{ id: string }> }
 ) {
   const { id } = await params;
-  const vendorId = parseInt(id, 10);
-  if (Number.isNaN(vendorId)) {
+  const vendorId = parseId(id);
+  if (vendorId === null) {
     return NextResponse.json({ error: "Invalid vendor id." }, { status: 400 });
   }
-  const vendor = await findVendorById(vendorId);
+  const session = await getSession();
+  const vendor = await findVendorById(vendorId, { publicOnly: true, viewerId: session?.userId ?? null });
   if (!vendor) {
     return NextResponse.json({ error: "Vendor not found." }, { status: 404 });
   }
@@ -24,7 +27,7 @@ export async function POST(
   request: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
-  const session = await getSession();
+  const session = await getLiveSession();
   if (!session) {
     return NextResponse.json({ error: "Not signed in." }, { status: 401 });
   }
@@ -33,8 +36,8 @@ export async function POST(
   }
 
   const { id } = await params;
-  const vendorId = parseInt(id, 10);
-  if (Number.isNaN(vendorId)) {
+  const vendorId = parseId(id);
+  if (vendorId === null) {
     return NextResponse.json({ error: "Invalid vendor id." }, { status: 400 });
   }
 

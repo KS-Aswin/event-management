@@ -1,20 +1,21 @@
 import { NextResponse } from "next/server";
-import { deleteService, findCategories, updateService } from "@/lib/db";
-import { getSession } from "@/lib/session";
+import { findCategories, isLastActiveService, removeService, updateService } from "@/lib/db";
+import { getLiveSession } from "../../_lib/auth";
+import { parseId } from "../../_lib/validation";
 import { parseServiceBody } from "@/lib/service-validation";
 
 export async function PATCH(
   request: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
-  const session = await getSession();
+  const session = await getLiveSession();
   if (!session) {
     return NextResponse.json({ error: "Not signed in." }, { status: 401 });
   }
 
   const { id } = await params;
-  const serviceId = parseInt(id, 10);
-  if (Number.isNaN(serviceId)) {
+  const serviceId = parseId(id);
+  if (serviceId === null) {
     return NextResponse.json({ error: "Invalid service id." }, { status: 400 });
   }
 
@@ -39,6 +40,13 @@ export async function PATCH(
 
   const service = await updateService(serviceId, session.userId, parsed.fields);
   if (!service) {
+    // updateService refuses to deactivate the listing's last active service.
+    if (parsed.fields.active === false && (await isLastActiveService(serviceId))) {
+      return NextResponse.json(
+        { error: "Your listing needs at least one active service. Add another before hiding this one." },
+        { status: 409 }
+      );
+    }
     return NextResponse.json(
       { error: "Service not found, or you don't own it." },
       { status: 404 }
@@ -51,23 +59,31 @@ export async function DELETE(
   request: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
-  const session = await getSession();
+  const session = await getLiveSession();
   if (!session) {
     return NextResponse.json({ error: "Not signed in." }, { status: 401 });
   }
 
   const { id } = await params;
-  const serviceId = parseInt(id, 10);
-  if (Number.isNaN(serviceId)) {
+  const serviceId = parseId(id);
+  if (serviceId === null) {
     return NextResponse.json({ error: "Invalid service id." }, { status: 400 });
   }
 
-  const deleted = await deleteService(serviceId, session.userId);
-  if (!deleted) {
+  // Services that past enquiries refer to are hidden instead of deleted, so
+  // leads keep showing what the customer asked for.
+  const result = await removeService(serviceId, session.userId);
+  if (!result.ok) {
+    if (result.reason === "last_service") {
+      return NextResponse.json(
+        { error: "Your listing needs at least one service. Add another before removing this one." },
+        { status: 409 }
+      );
+    }
     return NextResponse.json(
       { error: "Service not found, or you don't own it." },
       { status: 404 }
     );
   }
-  return NextResponse.json({ ok: true });
+  return NextResponse.json({ ok: true, mode: result.mode });
 }

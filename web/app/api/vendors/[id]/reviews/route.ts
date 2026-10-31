@@ -1,20 +1,37 @@
 import { NextResponse } from "next/server";
-import { getSession } from "@/lib/session";
-import { createVendorReview } from "@/lib/db";
+import { createVendorReview, findVendorById } from "@/lib/db";
+import { checkRateLimit } from "@/lib/rate-limit";
+import { getLiveSession } from "../../../_lib/auth";
+import { LIMITS, parseId } from "../../../_lib/validation";
 
 export async function POST(
   request: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
-  const session = await getSession();
+  const session = await getLiveSession();
   if (!session) {
     return NextResponse.json({ error: "Please sign in to leave a review." }, { status: 401 });
   }
 
   const { id } = await params;
-  const vendorId = parseInt(id, 10);
-  if (Number.isNaN(vendorId)) {
+  const vendorId = parseId(id);
+  if (vendorId === null) {
     return NextResponse.json({ error: "Invalid vendor id." }, { status: 400 });
+  }
+
+  // Reviews come from customers; vendor accounts can't review (competitors).
+  if (session.role !== "customer") {
+    return NextResponse.json(
+      { error: "Only customer accounts can leave reviews." },
+      { status: 403 }
+    );
+  }
+
+  if (!checkRateLimit(`review:u:${session.userId}`, 5, 10 * 60_000)) {
+    return NextResponse.json(
+      { error: "Too many requests. Please wait a few minutes and try again." },
+      { status: 429 }
+    );
   }
 
   let body: unknown;
@@ -26,7 +43,7 @@ export async function POST(
 
   const { rating, body: reviewBody } = (body ?? {}) as Record<string, unknown>;
 
-  const ratingNum = typeof rating === "number" ? rating : parseInt(String(rating), 10);
+  const ratingNum = typeof rating === "number" ? rating : Number(String(rating));
   if (!Number.isInteger(ratingNum) || ratingNum < 1 || ratingNum > 5) {
     return NextResponse.json({ error: "Rating must be a whole number from 1 to 5." }, { status: 400 });
   }
@@ -35,6 +52,18 @@ export async function POST(
       { error: "Please write at least a few words (5+ characters)." },
       { status: 400 }
     );
+  }
+  if (reviewBody.trim().length > LIMITS.reviewBody) {
+    return NextResponse.json(
+      { error: `Reviews can be up to ${LIMITS.reviewBody} characters.` },
+      { status: 400 }
+    );
+  }
+
+  // Only publicly listed vendors can be reviewed.
+  const vendor = await findVendorById(vendorId, { publicOnly: true });
+  if (!vendor) {
+    return NextResponse.json({ error: "Vendor not found." }, { status: 404 });
   }
 
   const result = await createVendorReview({
