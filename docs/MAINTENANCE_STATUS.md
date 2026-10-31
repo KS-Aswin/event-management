@@ -1,3 +1,49 @@
+# Product build (31 Oct 2026 →)
+
+## Stages
+- **Finished:** product (plan in `docs/PRODUCT_PLAN.md`), vendor (P0 vendor workspace).
+- **Interrupted:** admin (P1). Stopped by the 48% soft usage gate at 18:36; its work in progress was committed as `81fe95d` and pushed.
+- **Not reached:** customer (P2).
+
+## What each role can do now
+- **Vendor:** sign up and finish a 6-step onboarding wizard that saves each step and can be resumed. Then manage offerings and packages, including Other/custom offerings. Upload photos, short MP4s and video links to the media manager (albums, captions, cover/logo, reorder). Edit the business profile and service areas. Work leads in `/vendor/leads` with notes, follow-up dates and WhatsApp. The vendor home shows status, profile strength and 7-day stats.
+- **Customer / public:** see real vendor media (gallery, lightbox, videos), offerings grouped by unit, and search cards with cover images. Send enquiries for units (package-only rules are enforced). The customer area `/my` exists only as a shell, because P2 has not started.
+- **Admin:** created with `npm run admin:create`. Guarded `/admin` shell (404 for non-admins, API returns 401/403). Every action goes through an audit log helper. Work-in-progress pages and APIs exist for vendors (approve/reject/suspend/verify/owner), reviews (hide/unhide/reports), media, taxonomy/templates, users, enquiries, audit, analytics and the Today inbox. None of these is ticked or reviewed yet.
+
+## Tests (counts of test cases defined; the full suite was not re-run in this handoff)
+- `test:api` ≈149 checks; `test:unit` 42 (offering 32 + profile 10); `test:storage` script; `test:admin` 50 (guard 12, moderation 13, ops 13, vendors 12).
+- e2e (Playwright): 30 tests (public 13, flows 7, vendor workspace 9, admin shell 1).
+- Last reported green: test:unit, test:storage, test:api and test:e2e at the end of P0. The admin tests from the interrupted stage have not been confirmed green.
+- At handoff: lint 0 errors (1 warning). `tsc --noEmit` is clean for source. The only errors are 16 in stale `.next/types` (they point to removed `/dashboard` pages). Delete `web/.next` or run a build to clear them.
+
+## Pending per phase
+- **P0:** 14 of 16 done. Still open:
+  - P0-7: cover/logo crop in the media manager.
+  - P0-8: the home page, search filters, `/api/suggest` and the legacy `/api/vendors/[id]` still read the hard-coded CATEGORIES list.
+  - Follow-ups: 6 lead tabs (the DB has 4 statuses), an in-page confirm instead of `window.confirm`, and a 404 for another vendor's lead/package page.
+- **P1:** 1 of 14 ticked (P1-1). P1-2 to P1-13 have WIP code from `81fe95d` that needs review, test runs and ticking. P1-10 (vendor documents) and P1-14 (`/terms`) need checking for completeness.
+- **P2:** nothing started (P2-1 to P2-14: customer home, enquiry v2, guest tracking, quote offers, thread, calendar, search v2, event-type pages, shortlist, compare, reviews v2, mobile bar, notifications, insights).
+- **P3:** later, after income. P3-1 (production storage, R2) is required before the first production deploy.
+
+## Decisions the owner must confirm
+- The 30 defaults in `docs/PRODUCT_PLAN.md` section 9. The key ones:
+  - Admin approval before a listing goes live.
+  - Re-review only on name/category/phone edits.
+  - Vendor phone stays public while billing is off.
+  - Guest enquiries allowed.
+  - Multi-vendor cap of 5 per send and 15 per day.
+  - Cloudflare R2 for production storage.
+  - One role per account.
+- Review migrations `004_vendor_workspace.sql` and `005_admin.sql`. They are applied to the LOCAL database only.
+- The new dependency `sharp` (image processing).
+
+## Exact next step to resume next week
+1. `cd web`, then `npm run db:migrate`. Then run `npm run test:admin`, `npm run test:api` and `npm run test:e2e`. Fix any failures in the WIP admin code.
+2. Review and finish P1-2 to P1-14 in order. Tick each in `docs/PRODUCT_PLAN.md` with a _Status_ note.
+3. Re-run the pipeline from the `admin` stage, then `customer` (P2). The briefs are `admin.md` and `customer.md` in the run's scratchpad. See memory note "Maintenance run Oct 2026".
+
+---
+
 # Event Management (Vela): maintenance handoff, 31 Oct 2026
 
 Branch `ui-fixes-aswin`. Each stage was committed locally and pushed by the orchestrator. Nothing was deployed, and no live service was touched.
