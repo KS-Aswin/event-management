@@ -25,8 +25,7 @@ export function LeadContact({
   const [state, setState] = useState<"idle" | "saving" | "done">("idle");
   const [error, setError] = useState<string | null>(null);
 
-  const linkClass =
-    "inline-flex items-center justify-center min-h-11 px-3 rounded-md border border-line text-[13px] font-medium hover:border-accent hover:text-accent";
+  const linkClass = "btn btn-secondary btn-sm hover:border-accent hover:text-accent";
 
   async function markReplied() {
     setState("saving");
@@ -42,7 +41,7 @@ export function LeadContact({
   }
 
   return (
-    <div className="mt-1.5">
+    <div className="mt-3">
       <div className="flex flex-wrap items-center gap-2">
         <a href={telHref} onClick={() => setContacted(true)} className={linkClass}>
           Call {phone}
@@ -63,14 +62,14 @@ export function LeadContact({
             type="button"
             onClick={markReplied}
             disabled={state === "saving"}
-            className="min-h-11 px-3 rounded-md bg-accent hover:bg-accent-hover text-white text-[13px] font-medium disabled:opacity-70"
+            className="btn btn-primary btn-sm"
           >
             {state === "saving" ? "Saving…" : "Mark as replied"}
           </button>
         )}
       </div>
       <div aria-live="polite" className="text-[11.5px]">
-        {error && <span className="text-red-700">{error}</span>}
+        {error && <span className="text-danger">{error}</span>}
       </div>
     </div>
   );
@@ -82,7 +81,7 @@ export function LeadMessage({ message }: { message: string }) {
   const long = message.length > 160 || message.split("\n").length > 3;
   return (
     <div className="mt-1">
-      <p className={`whitespace-pre-line text-[13px] text-foreground ${!open && long ? "line-clamp-3" : ""}`}>
+      <p className={`whitespace-pre-line text-[13.5px] text-foreground ${!open && long ? "line-clamp-3" : ""}`}>
         &ldquo;{message}&rdquo;
       </p>
       {long && (
@@ -90,7 +89,7 @@ export function LeadMessage({ message }: { message: string }) {
           type="button"
           onClick={() => setOpen((o) => !o)}
           aria-expanded={open}
-          className="text-xs text-accent hover:underline mt-0.5"
+          className="inline-flex items-center min-h-11 sm:min-h-8 text-xs font-medium text-accent hover:underline"
         >
           {open ? "Show less" : "Show more"}
         </button>

@@ -4,8 +4,8 @@ import { useId, useState } from "react";
 import { useRouter } from "next/navigation";
 import type { ServiceRecord } from "@/lib/db";
 
-const inputClass =
-  "w-full px-3 py-2.5 border border-[#80868b] rounded-md text-sm outline-none focus:border-accent bg-white";
+// Shared .field, with a darker edge so inputs meet the 3:1 non-text contrast minimum.
+const inputClass = "field border-[#80868b] focus:border-accent aria-[invalid=true]:border-danger";
 
 async function send(
   url: string,
@@ -109,24 +109,24 @@ export default function ServicesManager({
 
   return (
     <>
-      <h2 className="text-[15px] font-semibold mb-2.5">Current services</h2>
+      <h2 className="text-base font-semibold mb-3">Current services</h2>
       {services.length === 0 ? (
-        <p className="text-sm text-ink-soft mb-6">No services yet. Add your first one below.</p>
+        <p className="card text-sm text-ink-soft mb-10">No services yet. Add your first one below.</p>
       ) : (
-        <ul className="space-y-2.5 mb-8">
+        <ul className="space-y-3 mb-10">
           {services.map((s) => (
-            <li key={s.id} className="border border-line rounded-xl p-4 text-sm">
-              <div className="flex flex-wrap items-start justify-between gap-2">
+            <li key={s.id} className="card p-4 sm:px-5 text-sm">
+              <div className="flex flex-wrap items-start justify-between gap-x-4 gap-y-3">
                 <div className="min-w-0">
-                  <div className="font-medium">
+                  <div className="font-semibold text-[15px]">
                     {s.title}
                     {!s.active && (
-                      <span className="ml-2 text-[11.5px] font-medium px-2 py-0.5 rounded-full border bg-gray-100 text-gray-700 border-gray-300">
+                      <span className="chip ml-2 align-middle font-medium">
                         Hidden from customers
                       </span>
                     )}
                   </div>
-                  <div className="text-ink-soft text-xs mt-0.5">
+                  <div className="text-ink-soft text-[13px] mt-0.5 tabular-nums">
                     {s.category} · from ₹{Number(s.price_from).toLocaleString("en-IN")} per {s.price_unit}
                   </div>
                   {s.description && <p className="text-[13px] mt-1 line-clamp-2">{s.description}</p>}
@@ -136,7 +136,7 @@ export default function ServicesManager({
                     type="button"
                     onClick={() => toggle(s)}
                     disabled={rowBusy === s.id}
-                    className="min-h-11 px-3 rounded-md border border-line text-[13px] hover:border-accent disabled:opacity-60"
+                    className="btn btn-secondary btn-sm"
                   >
                     {s.active ? "Hide" : "Show"}
                   </button>
@@ -144,13 +144,13 @@ export default function ServicesManager({
                     type="button"
                     onClick={() => remove(s)}
                     disabled={rowBusy === s.id}
-                    className="min-h-11 px-3 rounded-md border border-line text-[13px] text-red-700 hover:border-red-300 disabled:opacity-60"
+                    className="btn btn-secondary btn-sm text-danger hover:border-danger"
                   >
                     Delete
                   </button>
                 </div>
               </div>
-              <div aria-live="polite" className="text-xs text-red-700">
+              <div aria-live="polite" className="text-[13px] text-danger">
                 {rowError?.id === s.id ? rowError.msg : null}
               </div>
             </li>
@@ -158,15 +158,15 @@ export default function ServicesManager({
         </ul>
       )}
 
-      <form onSubmit={add} className="space-y-3.5 border border-line rounded-xl p-5.5">
-        <h2 className="text-[15px] font-semibold">Add a service</h2>
-        <div aria-live="polite">
+      <form onSubmit={add} className="card sm:p-7 space-y-5">
+        <h2 className="text-base font-semibold">Add a service</h2>
+        <div aria-live="polite" className="empty:absolute">
           {error && (
-            <div className="text-sm text-red-700 bg-red-50 border border-red-100 rounded-md px-3 py-2">{error}</div>
+            <div className="alert-error">{error}</div>
           )}
         </div>
         <div>
-          <label htmlFor={`${id}-title`} className="block text-[13px] text-ink-soft mb-1.5">
+          <label htmlFor={`${id}-title`} className="label">
             Service name
           </label>
           <input
@@ -181,7 +181,7 @@ export default function ServicesManager({
           />
         </div>
         <div>
-          <label htmlFor={`${id}-cat`} className="block text-[13px] text-ink-soft mb-1.5">
+          <label htmlFor={`${id}-cat`} className="label">
             Category
           </label>
           <select id={`${id}-cat`} value={category} onChange={(e) => setCategory(e.target.value)} className={inputClass}>
@@ -192,9 +192,9 @@ export default function ServicesManager({
             ))}
           </select>
         </div>
-        <div className="grid grid-cols-2 gap-3">
+        <div className="grid grid-cols-2 gap-3 sm:gap-4">
           <div>
-            <label htmlFor={`${id}-price`} className="block text-[13px] text-ink-soft mb-1.5">
+            <label htmlFor={`${id}-price`} className="label">
               Starting price (₹)
             </label>
             <input
@@ -210,7 +210,7 @@ export default function ServicesManager({
             />
           </div>
           <div>
-            <label htmlFor={`${id}-unit`} className="block text-[13px] text-ink-soft mb-1.5">
+            <label htmlFor={`${id}-unit`} className="label">
               Price per
             </label>
             <select id={`${id}-unit`} value={unit} onChange={(e) => setUnit(e.target.value)} className={inputClass}>
@@ -223,7 +223,7 @@ export default function ServicesManager({
           </div>
         </div>
         <div>
-          <label htmlFor={`${id}-desc`} className="block text-[13px] text-ink-soft mb-1.5">
+          <label htmlFor={`${id}-desc`} className="label">
             Description (optional)
           </label>
           <textarea
@@ -238,7 +238,7 @@ export default function ServicesManager({
         <button
           type="submit"
           disabled={adding}
-          className="px-4.5 py-2.5 rounded-md bg-accent hover:bg-accent-hover text-white text-sm font-medium disabled:opacity-70"
+          className="btn btn-primary btn-lg w-full sm:w-auto"
         >
           {adding ? "Adding…" : "Add service"}
         </button>

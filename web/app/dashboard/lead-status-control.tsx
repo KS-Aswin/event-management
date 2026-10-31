@@ -94,7 +94,7 @@ export default function LeadStatusControl({
         disabled={saving}
         aria-label={leadName ? `Status of enquiry from ${leadName}` : "Enquiry status"}
         onChange={(e) => change(asStatus(e.target.value))}
-        className="text-xs border border-[#80868b] rounded-md px-2 py-1.5 min-h-10 bg-white disabled:opacity-60"
+        className="field w-auto min-w-[7.5rem] pr-8 border-[#80868b] focus:border-accent text-[13px] font-medium disabled:opacity-60"
       >
         {STATUS_OPTIONS.filter((s) => options.includes(s)).map((s) => (
           <option key={s} value={s}>
@@ -104,14 +104,14 @@ export default function LeadStatusControl({
       </select>
       <div aria-live="polite" className="text-[11.5px] text-right max-w-[180px]">
         {error ? (
-          <span className="text-red-700">{error}</span>
+          <span className="text-danger">{error}</span>
         ) : undoFrom ? (
           <span className="text-ink-soft">
             Changed to {LEAD_STATUS_LABEL[current]} ·{" "}
             <button
               type="button"
               onClick={() => change(undoFrom, true)}
-              className="text-accent underline"
+              className="inline-flex items-center min-h-11 sm:min-h-6 font-medium text-accent underline"
             >
               Undo
             </button>

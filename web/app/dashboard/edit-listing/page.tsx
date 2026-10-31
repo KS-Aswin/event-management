@@ -18,9 +18,9 @@ export default async function EditListingPage() {
   const [categories, districts] = await Promise.all([findCategories(), findDistricts()]);
 
   return (
-    <main className="max-w-[600px] mx-auto px-4 sm:px-6 py-10 w-full">
-      <h1 className="text-2xl font-semibold mb-1">Edit your listing</h1>
-      <p className="text-ink-soft text-sm mb-6">
+    <main className="page-narrow max-w-[680px] py-8 sm:py-12">
+      <h1 className="text-2xl sm:text-[28px] font-semibold tracking-tight">Edit your listing</h1>
+      <p className="text-ink-soft mt-1.5 mb-8 max-w-[56ch]">
         Update what customers see on your profile.{" "}
         <Link href={`/vendors/${vendor.id}`} className="text-accent hover:underline">
           View public profile

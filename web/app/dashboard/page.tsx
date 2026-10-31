@@ -50,30 +50,27 @@ export default async function DashboardPage({
   else if (sp.updated === "1") banner = "Listing updated.";
 
   return (
-    <main className="max-w-2xl mx-auto px-4 sm:px-6 py-10 w-full">
+    <main className="page-narrow py-8 sm:py-12">
       {banner && (
         <div
           role="status"
-          className="flex items-start justify-between gap-3 mb-5 text-sm text-accent bg-accent-tint border border-accent/30 rounded-md px-3.5 py-2.5"
+          className="flex items-center justify-between gap-3 mb-6 text-sm text-accent-hover bg-accent-tint border border-accent/30 rounded-card pl-4 pr-1 py-1"
         >
           <span>{banner}</span>
-          <Link href="/dashboard" aria-label="Dismiss" className="-my-2.5 -mr-2 inline-flex items-center justify-center w-10 h-10 text-accent hover:underline shrink-0">
+          <Link href="/dashboard" aria-label="Dismiss" className="inline-flex items-center justify-center w-11 h-11 rounded-control text-accent hover:bg-white/60 shrink-0">
             ✕
           </Link>
         </div>
       )}
-      <h1 className="text-2xl font-semibold">{greeting}</h1>
+      <h1 className="text-2xl sm:text-[28px] font-semibold tracking-tight">{greeting}</h1>
 
       {isVendor ? (
         <VendorDashboard vendor={vendor} quotes={quotes} favorites={favorites} />
       ) : (
         <>
-          <p className="text-ink-soft text-sm mt-1 mb-6">Track your quote requests and saved vendors.</p>
+          <p className="text-ink-soft mt-1.5 mb-8">Track your quote requests and saved vendors.</p>
           <MyRequestsAndFavorites quotes={quotes} favorites={favorites} />
-          <Link
-            href="/search"
-            className="px-4.5 py-2.5 rounded-md bg-accent hover:bg-accent-hover text-white text-sm inline-block"
-          >
+          <Link href="/search" className="btn btn-primary w-full sm:w-auto mt-2">
             Browse vendors
           </Link>
         </>
@@ -94,15 +91,15 @@ async function VendorDashboard({
   if (!vendor) {
     return (
       <>
-        <p className="text-ink-soft text-sm mt-1 mb-6">
-          You don&apos;t have a business listing yet — customers can&apos;t find you until you create one.
-        </p>
-        <Link
-          href="/dashboard/create-listing"
-          className="inline-block px-4.5 py-2.5 rounded-md bg-accent hover:bg-accent-hover text-white text-sm font-medium mb-8"
-        >
-          Create your listing
-        </Link>
+        <div className="card sm:p-7 mt-6 mb-10">
+          <h2 className="text-lg font-semibold">Get found by customers</h2>
+          <p className="text-ink-soft mt-1.5 mb-5 max-w-[52ch]">
+            You don&apos;t have a business listing yet — customers can&apos;t find you until you create one.
+          </p>
+          <Link href="/dashboard/create-listing" className="btn btn-primary btn-lg w-full sm:w-auto">
+            Create your listing
+          </Link>
+        </div>
         {(quotes.length > 0 || favorites.length > 0) && (
           <MyRequestsAndFavorites quotes={quotes} favorites={favorites} />
         )}
@@ -121,26 +118,26 @@ async function VendorDashboard({
 
   return (
     <>
-      <p className="text-ink-soft text-sm mt-1 mb-6">
-        <span className="font-medium text-accent">{vendor.name}</span> · {vendor.category} · {district}
-        {" · "}
-        <Link href="/dashboard/edit-listing" className="text-accent hover:underline">
+      <p className="text-ink-soft mt-1.5">
+        <span className="font-medium text-foreground">{vendor.name}</span> · {vendor.category} · {district}
+      </p>
+      <div className="flex flex-wrap gap-2 mt-4 mb-8">
+        <Link href="/dashboard/edit-listing" className="btn btn-secondary btn-sm">
           Edit listing
         </Link>
-        {" · "}
-        <Link href="/dashboard/services" className="text-accent hover:underline">
+        <Link href="/dashboard/services" className="btn btn-secondary btn-sm">
           Services
         </Link>
-        {" · "}
-        <Link href={`/vendors/${vendor.id}`} className="text-accent hover:underline">
+        <Link href={`/vendors/${vendor.id}`} className="btn btn-ghost btn-sm">
           View public profile
+          <span aria-hidden="true">→</span>
         </Link>
-      </p>
+      </div>
 
       {pendingCount > 0 && (
         <Link
           href="/dashboard/leads?status=pending"
-          className="flex items-center justify-between gap-3 mb-4 rounded-xl border border-gold bg-amber-50 px-4 py-3 text-sm hover:bg-amber-100"
+          className="flex items-center justify-between gap-3 mb-4 rounded-card border border-gold bg-amber-50 px-4 py-3.5 text-sm hover:bg-amber-100 transition-colors"
         >
           <span>
             <span className="font-semibold">
@@ -155,24 +152,24 @@ async function VendorDashboard({
       <OnboardingChecklist vendor={vendor} services={services} />
 
       <h2 className="sr-only">Your numbers</h2>
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3.5 mb-4">
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-4">
         <Stat num={String(leads.length)} label="Total leads" href="/dashboard/leads" />
         <Stat num={String(pendingCount)} label="Awaiting reply" href="/dashboard/leads?status=pending" />
         <Stat num={replyRate === null ? "—" : `${replyRate}%`} label="Reply rate" />
         <Stat num={String(vendor.reviews_count)} label="Reviews" href={`/vendors/${vendor.id}`} />
       </div>
 
-      <div className="border border-line rounded-xl p-5.5 mb-8">
-        <div className="flex items-center justify-between gap-2 mb-1">
-          <h2 className="text-[15px] font-semibold">Recent enquiries</h2>
+      <div className="card sm:px-6 mb-10">
+        <div className="flex items-center justify-between gap-2 min-h-11 -mt-1.5">
+          <h2 className="text-base font-semibold">Recent enquiries</h2>
           {leads.length > 0 && (
-            <Link href="/dashboard/leads" className="inline-flex items-center justify-center min-h-10 min-w-10 text-[13px] text-accent hover:underline">
+            <Link href="/dashboard/leads" className="btn btn-ghost btn-sm -mr-3">
               {leads.length > RECENT_LEADS ? `See all ${leads.length}` : "See all"}
             </Link>
           )}
         </div>
         {leads.length === 0 ? (
-          <p className="text-sm text-ink-soft mt-1.5">
+          <p className="text-sm text-ink-soft mt-1.5 max-w-[60ch]">
             No quote requests yet. Once your listing is live, customer enquiries will show up here.
           </p>
         ) : (
@@ -182,10 +179,10 @@ async function VendorDashboard({
 
       {(quotes.length > 0 || favorites.length > 0) && (
         <section aria-labelledby="my-requests">
-          <h2 id="my-requests" className="text-[15px] font-semibold mb-1">
+          <h2 id="my-requests" className="text-lg font-semibold mb-1">
             Your quote requests and favourites
           </h2>
-          <p className="text-xs text-ink-soft mb-3">Vendors you contacted or saved while planning your own events.</p>
+          <p className="text-sm text-ink-soft mb-5">Vendors you contacted or saved while planning your own events.</p>
           <MyRequestsAndFavorites quotes={quotes} favorites={favorites} headingLevel="h3" />
         </section>
       )}
@@ -216,40 +213,50 @@ function OnboardingChecklist({ vendor, services }: { vendor: VendorRecord; servi
   if (doneCount === items.length) return null;
 
   return (
-    <div className="border border-line rounded-xl p-5.5 mb-4">
-      <h2 className="text-[15px] font-semibold">Complete your profile</h2>
-      <p className="text-xs text-ink-soft mt-0.5 mb-2.5">
+    <div className="card sm:px-6 mb-4">
+      <div className="flex items-baseline justify-between gap-3">
+        <h2 className="text-base font-semibold">Complete your profile</h2>
+        <span className="text-sm font-semibold text-accent tabular-nums" aria-hidden="true">
+          {Math.round((doneCount / items.length) * 100)}%
+        </span>
+      </div>
+      <p className="text-[13px] text-ink-soft mt-0.5 mb-3">
         {doneCount} of {items.length} done. Complete profiles get more enquiries.
       </p>
       <div
-        className="h-1.5 rounded-full bg-line mb-3 overflow-hidden"
+        className="h-2 rounded-full bg-line mb-2 overflow-hidden"
         role="progressbar"
         aria-label="Profile strength"
         aria-valuemin={0}
         aria-valuemax={items.length}
         aria-valuenow={doneCount}
       >
-        <div className="h-full bg-accent" style={{ width: `${(doneCount / items.length) * 100}%` }} />
+        <div className="h-full rounded-full bg-accent" style={{ width: `${(doneCount / items.length) * 100}%` }} />
       </div>
-      <ul className="space-y-1.5 text-sm">
+      <ul className="text-sm -mb-2">
         {items.map((item) => (
-          <li key={item.label} className="flex items-center gap-2">
+          <li key={item.label} className="flex items-center gap-3 min-h-11 border-b border-line last:border-b-0">
             <span
               aria-hidden="true"
-              className={`w-4 h-4 rounded-full shrink-0 border text-[10px] leading-[14px] text-center ${
-                item.done ? "bg-accent border-accent text-white" : "border-[#80868b]"
+              className={`inline-flex items-center justify-center w-5 h-5 rounded-full shrink-0 border ${
+                item.done ? "bg-accent border-accent text-white" : "border-[#80868b] bg-white"
               }`}
             >
-              {item.done ? "✓" : ""}
+              {item.done ? (
+                <svg viewBox="0 0 16 16" className="w-3 h-3" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M3.5 8.5l3 3 6-6.5" />
+                </svg>
+              ) : null}
             </span>
             {item.done ? (
-              <span className="text-ink-soft line-through">
+              <span className="text-ink-soft line-through decoration-ink-soft/50 py-2">
                 {item.label}
                 <span className="sr-only"> (done)</span>
               </span>
             ) : (
-              <Link href={item.href} className="inline-flex items-center min-h-10 text-accent hover:underline">
+              <Link href={item.href} className="flex-1 flex items-center justify-between gap-2 min-h-11 py-2 font-medium text-accent hover:underline">
                 {item.label}
+                <span aria-hidden="true" className="text-ink-soft">→</span>
               </Link>
             )}
           </li>
@@ -262,15 +269,15 @@ function OnboardingChecklist({ vendor, services }: { vendor: VendorRecord; servi
 function Stat({ num, label, href }: { num: string; label: string; href?: string }) {
   const body = (
     <>
-      <div className="text-[22px] font-semibold text-accent">{num}</div>
-      <div className="text-[12.5px] text-ink-soft mt-0.5">{label}</div>
+      <div className="text-2xl sm:text-[28px] leading-tight font-semibold text-accent tabular-nums">{num}</div>
+      <div className="text-[13px] text-ink-soft mt-1">{label}</div>
     </>
   );
   return href ? (
-    <Link href={href} className="block border border-line rounded-lg p-4 hover:border-accent">
+    <Link href={href} className="card card-link block p-4 hover:border-accent">
       {body}
     </Link>
   ) : (
-    <div className="border border-line rounded-lg p-4">{body}</div>
+    <div className="card p-4">{body}</div>
   );
 }
