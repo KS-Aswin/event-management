@@ -1,7 +1,8 @@
 import Link from "next/link";
 import { findVendors, findAllLocations, findFavoriteVendorIds, type VendorRecord } from "@/lib/db";
 import { getSession } from "@/lib/session";
-import { VendorTile } from "@/lib/vendorVisuals";
+import CardImage from "./card-image";
+import { findCardMedia } from "./card-media";
 import FavoriteButton from "@/lib/favorite-button";
 import SearchFilters from "./search-filters";
 import SortSelect from "./sort-select";
@@ -85,26 +86,22 @@ export default async function SearchPage({ searchParams }: { searchParams: Promi
   const popular =
     total === 0 ? (await findVendors({ sort: "rating" })).filter((v) => !v.status || v.status === "approved").slice(0, 3) : [];
 
+  // Card images (cover -> featured -> first photo -> gradient) for every
+  // vendor rendered on this page, in one query.
+  const cardMedia = await findCardMedia([...pageVendors, ...popular]);
+
   const renderCard = (v: VendorRecord) => (
     <article
       key={v.id}
       className="relative flex flex-row gap-3.5 sm:gap-5 py-4 sm:p-4 sm:-mx-4 border-b border-line sm:border-b-0 sm:rounded-card sm:hover:bg-surface-muted transition-colors group has-[a:focus-visible]:ring-2 has-[a:focus-visible]:ring-accent"
     >
-      {v.cover_image_url ? (
-        // eslint-disable-next-line @next/next/no-img-element
-        <img
-          src={v.cover_image_url}
-          alt=""
-          loading="lazy"
-          className="w-[88px] h-[88px] sm:w-[200px] sm:h-[140px] rounded-card shrink-0 object-cover bg-surface-muted"
-        />
-      ) : (
-        <VendorTile
-          category={v.category}
-          size={32}
-          className="w-[88px] h-[88px] sm:w-[200px] sm:h-[140px] rounded-card shrink-0"
-        />
-      )}
+      <CardImage
+        src={cardMedia.get(v.id)?.src ?? null}
+        color={cardMedia.get(v.id)?.color ?? null}
+        hasVideo={cardMedia.get(v.id)?.hasVideo ?? false}
+        category={v.category}
+        className="w-[88px] h-[88px] sm:w-[200px] sm:h-[140px]"
+      />
       <div className="flex-1 min-w-0 flex flex-col">
         <div className="flex items-start justify-between gap-2">
           <h2 className="text-[16px] sm:text-[18px] leading-snug font-semibold tracking-[-0.01em] pt-0.5 group-hover:text-accent">

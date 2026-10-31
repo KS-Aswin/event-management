@@ -18,7 +18,7 @@ export default function DashboardError({
     <main className="max-w-2xl mx-auto px-4 sm:px-6 py-16 w-full text-center">
       <h1 className="text-2xl font-semibold mb-2">Your dashboard couldn&apos;t load</h1>
       <p className="text-ink-soft text-sm mb-6">
-        Check your connection and try again. Your listing and enquiries are safe.
+        Check your connection and try again. Your enquiries and saved vendors are safe.
         {error.digest && <span className="block mt-1 text-xs">Reference: {error.digest}</span>}
       </p>
       <div className="flex flex-wrap justify-center gap-3">

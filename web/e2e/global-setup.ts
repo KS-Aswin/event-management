@@ -37,7 +37,10 @@ export async function cleanup() {
     const users = await client.query("SELECT id FROM users WHERE email ~ $1", [E2E_EMAIL_REGEX]);
     const ids = users.rows.map((r) => r.id);
     if (ids.length) {
-      await client.query("DELETE FROM vendors WHERE owner_id = ANY($1::int[])", [ids]);
+      const gone = await client.query("DELETE FROM vendors WHERE owner_id = ANY($1::int[]) RETURNING id", [ids]);
+      // Uploaded files (local storage driver) live under uploads/vendors/<id>.
+      const uploads = path.resolve(process.env.UPLOADS_DIR || path.resolve(__dirname, "..", "uploads"));
+      for (const row of gone.rows) fs.rmSync(path.join(uploads, "vendors", String(row.id)), { recursive: true, force: true });
       await client.query("DELETE FROM quote_requests WHERE customer_id = ANY($1::int[])", [ids]);
       await client.query("DELETE FROM vendor_reviews WHERE customer_id = ANY($1::int[])", [ids]);
       await client.query("DELETE FROM users WHERE id = ANY($1::int[])", [ids]);

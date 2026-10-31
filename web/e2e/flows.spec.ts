@@ -25,14 +25,18 @@ test.describe("vendor and customer journey", () => {
     customer = { name: `Cara Customer ${tag}`, email: `e2e-customer-${tag}@example.com`, password: "e2e-pass-12345" };
   });
 
-  // P0 wave 1: vendors now land in the /vendor workspace. The onboarding
-  // wizard, offerings and leads pages arrive in wave 2, so until then the
-  // listing is created through the API and only the shipped pages are checked.
+  // Vendors land in the /vendor workspace. This journey creates the listing
+  // through the legacy one-form API (approved at once) so the customer half
+  // can find it; the onboarding wizard itself is covered in
+  // vendor-workspace.spec.ts.
   test("vendor signs up and lands in the workspace", async ({ page }) => {
     await signUp(page, "vendor", vendor);
     await expect(page).toHaveURL(/\/vendor\/onboarding/);
+    // Let the wizard finish loading (it may update its URL) before navigating on.
+    await page.waitForLoadState("networkidle");
     await page.goto("/dashboard");
     await expect(page).toHaveURL(/\/vendor(\/|\?|$)/);
+    await page.waitForLoadState("networkidle");
     // The customer area is off-limits for vendors.
     await page.goto("/my");
     await expect(page).toHaveURL(/\/vendor(\/|\?|$)/);
@@ -124,14 +128,15 @@ test.describe("vendor and customer journey", () => {
     await signOut(page);
   });
 
-  // Wave 2 (P0-15) brings the /vendor/leads page; re-enable the UI check then.
-  test.fixme("vendor sees the lead and changes its status", async ({ page, diag }, testInfo) => {
+  test("vendor sees the lead and changes its status", async ({ page, diag }, testInfo) => {
     await signIn(page, vendor);
     await page.goto("/vendor/leads");
     const status = page.getByRole("combobox", { name: /Status of enquiry from/ }).first();
     await expect(status).toBeVisible();
     await checkScreen(page, diag, testInfo, "vendor-leads");
     await status.selectOption("responded");
+    // Saved (optimistic update, then the PATCH confirms with an Undo link).
+    await expect(page.getByText(/Changed to /).first()).toBeVisible();
     await page.reload();
     await expect(page.getByRole("combobox", { name: /Status of enquiry from/ }).first()).toHaveValue("responded");
   });
