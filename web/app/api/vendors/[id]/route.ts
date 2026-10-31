@@ -5,24 +5,31 @@ import {
   findServicesByVendor,
   findPortfolioByVendor,
   updateVendorListing,
+  districtExists,
+  toPublicVendor,
 } from "@/lib/db";
 import { getSession } from "@/lib/session";
 import { CATEGORIES } from "@/lib/vendorVisuals";
+import { getLiveSession } from "../../_lib/auth";
+import { parseId, validateListingFields } from "../../_lib/validation";
 
 export async function GET(
   request: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
   const { id } = await params;
-  const vendorId = parseInt(id, 10);
-  if (Number.isNaN(vendorId)) {
+  const vendorId = parseId(id);
+  if (vendorId === null) {
     return NextResponse.json({ error: "Invalid vendor id." }, { status: 400 });
   }
 
-  const vendor = await findVendorById(vendorId);
+  // Unapproved/unpublished listings are visible only to their owner.
+  const session = await getSession();
+  const vendor = await findVendorById(vendorId, { publicOnly: true, viewerId: session?.userId ?? null });
   if (!vendor) {
     return NextResponse.json({ error: "Vendor not found." }, { status: 404 });
   }
+  const isOwner = session?.userId != null && vendor.owner_id === session.userId;
 
   const [reviews, services, portfolio] = await Promise.all([
     findReviewsByVendor(vendorId),
@@ -30,21 +37,26 @@ export async function GET(
     findPortfolioByVendor(vendorId),
   ]);
 
-  return NextResponse.json({ vendor, reviews, services, portfolio });
+  return NextResponse.json({
+    vendor: isOwner ? vendor : toPublicVendor(vendor),
+    reviews,
+    services,
+    portfolio,
+  });
 }
 
 export async function PATCH(
   request: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
-  const session = await getSession();
+  const session = await getLiveSession();
   if (!session) {
     return NextResponse.json({ error: "Not signed in." }, { status: 401 });
   }
 
   const { id } = await params;
-  const vendorId = parseInt(id, 10);
-  if (Number.isNaN(vendorId)) {
+  const vendorId = parseId(id);
+  if (vendorId === null) {
     return NextResponse.json({ error: "Invalid vendor id." }, { status: 400 });
   }
 
@@ -55,38 +67,27 @@ export async function PATCH(
     return NextResponse.json({ error: "Invalid request body." }, { status: 400 });
   }
 
-  const { name, category, location, price, experience, tags, about } = (body ?? {}) as Record<
-    string,
-    unknown
-  >;
-
-  if (category !== undefined && !CATEGORIES.includes(category as (typeof CATEGORIES)[number])) {
-    return NextResponse.json({ error: "Please choose a valid category." }, { status: 400 });
+  // Same rules and messages as create; a field that is sent but invalid is a
+  // 400 instead of being silently ignored.
+  const parsed = validateListingFields(body, { partial: true, categories: CATEGORIES });
+  if (!parsed.ok) {
+    return NextResponse.json({ field: parsed.field, error: parsed.error }, { status: 400 });
   }
-
-  let priceNum: number | undefined;
-  let priceLabel: string | undefined;
-  if (price !== undefined) {
-    priceNum = typeof price === "number" ? price : parseInt(String(price), 10);
-    if (!priceNum || priceNum <= 0) {
-      return NextResponse.json({ error: "Please enter a valid starting price." }, { status: 400 });
-    }
-    priceLabel = `₹${priceNum.toLocaleString("en-IN")} onwards`;
+  const f = parsed.fields;
+  if (f.districtId !== undefined && !(await districtExists(f.districtId))) {
+    return NextResponse.json({ field: "districtId", error: "Please choose a valid district." }, { status: 400 });
   }
-
-  const tagList = Array.isArray(tags)
-    ? tags.filter((t): t is string => typeof t === "string" && t.trim().length > 0)
-    : undefined;
 
   const updated = await updateVendorListing(vendorId, session.userId, {
-    name: typeof name === "string" && name.trim() ? name.trim() : undefined,
-    category: typeof category === "string" ? category : undefined,
-    location: typeof location === "string" && location.trim() ? location.trim() : undefined,
-    price: priceNum,
-    priceLabel,
-    experience: typeof experience === "string" && experience.trim() ? experience.trim() : undefined,
-    tags: tagList,
-    about: typeof about === "string" && about.trim() ? about.trim() : undefined,
+    name: f.name,
+    category: f.category,
+    location: f.location,
+    price: f.price,
+    priceLabel: f.price !== undefined ? `₹${f.price.toLocaleString("en-IN")} onwards` : undefined,
+    experience: f.experience,
+    tags: f.tags,
+    about: f.about,
+    districtId: f.districtId,
   });
 
   // updateVendorListing's WHERE clause matches on (id AND owner_id) together,

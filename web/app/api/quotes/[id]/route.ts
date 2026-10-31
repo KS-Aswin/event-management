@@ -1,19 +1,20 @@
 import { NextResponse } from "next/server";
-import { getSession } from "@/lib/session";
+import { getLiveSession } from "../../_lib/auth";
+import { parseId } from "../../_lib/validation";
 import { updateQuoteStatus, QUOTE_STATUSES } from "@/lib/db";
 
 export async function PATCH(
   request: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
-  const session = await getSession();
+  const session = await getLiveSession();
   if (!session) {
     return NextResponse.json({ error: "Not signed in." }, { status: 401 });
   }
 
   const { id } = await params;
-  const quoteId = parseInt(id, 10);
-  if (Number.isNaN(quoteId)) {
+  const quoteId = parseId(id);
+  if (quoteId === null) {
     return NextResponse.json({ error: "Invalid quote id." }, { status: 400 });
   }
 
