@@ -94,6 +94,10 @@ export async function PATCH(request: Request, { params }: Ctx) {
     if (typeof body.hidden !== "boolean") return apiError(400, "hidden must be true or false.", "VALIDATION");
     if (body.hidden && row.status === "approved") fields.status = "hidden";
     if (!body.hidden && row.status === "hidden") {
+      // Hidden by an admin (lib/admin/moderation.ts ADMIN_HIDE_PREFIX): only an admin can restore it.
+      if (row.status_reason?.startsWith("admin:")) {
+        return apiError(403, "Vela's team hid this item. Contact support to restore it.", "ADMIN_HIDDEN");
+      }
       if (row.status_reason === "plan_limit") {
         return apiError(402, "This item is hidden because of your plan limit.", "PLAN_LIMIT", { limit: "images" });
       }

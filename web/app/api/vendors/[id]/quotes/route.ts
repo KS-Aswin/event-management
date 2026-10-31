@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { findVendorById, createQuoteRequest, resolveEnquiryServices, addLeadUnits } from "@/lib/db";
 import { checkRateLimit } from "@/lib/rate-limit";
+import { isEnquiryBlocked } from "@/lib/admin/ops";
 import { getLiveSession } from "../../../_lib/auth";
 import { LIMITS, normalisePhone, parseEventDate, parseId } from "../../../_lib/validation";
 
@@ -65,6 +66,22 @@ export async function POST(
   const cleanPhone = normalisePhone(phone);
   if (!cleanPhone) {
     return fieldError("phone", "Please enter a valid 10-digit mobile number.");
+  }
+
+  // Blocked contacts (P1-13): a phone or account an admin blocked gets a
+  // generic 403 that doesn't say why.
+  const { contactEmail } = (body ?? {}) as Record<string, unknown>;
+  if (
+    await isEnquiryBlocked({
+      phone: cleanPhone,
+      email: typeof contactEmail === "string" ? contactEmail : null,
+      userId: session?.userId ?? null,
+    })
+  ) {
+    return NextResponse.json(
+      { error: "We couldn't send this enquiry. Please contact support if you think this is a mistake." },
+      { status: 403 }
+    );
   }
 
   let cleanDate: string | null = null;

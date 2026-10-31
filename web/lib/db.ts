@@ -485,7 +485,8 @@ export async function findReviewsByVendor(
   const limit = Math.min(Math.max(1, opts.limit ?? 100), 100);
   const offset = Math.max(0, opts.offset ?? 0);
   const result = await pool.query<ReviewRecord>(
-    "SELECT * FROM vendor_reviews WHERE vendor_id = $1 ORDER BY created_at DESC, id DESC LIMIT $2 OFFSET $3",
+    // Hidden reviews (admin moderation, P1-5) never reach public pages or APIs.
+    "SELECT * FROM vendor_reviews WHERE vendor_id = $1 AND hidden_at IS NULL ORDER BY created_at DESC, id DESC LIMIT $2 OFFSET $3",
     [vendorId, limit, offset]
   );
   return result.rows;
@@ -895,9 +896,11 @@ export async function createVendorReview(params: {
  * Recompute a vendor's rating and review count from its real reviews plus
  * the seeded/imported baseline kept in seed_rating/seed_reviews_count
  * (migration 003), so the first real review adds to "4.7 from 210 reviews"
- * instead of replacing it. New vendors have a 0/0 baseline.
+ * instead of replacing it. New vendors have a 0/0 baseline. Reviews hidden
+ * by an admin (hidden_at set, P1-5) do not count. Exported for the admin
+ * moderation code (lib/admin/moderation.ts), which calls it in its own txn.
  */
-async function recomputeVendorRating(
+export async function recomputeVendorRating(
   client: { query: (sql: string, values?: unknown[]) => Promise<unknown> },
   vendorId: number
 ) {
@@ -907,7 +910,7 @@ async function recomputeVendorRating(
          (v.seed_rating * v.seed_reviews_count + COALESCE(r.total, 0))
            / NULLIF(v.seed_reviews_count + r.n, 0), 1), 0),
        reviews_count = v.seed_reviews_count + r.n
-     FROM (SELECT COUNT(*)::int AS n, SUM(rating) AS total FROM vendor_reviews WHERE vendor_id = $1) r
+     FROM (SELECT COUNT(*)::int AS n, SUM(rating) AS total FROM vendor_reviews WHERE vendor_id = $1 AND hidden_at IS NULL) r
      WHERE v.id = $1`,
     [vendorId]
   );
@@ -924,7 +927,7 @@ export async function reportReview(params: {
   try {
     const result = await pool.query(
       `INSERT INTO review_reports (review_id, reporter_id, reason)
-       SELECT r.id, $2, $3 FROM vendor_reviews r WHERE r.id = $1`,
+       SELECT r.id, $2, $3 FROM vendor_reviews r WHERE r.id = $1 AND r.hidden_at IS NULL`,
       [params.reviewId, params.reporterId, params.reason]
     );
     return (result.rowCount ?? 0) > 0 ? "ok" : "not_found";
