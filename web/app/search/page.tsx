@@ -86,27 +86,30 @@ export default async function SearchPage({ searchParams }: { searchParams: Promi
     total === 0 ? (await findVendors({ sort: "rating" })).filter((v) => !v.status || v.status === "approved").slice(0, 3) : [];
 
   const renderCard = (v: VendorRecord) => (
-    <article key={v.id} className="relative flex flex-row gap-3.5 sm:gap-4.5 py-4.5 border-b border-line group">
+    <article
+      key={v.id}
+      className="relative flex flex-row gap-3.5 sm:gap-5 py-4 sm:p-4 sm:-mx-4 border-b border-line sm:border-b-0 sm:rounded-card sm:hover:bg-surface-muted transition-colors group has-[a:focus-visible]:ring-2 has-[a:focus-visible]:ring-accent"
+    >
       {v.cover_image_url ? (
         // eslint-disable-next-line @next/next/no-img-element
         <img
           src={v.cover_image_url}
           alt=""
           loading="lazy"
-          className="w-24 h-24 sm:w-[180px] sm:h-[130px] rounded-[10px] shrink-0 object-cover bg-gray-100"
+          className="w-[88px] h-[88px] sm:w-[200px] sm:h-[140px] rounded-card shrink-0 object-cover bg-surface-muted"
         />
       ) : (
         <VendorTile
           category={v.category}
           size={32}
-          className="w-24 h-24 sm:w-[180px] sm:h-[130px] rounded-[10px] shrink-0"
+          className="w-[88px] h-[88px] sm:w-[200px] sm:h-[140px] rounded-card shrink-0"
         />
       )}
-      <div className="flex-1 min-w-0">
+      <div className="flex-1 min-w-0 flex flex-col">
         <div className="flex items-start justify-between gap-2">
-          <h2 className="text-[16px] sm:text-[17px] font-semibold group-hover:text-accent group-hover:underline">
+          <h2 className="text-[16px] sm:text-[18px] leading-snug font-semibold tracking-[-0.01em] pt-0.5 group-hover:text-accent">
             {/* Stretched link: the whole card is clickable, but the favourite button sits outside it. */}
-            <Link href={`/vendors/${v.id}`} className="after:absolute after:inset-0">
+            <Link href={`/vendors/${v.id}`} className="after:absolute after:inset-0 after:rounded-card focus-visible:outline-none">
               {v.name}
             </Link>
           </h2>
@@ -114,85 +117,73 @@ export default async function SearchPage({ searchParams }: { searchParams: Promi
             <FavoriteButton vendorId={v.id} initialFavorited={favoriteIds.has(v.id)} loggedIn={!!session} size="sm" />
           </div>
         </div>
-        <div className="text-[13px] text-ink-soft mt-0.5">
+        <div className="text-[13px] sm:text-sm text-ink-soft mt-0.5 line-clamp-2">
           {v.category} · {v.location} · {v.experience} experience
         </div>
-        <div className="inline-flex items-center gap-1.5 text-[13px] mt-1.5 sm:mt-2">
-          <span className="text-gold" aria-hidden="true">★</span> {v.rating} ({v.reviews_count} reviews)
+        <div className="flex items-center gap-1.5 text-[13px] sm:text-sm mt-1.5">
+          {v.reviews_count > 0 ? (
+            <>
+              <span className="text-gold" aria-hidden="true">★</span>
+              <span className="font-medium text-foreground">{v.rating}</span>
+              <span className="text-ink-soft">({v.reviews_count} reviews)</span>
+            </>
+          ) : (
+            <span className="text-ink-soft">New on Vela · no reviews yet</span>
+          )}
         </div>
-        <div className="hidden sm:flex gap-1.5 flex-wrap mt-2">
-          {v.tags.map((t) => (
-            <span key={t} className="bg-gray-100 text-[12px] text-ink-soft px-2.5 py-0.5 rounded-full">
-              {t}
-            </span>
-          ))}
-        </div>
-        <div className="text-sm font-semibold text-accent mt-1.5 sm:mt-2">{v.price_label}</div>
+        {v.tags.length > 0 && (
+          <div className="hidden sm:flex gap-1.5 flex-wrap mt-2.5">
+            {v.tags.map((t) => (
+              <span key={t} className="chip">
+                {t}
+              </span>
+            ))}
+          </div>
+        )}
+        <div className="text-sm sm:text-[15px] font-semibold text-accent mt-1.5 sm:mt-auto sm:pt-2.5">{v.price_label}</div>
       </div>
     </article>
   );
 
   return (
-    <main className="max-w-[1180px] mx-auto px-4 sm:px-6 py-6 flex flex-col md:flex-row gap-x-8 w-full">
-      {/* Query box for phones; the header search box covers md and up. */}
-      <form action="/search" method="get" role="search" className="md:hidden mb-4 flex items-center gap-2 border border-line rounded-full px-4 py-0 bg-white">
-        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="text-ink-soft shrink-0" aria-hidden="true">
-          <circle cx="11" cy="11" r="8" />
-          <path d="m21 21-4.35-4.35" />
-        </svg>
-        <input
-          key={query ?? ""}
-          name="q"
-          type="search"
-          defaultValue={query ?? ""}
-          aria-label="Search vendors"
-          placeholder="Search vendors"
-          enterKeyHint="search"
-          className="flex-1 min-w-0 min-h-11 outline-none text-base bg-transparent"
-        />
-        {categories.map((c) => (
-          <input key={c} type="hidden" name="category" value={c} />
-        ))}
-        {location && <input type="hidden" name="location" value={location} />}
-        {minRating && <input type="hidden" name="minRating" value={String(minRating)} />}
-        {sort !== "rating" && <input type="hidden" name="sort" value={sort} />}
-        <button type="submit" className="min-h-11 text-sm text-accent font-medium px-1">
-          Search
-        </button>
-      </form>
-
+    <main className="page w-full pt-4 pb-10 md:pt-8 md:pb-16 flex flex-col md:flex-row md:items-start gap-x-10">
       <SearchFilters
         locations={locations}
         activeLocation={location ?? ""}
         activeMinRating={minRating ? String(minRating) : "0"}
+        mobileToolbar={<SortSelect value={sort} />}
       />
 
       <div className="flex-1 min-w-0">
-        <div className="flex items-center justify-between gap-3 mb-3 flex-wrap">
-          <p className="text-sm text-ink-soft" aria-live="polite">
-            {total} vendor{total !== 1 ? "s" : ""}
-            {query ? <> for &ldquo;{query}&rdquo;</> : " found"}
+        <div className="flex items-center justify-between gap-3 mb-3 md:mb-4 min-h-6 md:min-h-10 flex-wrap">
+          <p className="text-sm md:text-[15px] text-ink-soft" aria-live="polite">
+            <span className="font-semibold text-foreground">{total}</span> vendor{total !== 1 ? "s" : ""}
+            {query ? <> for &ldquo;<span className="text-foreground">{query}</span>&rdquo;</> : " found"}
           </p>
-          <SortSelect value={sort} />
+          <div className="hidden md:block">
+            <SortSelect value={sort} />
+          </div>
         </div>
 
         {chips.length > 0 && (
-          <ul className="flex gap-2 flex-wrap mb-3" aria-label="Active filters">
+          <ul className="flex gap-2 flex-wrap items-center mb-2 md:mb-3" aria-label="Active filters">
             {chips.map((c) => (
               <li key={c.label}>
                 <Link
                   href={c.href}
-                  className="inline-flex items-center gap-1.5 bg-accent-tint text-accent text-[12.5px] rounded-full pl-3 pr-2 py-1 min-h-10 hover:underline"
+                  className="inline-flex items-center gap-1 bg-accent-tint text-accent text-[13px] font-medium rounded-full pl-3.5 pr-2 min-h-11 sm:min-h-9 border border-transparent hover:border-accent transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
                   aria-label={`Remove filter ${c.label}`}
                 >
                   {c.label}
-                  <span aria-hidden="true">×</span>
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" aria-hidden="true">
+                    <path d="M18 6 6 18M6 6l12 12" />
+                  </svg>
                 </Link>
               </li>
             ))}
             {chips.length > 1 && (
               <li>
-                <Link href={href({ q: null, categories: [], location: null, minRating: null })} className="inline-flex items-center min-h-10 text-[12.5px] text-accent py-1 px-1 hover:underline">
+                <Link href={href({ q: null, categories: [], location: null, minRating: null })} className="inline-flex items-center min-h-11 sm:min-h-9 text-[13px] font-medium text-accent px-2 rounded-full hover:underline">
                   Clear all
                 </Link>
               </li>
@@ -201,20 +192,28 @@ export default async function SearchPage({ searchParams }: { searchParams: Promi
         )}
 
         {total === 0 ? (
-          <div className="py-12 text-center text-ink-soft">
-            <p>No vendors match {chips.length > 0 ? "these filters" : "yet"}.</p>
+          <div>
+            <div className="mt-2 rounded-card bg-surface-muted px-5 py-10 sm:py-12 text-center text-ink-soft">
+              <span className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-full bg-surface text-accent shadow-card" aria-hidden="true">
+                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+                  <circle cx="11" cy="11" r="7" />
+                  <path d="m20 20-3.5-3.5M8.5 11h5" />
+                </svg>
+              </span>
+              <p className="text-base sm:text-lg font-semibold text-foreground">No vendors match {chips.length > 0 ? "these filters" : "yet"}.</p>
             {chips.length > 0 && (
-              <p className="mt-2 text-sm">
+              <p className="mt-2 text-sm max-w-[42ch] mx-auto">
                 Remove a filter above, or{" "}
-                <Link href="/search" className="text-accent hover:underline">
+                <Link href="/search" className="text-accent font-medium underline underline-offset-2 hover:no-underline">
                   browse all vendors
                 </Link>
                 .
               </p>
             )}
+            </div>
             {popular.length > 0 && (
-              <div className="text-left mt-10">
-                <h2 className="text-sm uppercase tracking-wide text-ink-soft mb-1">Popular vendors</h2>
+              <div className="mt-8 sm:mt-10">
+                <h2 className="eyebrow mb-1 sm:mb-2">Popular vendors</h2>
                 <div>{popular.map(renderCard)}</div>
               </div>
             )}
@@ -224,9 +223,9 @@ export default async function SearchPage({ searchParams }: { searchParams: Promi
         )}
 
         {pageCount > 1 && (
-          <nav aria-label="Pagination" className="flex items-center justify-between gap-3 mt-6 text-sm">
+          <nav aria-label="Pagination" className="flex items-center justify-between gap-3 mt-8 text-sm">
             {page > 1 ? (
-              <Link href={href({ page: page - 1 })} className="inline-flex items-center min-h-10 px-3.5 py-2 border border-line rounded-md hover:border-accent">
+              <Link href={href({ page: page - 1 })} className="btn btn-secondary">
                 ← Previous
               </Link>
             ) : (
@@ -236,7 +235,7 @@ export default async function SearchPage({ searchParams }: { searchParams: Promi
               Page {page} of {pageCount}
             </span>
             {page < pageCount ? (
-              <Link href={href({ page: page + 1 })} className="inline-flex items-center min-h-10 px-3.5 py-2 border border-line rounded-md hover:border-accent">
+              <Link href={href({ page: page + 1 })} className="btn btn-secondary">
                 Next →
               </Link>
             ) : (

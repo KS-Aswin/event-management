@@ -9,8 +9,8 @@ export default function SortSelect({ value }: { value: string }) {
   const [pending, startTransition] = useTransition();
 
   return (
-    <label className="flex items-center gap-2 text-sm text-ink-soft">
-      Sort by
+    <label className="flex min-w-0 items-center justify-end gap-2 text-sm text-ink-soft whitespace-nowrap">
+      <span className="sr-only sm:not-sr-only">Sort by</span>
       <select
         value={value}
         aria-busy={pending}
@@ -22,7 +22,7 @@ export default function SortSelect({ value }: { value: string }) {
           const qs = params.toString();
           startTransition(() => router.replace(qs ? `/search?${qs}` : "/search"));
         }}
-        className={`min-h-10 px-2.5 py-1.5 border border-line rounded-md text-sm text-foreground bg-white ${pending ? "opacity-60" : ""}`}
+        className={`field w-auto min-w-0 inline-block pr-8 text-foreground ${pending ? "opacity-60" : ""}`}
       >
         <option value="rating">Highest rated</option>
         <option value="reviews">Most reviewed</option>
