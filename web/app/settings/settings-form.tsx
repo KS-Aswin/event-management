@@ -3,8 +3,7 @@
 import { useId, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 
-const inputClass =
-  "w-full px-3 py-2.5 border border-line rounded-md text-base sm:text-sm outline-none focus:border-accent focus-visible:ring-2 focus-visible:ring-accent/40";
+const inputClass = "field";
 
 type PrefKey = "emailNotifications" | "smsNotifications";
 
@@ -25,8 +24,13 @@ export default function SettingsForm({
   const [name, setName] = useState(initialName);
   const [email, setEmail] = useState(initialEmail);
   // Last values the server confirmed, used to disable Save when nothing changed.
-  const [saved, setSaved] = useState({ name: initialName, email: initialEmail });
-  const [emailNotifications, setEmailNotifications] = useState(initialEmailNotifications);
+  const [saved, setSaved] = useState({
+    name: initialName,
+    email: initialEmail,
+  });
+  const [emailNotifications, setEmailNotifications] = useState(
+    initialEmailNotifications,
+  );
   const [pending, setPending] = useState<Record<PrefKey, boolean>>({
     emailNotifications: false,
     smsNotifications: false,
@@ -44,7 +48,8 @@ export default function SettingsForm({
 
   const trimmedName = name.trim();
   const normalisedEmail = email.trim().toLowerCase();
-  const unchanged = trimmedName === saved.name && normalisedEmail === saved.email.toLowerCase();
+  const unchanged =
+    trimmedName === saved.name && normalisedEmail === saved.email.toLowerCase();
 
   async function saveProfile(e: React.FormEvent) {
     e.preventDefault();
@@ -72,8 +77,12 @@ export default function SettingsForm({
       // Show exactly what was stored, so the form never shows a value the
       // server ignored.
       const stored = {
-        name: typeof data.user?.name === "string" ? data.user.name : trimmedName,
-        email: typeof data.user?.email === "string" ? data.user.email : normalisedEmail,
+        name:
+          typeof data.user?.name === "string" ? data.user.name : trimmedName,
+        email:
+          typeof data.user?.email === "string"
+            ? data.user.email
+            : normalisedEmail,
       };
       setName(stored.name);
       setEmail(stored.email);
@@ -116,57 +125,64 @@ export default function SettingsForm({
   }
 
   return (
-    <div className="space-y-4">
-      <section className="border border-line rounded-xl p-5.5">
-        <h2 className="text-[15px] font-semibold mb-3">Profile</h2>
+    <div className="space-y-4 sm:space-y-5">
+      <section className="card sm:p-7">
+        <SectionHeading title="Profile" />
         {error && (
-          <div role="alert" className="mb-3 text-sm text-red-700 bg-red-50 border border-red-100 rounded-md px-3 py-2">
+          <div role="alert" className="alert-error mb-4">
             {error}
           </div>
         )}
-        <form onSubmit={saveProfile} className="space-y-3">
-          <div>
-            <label htmlFor={nameId} className="block text-[13px] text-ink-soft mb-1.5">
-              Full name
-            </label>
-            <input
-              id={nameId}
-              name="name"
-              autoComplete="name"
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              className={inputClass}
-            />
+        <form onSubmit={saveProfile}>
+          <div className="grid gap-4 sm:grid-cols-2">
+            <div>
+              <label htmlFor={nameId} className="label">
+                Full name
+              </label>
+              <input
+                id={nameId}
+                name="name"
+                autoComplete="name"
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                className={inputClass}
+              />
+            </div>
+            <div>
+              <label htmlFor={emailId} className="label">
+                Email
+              </label>
+              <input
+                id={emailId}
+                name="email"
+                type="email"
+                autoComplete="email"
+                autoCapitalize="none"
+                spellCheck={false}
+                inputMode="email"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                className={inputClass}
+              />
+            </div>
           </div>
-          <div>
-            <label htmlFor={emailId} className="block text-[13px] text-ink-soft mb-1.5">
-              Email
-            </label>
-            <input
-              id={emailId}
-              name="email"
-              type="email"
-              autoComplete="email"
-              autoCapitalize="none"
-              spellCheck={false}
-              inputMode="email"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              className={inputClass}
-            />
+          <div className="mt-5 pt-5 border-t border-line flex sm:justify-end">
+            <button
+              type="submit"
+              disabled={saving || unchanged}
+              className="btn btn-primary w-full sm:w-auto"
+            >
+              {saving ? "Saving…" : "Save changes"}
+            </button>
           </div>
-          <button
-            type="submit"
-            disabled={saving || unchanged}
-            className="min-h-11 px-4.5 py-2.5 rounded-md bg-accent hover:bg-accent-hover text-white text-sm font-medium disabled:opacity-70 disabled:hover:bg-accent disabled:cursor-not-allowed outline-none focus-visible:ring-2 focus-visible:ring-accent/40 focus-visible:ring-offset-2"
-          >
-            {saving ? "Saving…" : "Save changes"}
-          </button>
         </form>
       </section>
 
-      <section className="border border-line rounded-xl p-5.5">
-        <h2 className="text-[15px] font-semibold mb-1">Notifications</h2>
+      <section className="card sm:p-7">
+        <SectionHeading
+          title="Notifications"
+          description="Choose how Vela gets in touch with you."
+        />
         <ToggleRow
           label="Email notifications"
           checked={emailNotifications}
@@ -185,21 +201,29 @@ export default function SettingsForm({
         />
       </section>
 
-      <section className="border border-line rounded-xl p-5.5">
-        <h2 className="text-[15px] font-semibold mb-3">Account</h2>
-        <button
-          onClick={logout}
-          className="min-h-11 px-4 py-2 rounded-md bg-gray-100 hover:bg-gray-200 text-sm outline-none focus-visible:ring-2 focus-visible:ring-accent/40"
-        >
-          Log out
-        </button>
-        <div className="mt-4 pt-4 border-t border-line">
-          <h3 className="text-[13px] font-semibold text-red-700 mb-1">Danger zone</h3>
+      <section className="card sm:p-7">
+        <SectionHeading title="Account" />
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+          <p className="text-sm text-ink-soft">
+            Sign out of Vela on this device.
+          </p>
+          <button
+            type="button"
+            onClick={logout}
+            className="btn btn-secondary w-full sm:w-auto"
+          >
+            Log out
+          </button>
+        </div>
+        <div className="mt-5 rounded-control border border-danger/25 bg-danger-tint/60 px-4 py-3.5">
+          <h3 className="text-sm font-semibold text-danger mb-1">
+            Danger zone
+          </h3>
           <p className="text-sm text-ink-soft">
             To delete your account, email{" "}
             <a
               href="mailto:help@vela.example?subject=Delete%20my%20account"
-              className="text-accent hover:underline"
+              className="font-medium text-accent underline underline-offset-2 hover:text-accent-hover whitespace-nowrap"
             >
               help@vela.example
             </a>{" "}
@@ -210,7 +234,7 @@ export default function SettingsForm({
 
       <div role="status" aria-live="polite" className="contents">
         {toast && (
-          <div className="fixed bottom-6 left-1/2 -translate-x-1/2 bg-gray-900 text-white text-sm px-5.5 py-3 rounded-lg z-50">
+          <div className="fixed left-1/2 -translate-x-1/2 bottom-[calc(1.5rem+env(safe-area-inset-bottom))] w-max max-w-[calc(100vw-2rem)] bg-foreground text-white text-sm font-medium px-5 py-3 rounded-card shadow-pop z-50">
             {toast}
           </div>
         )}
@@ -237,11 +261,15 @@ function ToggleRow({
   const labelId = useId();
   const descId = useId();
   return (
-    <div className={`flex items-center justify-between gap-3 py-1 text-sm ${!last ? "border-b border-line" : ""}`}>
-      <div className="py-1.5">
-        <span id={labelId}>{label}</span>
+    <div
+      className={`flex items-center justify-between gap-4 py-2 ${!last ? "border-b border-line" : ""}`}
+    >
+      <div className="py-1.5 min-w-0">
+        <span id={labelId} className="text-[15px] font-medium text-foreground">
+          {label}
+        </span>
         {description && (
-          <p id={descId} className="text-xs text-ink-soft mt-0.5">
+          <p id={descId} className="text-[13px] text-ink-soft mt-0.5">
             {description}
           </p>
         )}
@@ -258,17 +286,34 @@ function ToggleRow({
         className="group shrink-0 min-h-11 min-w-11 flex items-center justify-center rounded-full outline-none disabled:cursor-not-allowed disabled:opacity-60"
       >
         <span
-          className={`w-10 h-[22px] rounded-full relative transition-colors group-focus-visible:ring-2 group-focus-visible:ring-accent/40 group-focus-visible:ring-offset-2 ${
-            checked ? "bg-accent" : "bg-gray-200"
+          className={`block w-11 h-6 rounded-full relative transition-colors group-focus-visible:ring-2 group-focus-visible:ring-accent/40 group-focus-visible:ring-offset-2 ${
+            checked ? "bg-accent" : "bg-line-strong"
           }`}
         >
           <span
-            className={`w-4 h-4 rounded-full bg-white absolute top-[3px] transition-all ${
-              checked ? "left-[21px]" : "left-[3px]"
+            className={`size-[18px] rounded-full bg-white shadow-sm absolute top-[3px] left-[3px] transition-transform ${
+              checked ? "translate-x-5" : "translate-x-0"
             }`}
           />
         </span>
       </button>
+    </div>
+  );
+}
+
+function SectionHeading({
+  title,
+  description,
+}: {
+  title: string;
+  description?: string;
+}) {
+  return (
+    <div className="mb-4">
+      <h2 className="text-base font-semibold text-foreground">{title}</h2>
+      {description && (
+        <p className="text-sm text-ink-soft mt-1">{description}</p>
+      )}
     </div>
   );
 }
