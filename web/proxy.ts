@@ -1,29 +1,66 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { jwtVerify } from "jose";
+import { pool } from "@/lib/db";
 import {
   legacyDashboardTarget,
   roleRedirect,
   type Role,
 } from "@/app/_nav/routes";
 
-// Optimistic role routing (PRODUCT_PLAN 2.6). Reads only the signed session
-// cookie: no DB. The real checks (user still exists, status, session_version,
-// role from the DB) are the layout guards and requireRole() in each API
+// Optimistic role routing (PRODUCT_PLAN 2.6). Reads the signed session
+// cookie; the only DB read is the /admin page re-check (adminStillLive).
+// The real checks (user still exists, status, session_version, role from
+// the DB) are the layout guards and requireRole() in each API
 // handler; this layer only makes the common redirects fast and keeps the
 // admin area a plain 404 for everyone else.
 
 const COOKIE_NAME = "vela_session";
 
-async function cookieRole(request: NextRequest): Promise<Role | null> {
+interface CookieSession {
+  role: Role;
+  userId: number;
+  sessionVersion: number;
+}
+
+async function cookieSession(request: NextRequest): Promise<CookieSession | null> {
   const token = request.cookies.get(COOKIE_NAME)?.value;
   const secret = process.env.SESSION_SECRET;
   if (!token || !secret || secret.length < 32) return null;
   try {
     const { payload } = await jwtVerify(token, new TextEncoder().encode(secret));
     const role = payload.role;
-    return role === "customer" || role === "vendor" || role === "admin" ? role : null;
+    if (role !== "customer" && role !== "vendor" && role !== "admin") return null;
+    return {
+      role,
+      userId: Number(payload.userId),
+      sessionVersion: typeof payload.sessionVersion === "number" ? payload.sessionVersion : 0,
+    };
   } catch {
     return null;
+  }
+}
+
+/**
+ * /admin pages only: re-check an admin cookie against the DB (role, status,
+ * session_version, like resolveLiveSession). The layout guard does the same,
+ * but by then the root loading.tsx has already streamed a 200, so a
+ * demoted, suspended or force-logged-out admin would get a 200 page with
+ * the not-found UI. Doing it here keeps it a real 404. Fails closed.
+ */
+async function adminStillLive(s: CookieSession): Promise<boolean> {
+  if (!Number.isInteger(s.userId)) return false;
+  try {
+    const { rows } = await pool.query<{ role: string; status: string | null; session_version: number | null }>(
+      "SELECT role, status, session_version FROM users WHERE id = $1",
+      [s.userId]
+    );
+    const u = rows[0];
+    if (!u || u.role !== "admin") return false;
+    if (u.status && u.status !== "active") return false;
+    if (typeof u.session_version === "number" && u.session_version !== s.sessionVersion) return false;
+    return true;
+  } catch {
+    return false;
   }
 }
 
@@ -34,11 +71,20 @@ function notFoundPage(request: NextRequest) {
 
 export async function proxy(request: NextRequest) {
   const { pathname, search } = request.nextUrl;
-  const role = await cookieRole(request);
+  const cookie = await cookieSession(request);
+  const role = cookie?.role ?? null;
 
   if (pathname === "/api/admin" || pathname.startsWith("/api/admin/")) {
-    if (role !== "admin") return NextResponse.json({ error: "Not found." }, { status: 404 });
-    return NextResponse.next();
+    // Fast answers by cookie; the handler's requireAdmin() is the real check
+    // (it reloads the user, so a stale admin cookie still gets 403 there).
+    const noStore = { "Cache-Control": "private, no-store" };
+    if (!role) return NextResponse.json({ error: "Please sign in." }, { status: 401, headers: noStore });
+    if (role !== "admin") {
+      return NextResponse.json({ error: "You don't have access to this." }, { status: 403, headers: noStore });
+    }
+    const response = NextResponse.next();
+    response.headers.set("Cache-Control", "private, no-store");
+    return response;
   }
 
   // Old vendor pages moved for good; bookmarks and e-mails keep working.
@@ -53,6 +99,9 @@ export async function proxy(request: NextRequest) {
   }
 
   const target = roleRedirect(role, pathname);
+  if (target === null && role === "admin" && cookie && (pathname === "/admin" || pathname.startsWith("/admin/"))) {
+    if (!(await adminStillLive(cookie))) return notFoundPage(request);
+  }
   if (target === "404") return notFoundPage(request);
   if (target) return NextResponse.redirect(new URL(target, request.url));
 

@@ -4,7 +4,9 @@ import fs from "node:fs";
 // Load DATABASE_URL etc. for the global setup/teardown cleanup (local DB only).
 if (fs.existsSync(".env.local")) process.loadEnvFile(".env.local");
 
-const PORT = 3130;
+// E2E_PORT / E2E_DIST_DIR let several suites run side by side (own server and build dir).
+const PORT = Number(process.env.E2E_PORT) || 3130;
+const DIST_DIR = process.env.E2E_DIST_DIR || ".next-e2e";
 const headed = process.env.HEADED === "1";
 
 export default defineConfig({
@@ -41,7 +43,7 @@ export default defineConfig({
     command: `npx next dev -p ${PORT}`,
     url: `http://localhost:${PORT}`,
     reuseExistingServer: false,
-    env: { NEXT_DIST_DIR: ".next-e2e" },
+    env: { NEXT_DIST_DIR: DIST_DIR },
     timeout: 240_000,
     stdout: "ignore",
     stderr: "pipe",

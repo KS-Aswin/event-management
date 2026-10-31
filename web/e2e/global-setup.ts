@@ -5,7 +5,7 @@ import fs from "node:fs";
 import path from "node:path";
 import pg from "pg";
 
-export const E2E_EMAIL_REGEX = "^e2e-(customer|vendor)-[0-9a-z-]+@example[.]com$";
+export const E2E_EMAIL_REGEX = "^e2e-(customer|vendor|admin)-[0-9a-z-]+@example[.]com$";
 
 function isLocal(url: string | undefined): boolean {
   if (!url) return false;

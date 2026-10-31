@@ -177,3 +177,40 @@ export async function signOut(page: Page) {
   await page.waitForURL((u) => u.pathname === "/");
   await expect(page.getByRole("link", { name: "Sign in" })).toBeVisible();
 }
+
+/**
+ * TEST-ONLY: creates an admin straight in the LOCAL DB (e2e-admin-... email,
+ * removed by the global cleanup) and signs in through the login page.
+ * Returns the credentials. Refuses a non-localhost DATABASE_URL.
+ */
+export async function loginAsAdmin(page: Page, testInfo: TestInfo): Promise<Creds> {
+  const url = process.env.DATABASE_URL;
+  const host = (() => {
+    try {
+      return new URL(url ?? "").hostname;
+    } catch {
+      return "";
+    }
+  })();
+  if (!url || !LOCAL_HOSTS.has(host)) throw new Error("loginAsAdmin needs a localhost DATABASE_URL");
+  const { default: pg } = await import("pg");
+  const { default: bcrypt } = await import("bcryptjs");
+  const creds: Creds = {
+    name: "E2E Admin",
+    email: `e2e-admin-${runTag(testInfo)}-${Math.random().toString(36).slice(2, 8)}@example.com`,
+    password: "e2e-admin-password-1",
+  };
+  const client = new pg.Client({ connectionString: url });
+  await client.connect();
+  try {
+    await client.query("INSERT INTO users (name, email, password_hash, role) VALUES ($1, $2, $3, 'admin')", [
+      creds.name,
+      creds.email,
+      await bcrypt.hash(creds.password, 10),
+    ]);
+  } finally {
+    await client.end();
+  }
+  await signIn(page, creds);
+  return creds;
+}

@@ -237,6 +237,58 @@ export const vendors = [
   },
 ];
 
+// Admin queue fixtures (P1). NOT public: pending / changes_requested
+// listings with no owner, so the public counts above are unchanged. They give
+// the admin queues something to show: 2 pending vendors (one with photos
+// waiting for review), 1 changes-requested listing, and the third
+// "Kolkali" custom offering (with Guruvayur Chenda Sangham and Petal & Palm
+// Decor, see kolkaliOfferings). submittedHoursAgo sets submitted_at.
+export const adminFixtureVendors = [
+  {
+    name: "Kochi Bloom Florists", category: "Decoration", location: "Kakkanad", district: "Ernakulam", vendorType: "company",
+    status: "pending", submittedHoursAgo: 52, mediaStatus: "pending_review",
+    rating: 0, reviewsCount: 0, experience: "4 yrs", years: 4, tags: ["Floral", "Car decor"],
+    about: "Fresh-flower decor for weddings, house-warmings and car decoration across Kochi.",
+    areas: [["Ernakulam", null, null]],
+    theme: { from: "#2d6a4f", to: "#f4a6c0", accent: "#fff3b0", motif: "flower" },
+    offerings: [
+      { template: "stage-mandapam-decor", category: "Decoration", title: "Floral stage decor", description: "Fresh-flower stage and backdrop.", price: 35000, unit: "event" },
+    ],
+    gallery: [{ title: "Jasmine backdrop", subtitle: "Kakkanad, 2025" }, { title: "Car decor", subtitle: "Rose and orchid" }],
+  },
+  {
+    name: "Malabar Folk Arts Collective", category: "Traditional & Live Arts", location: "Tirur", district: "Malappuram", vendorType: "company",
+    status: "pending", submittedHoursAgo: 6,
+    rating: 0, reviewsCount: 0, experience: "9 yrs", years: 9, tags: ["Oppana", "Kolkali", "Duffmuttu"], team: 14,
+    about: "Oppana, kolkali and duffmuttu troupes from Tirur for weddings and cultural evenings.",
+    areas: [["Malappuram", null, null], ["Kozhikode", 2500, null]],
+    theme: { from: "#3a0ca3", to: "#f72585", accent: "#ffd6a5", motif: "drum" },
+    offerings: [],
+    gallery: [{ title: "Oppana", subtitle: "Wedding eve, Tirur" }],
+  },
+  {
+    name: "Alappuzha Invites & Prints", category: "Invitations & Printing", location: "Alappuzha", district: "Alappuzha", vendorType: "individual",
+    status: "changes_requested", submittedHoursAgo: 30,
+    statusReason: "Please add at least three photos of invitations you have printed yourself (not supplier catalogue images) and a starting price for your wedding cards.",
+    rating: 0, reviewsCount: 0, experience: "3 yrs", years: 3, tags: ["Wedding cards", "Malayalam calligraphy"],
+    about: "Wedding cards and save-the-dates with Malayalam calligraphy.",
+    areas: [["Alappuzha", null, null]],
+    theme: { from: "#7f5539", to: "#ede0d4", accent: "#ffffff", motif: "sparkle" },
+    offerings: [],
+    gallery: [],
+  },
+];
+
+/** The same "Other" offering typed three ways by three vendors (custom_offering_requests). */
+export const kolkaliOfferings = [
+  { vendor: "Guruvayur Chenda Sangham", title: "Kolkali", price: 15000 },
+  { vendor: "Petal & Palm Decor", title: "Kolkali team", price: 18000 },
+  { vendor: "Malabar Folk Arts Collective", title: "kolkali!", price: 14000 },
+];
+
+/** Every seeded listing: the public vendors, then the admin fixtures. */
+export const allSeedVendors = [...vendors, ...adminFixtureVendors];
+
 export const reviewsByVendor = {
   "Backwater Grand Palace": [{ name: "Anjali R.", rating: 5, body: "Beautiful venue, staff coordinated everything smoothly on the day." }, { name: "Vishnu K.", rating: 5, body: "Spacious hall, parking was never an issue even with 800 guests." }],
   "Studio Frames by Arun": [{ name: "Meera S.", rating: 5, body: "Arun captured moments we didn't even know were happening. Loved the drone shots." }, { name: "Rahul P.", rating: 4, body: "Great photos, delivery took a little longer than promised." }],
@@ -278,5 +330,5 @@ export function mediaPlan(v) {
 }
 
 export function fixtureSpecs() {
-  return vendors.flatMap(mediaPlan);
+  return allSeedVendors.flatMap(mediaPlan);
 }

@@ -54,6 +54,10 @@ export default function Header({
     if (pathname !== initialPath.current) navigatedInApp = true;
   }, [pathname]);
 
+  // The admin area draws its own chrome (app/_nav/admin-shell.tsx): no
+  // customer or vendor links there.
+  if (role === "admin" && under(pathname, ADMIN_HOME)) return null;
+
   function goBack() {
     let sameOriginReferrer = false;
     try {
