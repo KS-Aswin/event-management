@@ -147,22 +147,34 @@ export default async function VendorProfilePage({
       }
     : null;
 
-  const actions = isOwnListing ? (
-    <div className="flex items-center gap-2.5 flex-wrap">
-      <span className="bg-gray-100 text-ink-soft text-xs px-2.5 py-1 rounded-full font-medium">
-        {publicListing ? "Preview of your listing" : `Preview · ${vendor.status}`}
-      </span>
-      <Link
-        href="/dashboard/edit-listing"
-        className="px-5 py-2.5 rounded-md bg-accent hover:bg-accent-hover text-white text-sm font-medium"
-      >
-        Edit listing
-      </Link>
-    </div>
-  ) : (
-    <div className="flex items-center gap-3">
+  const initials = (name: string) =>
+    name
+      .split(/\s+/)
+      .filter(Boolean)
+      .slice(0, 2)
+      .map((w) => w[0]?.toUpperCase() ?? "")
+      .join("");
+
+  const ownerBadge = (
+    <span className="chip">{publicListing ? "Preview of your listing" : `Preview · ${vendor.status}`}</span>
+  );
+
+  // Heart in a bordered square so it reads as a second action beside the CTA.
+  const favorite = (
+    <span className="inline-flex items-center justify-center w-11 h-11 lg:w-[46px] lg:h-[46px] shrink-0 rounded-control border border-line-strong bg-white">
       <FavoriteButton vendorId={vendor.id} initialFavorited={favorited} loggedIn={!!session} />
-      <QuoteButton {...quoteProps} />
+    </span>
+  );
+
+  const ratingRow = (
+    <div className="flex items-center gap-1.5 text-sm flex-wrap">
+      <span role="img" aria-label={`Rated ${vendor.rating} out of 5`} className="text-gold text-base leading-none">
+        ★
+      </span>
+      <span aria-hidden="true" className="font-semibold">
+        {vendor.rating}
+      </span>{" "}
+      <span className="text-ink-soft">({vendor.reviews_count} reviews)</span>
     </div>
   );
 
@@ -175,7 +187,7 @@ export default async function VendorProfilePage({
         />
       ) : null}
 
-      <div className="relative h-[260px] flex items-center justify-center overflow-hidden">
+      <div className="relative h-[168px] sm:h-[240px] flex items-center justify-center overflow-hidden">
         {vendor.cover_image_url ? (
           <Image
             src={vendor.cover_image_url}
@@ -187,63 +199,81 @@ export default async function VendorProfilePage({
             className="object-cover"
           />
         ) : (
-          <VendorTile category={vendor.category} size={72} opacity={0.85} className="w-full h-[260px]" />
+          <VendorTile
+            category={vendor.category}
+            size={64}
+            opacity={0.85}
+            className="w-full h-[168px] sm:h-[240px]"
+          />
         )}
       </div>
 
-      <div className="relative z-10 max-w-[1100px] mx-auto px-4 sm:px-6 -mt-[60px] mb-14 lg:grid lg:grid-cols-[minmax(0,1fr)_300px] lg:gap-6 lg:items-start">
-        <div className="bg-white border border-line rounded-xl p-5 sm:p-7 shadow-[0_4px_18px_rgba(0,0,0,0.06)]">
-          <div className="flex justify-between items-start gap-5 flex-wrap">
-            <div className="flex items-start gap-3.5 min-w-0">
-              {vendor.logo_url ? (
-                <Image
-                  src={vendor.logo_url}
-                  alt={`${vendor.name} logo`}
-                  width={56}
-                  height={56}
-                  unoptimized
-                  className="w-14 h-14 rounded-lg object-cover border border-line shrink-0"
-                />
-              ) : null}
-              <div className="min-w-0">
-                <h1 className="text-[26px] font-semibold">{vendor.name}</h1>
-                <p className="text-ink-soft text-sm mt-1">
-                  {vendor.category} · {vendor.location} · {vendor.experience} experience
-                </p>
-                <div className="flex items-center gap-1.5 mt-2.5 text-sm flex-wrap">
-                  <span role="img" aria-label={`Rated ${vendor.rating} out of 5`} className="text-gold">
-                    ★
-                  </span>
-                  <span aria-hidden="true">{vendor.rating}</span> ({vendor.reviews_count} reviews)
-                </div>
+      <div className="page relative z-10 -mt-12 sm:-mt-[72px] mb-8 sm:mb-16 lg:grid lg:grid-cols-[minmax(0,1fr)_320px] lg:gap-8 lg:items-start">
+        <div className="card p-5 sm:p-8 shadow-pop">
+          <div className="flex items-start gap-4 min-w-0">
+            {vendor.logo_url ? (
+              <Image
+                src={vendor.logo_url}
+                alt={`${vendor.name} logo`}
+                width={64}
+                height={64}
+                unoptimized
+                className="w-14 h-14 sm:w-16 sm:h-16 rounded-card object-cover border border-line shrink-0"
+              />
+            ) : null}
+            <div className="min-w-0 flex-1">
+              {isOwnListing ? <div className="mb-2.5">{ownerBadge}</div> : null}
+              <h1 className="font-display text-display sm:text-[32px] font-semibold leading-tight tracking-[-0.01em] break-words">
+                {vendor.name}
+              </h1>
+              <p className="text-ink-soft text-body mt-1.5">
+                {vendor.category} · {vendor.location} · {vendor.experience} experience
+              </p>
+              <div className="flex items-center gap-x-4 gap-y-1.5 mt-3 flex-wrap">
+                {ratingRow}
                 {vendor.price_label ? (
-                  <p className="text-sm mt-2">
+                  <p className="text-sm">
                     <span className="text-ink-soft">Starting from </span>
                     <span className="text-accent font-semibold">{vendor.price_label}</span>
                   </p>
                 ) : null}
-                {vendor.tags?.length ? (
-                  <ul className="flex flex-wrap gap-1.5 mt-2.5" aria-label="Tags">
-                    {vendor.tags.map((t) => (
-                      <li key={t} className="text-xs bg-gray-100 text-ink-soft px-2.5 py-0.5 rounded-full">
-                        {t}
-                      </li>
-                    ))}
-                  </ul>
-                ) : null}
               </div>
+              {vendor.tags?.length ? (
+                <ul className="flex flex-wrap gap-1.5 mt-3.5" aria-label="Tags">
+                  {vendor.tags.map((t) => (
+                    <li key={t} className="chip">
+                      {t}
+                    </li>
+                  ))}
+                </ul>
+              ) : null}
             </div>
-            <div className="lg:hidden">{actions}</div>
+          </div>
+
+          <div className="lg:hidden mt-5 flex items-center gap-3">
+            {isOwnListing ? (
+              <Link href="/dashboard/edit-listing" className="btn btn-primary flex-1 sm:flex-none">
+                Edit listing
+              </Link>
+            ) : (
+              <>
+                <QuoteButton {...quoteProps} triggerClassName="btn btn-primary flex-1 sm:flex-none sm:px-8" />
+                {favorite}
+              </>
+            )}
           </div>
 
           {images.length > 0 && (
-            <section aria-labelledby="gallery-heading" className="my-6">
+            <section aria-labelledby="gallery-heading" className="mt-7">
               <h2 id="gallery-heading" className="sr-only">
                 Portfolio
               </h2>
               <ul className="grid grid-cols-2 sm:grid-cols-3 gap-2">
                 {images.map((p) => (
-                  <li key={p.id} className="relative h-[130px] sm:h-[150px] rounded-lg overflow-hidden bg-gray-100">
+                  <li
+                    key={p.id}
+                    className="relative aspect-[4/3] rounded-control overflow-hidden bg-surface-muted"
+                  >
                     <Image
                       src={p.media_url}
                       alt={p.caption || `${vendor.name} portfolio photo`}
@@ -258,46 +288,48 @@ export default async function VendorProfilePage({
             </section>
           )}
 
-          <section aria-labelledby="about-heading">
-            <h2 id="about-heading" className="text-base font-semibold mt-6.5 mb-3">
+          <section aria-labelledby="about-heading" className="mt-7 pt-7 border-t border-line">
+            <h2 id="about-heading" className="font-display text-title font-semibold mb-2.5">
               About
             </h2>
-            <p className="text-sm leading-relaxed">{vendor.about}</p>
+            <p className="text-[15px] leading-relaxed max-w-[68ch]">{vendor.about}</p>
           </section>
 
-          <section aria-labelledby="services-heading">
-            <h2 id="services-heading" className="text-base font-semibold mt-6.5 mb-3">
+          <section aria-labelledby="services-heading" className="mt-7 pt-7 border-t border-line">
+            <h2 id="services-heading" className="font-display text-title font-semibold mb-3.5">
               Services &amp; pricing
             </h2>
-            <ul className="border border-line rounded-lg divide-y divide-line">
+            <ul className="border border-line rounded-card divide-y divide-line overflow-hidden">
               {services.length > 0 ? (
                 services.map((s) => (
-                  <li key={s.id} className="flex items-start justify-between gap-4 p-4">
-                    <div className="min-w-0">
-                      <h3 className="text-sm font-semibold">{s.title}</h3>
-                      <div className="text-xs text-ink-soft mt-0.5">{s.category}</div>
-                      {s.description ? (
-                        <p className="text-[13px] text-ink-soft mt-1.5 leading-relaxed">{s.description}</p>
-                      ) : null}
-                      {!isOwnListing ? (
-                        <div className="mt-2">
-                          <QuoteButton
-                            {...quoteProps}
-                            preselectServiceId={s.id}
-                            variant="link"
-                            label="Request quote"
-                          />
-                        </div>
-                      ) : null}
+                  <li key={s.id} className="p-4 sm:p-5">
+                    <div className="flex items-start justify-between gap-4">
+                      <div className="min-w-0">
+                        <h3 className="text-[15px] font-semibold">{s.title}</h3>
+                        <div className="text-caption text-ink-soft mt-0.5">{s.category}</div>
+                      </div>
+                      <div className="shrink-0 text-right">
+                        <div className="text-accent font-semibold text-[15px]">{formatPrice(s.price_from)}</div>
+                        <div className="text-caption text-ink-soft">onwards / {s.price_unit}</div>
+                      </div>
                     </div>
-                    <div className="text-accent font-semibold text-sm shrink-0 text-right">
-                      {formatPrice(s.price_from)}
-                      <div className="text-xs text-ink-soft font-normal">onwards / {s.price_unit}</div>
-                    </div>
+                    {s.description ? (
+                      <p className="text-sm text-ink-soft mt-2 leading-relaxed max-w-[68ch]">{s.description}</p>
+                    ) : null}
+                    {!isOwnListing ? (
+                      <div className="mt-2 -mb-1.5">
+                        <QuoteButton
+                          {...quoteProps}
+                          preselectServiceId={s.id}
+                          variant="link"
+                          label="Request quote"
+                        />
+                      </div>
+                    ) : null}
                   </li>
                 ))
               ) : (
-                <li className="flex items-start justify-between gap-4 p-4">
+                <li className="flex items-start justify-between gap-4 p-4 sm:p-5">
                   <span className="text-sm text-ink-soft">Starting from</span>
                   <span className="text-accent font-semibold text-sm text-right">{vendor.price_label}</span>
                 </li>
@@ -305,28 +337,31 @@ export default async function VendorProfilePage({
             </ul>
           </section>
 
-          <section aria-labelledby="reviews-heading">
-            <h2 id="reviews-heading" className="text-base font-semibold mt-6.5 mb-3">
+          <section aria-labelledby="reviews-heading" className="mt-7 pt-7 border-t border-line">
+            <h2 id="reviews-heading" className="font-display text-title font-semibold mb-3.5">
               Reviews
             </h2>
 
             {reviews.length > 0 && (
-              <div className="flex flex-col sm:flex-row sm:items-center gap-4 mb-4">
-                <div className="shrink-0">
-                  <div className="text-[28px] font-semibold leading-none">{vendor.rating}</div>
-                  <div className="text-xs text-ink-soft mt-1">{vendor.reviews_count} reviews</div>
+              <div className="flex flex-col sm:flex-row sm:items-center gap-4 sm:gap-8 mb-2 rounded-card bg-surface-muted p-4 sm:p-5">
+                <div className="shrink-0 sm:min-w-[96px]">
+                  <div className="font-display text-[34px] font-semibold leading-none">{vendor.rating}</div>
+                  <div aria-hidden="true" className="text-gold text-sm tracking-[0.1em] mt-1.5">
+                    {"★".repeat(Math.max(0, Math.min(5, Math.round(ratingNum))))}
+                  </div>
+                  <div className="text-caption text-ink-soft mt-0.5">{vendor.reviews_count} reviews</div>
                 </div>
-                <ul className="flex-1 space-y-1 max-w-[320px]" aria-label="Rating breakdown">
+                <ul className="flex-1 space-y-1.5 sm:max-w-[360px]" aria-label="Rating breakdown">
                   {distribution.map(({ star, count }) => (
-                    <li key={star} className="flex items-center gap-2 text-xs text-ink-soft">
+                    <li key={star} className="flex items-center gap-2.5 text-caption text-ink-soft">
                       <span className="w-7 shrink-0">{star} ★</span>
-                      <span className="flex-1 h-1.5 bg-gray-100 rounded-full overflow-hidden" aria-hidden="true">
+                      <span className="flex-1 h-2 bg-white rounded-full overflow-hidden" aria-hidden="true">
                         <span
-                          className="block h-full bg-gold"
+                          className="block h-full bg-gold rounded-full"
                           style={{ width: `${Math.round((count / reviews.length) * 100)}%` }}
                         />
                       </span>
-                      <span className="w-6 text-right">
+                      <span className="w-6 text-right tabular-nums">
                         {count}
                         <span className="sr-only"> {count === 1 ? "review" : "reviews"}</span>
                       </span>
@@ -345,25 +380,40 @@ export default async function VendorProfilePage({
                   return (
                     <li
                       key={r.id}
-                      className={`py-3.5 border-b border-line last:border-b-0 ${
-                        mine ? "bg-accent-tint/50 -mx-3 px-3 rounded-md" : ""
+                      className={`flex gap-3 py-4 border-b border-line last:border-b-0 ${
+                        mine ? "bg-accent-tint/50 -mx-3 px-3 rounded-control" : ""
                       }`}
                     >
-                      <div className="flex justify-between gap-3 text-sm font-semibold">
-                        <span>
-                          {r.reviewer_name}
-                          {mine ? (
-                            <span className="ml-2 text-xs font-medium text-accent">Your review</span>
-                          ) : null}
-                        </span>
-                        <span role="img" aria-label={`${r.rating} out of 5 stars`} className="text-gold shrink-0">
-                          {"★".repeat(r.rating)}
-                        </span>
+                      <span
+                        aria-hidden="true"
+                        className="w-9 h-9 shrink-0 rounded-full bg-accent-tint text-accent-hover text-xs font-semibold inline-flex items-center justify-center"
+                      >
+                        {initials(r.reviewer_name)}
+                      </span>
+                      <div className="min-w-0 flex-1">
+                        <div className="flex justify-between gap-3 text-sm font-semibold">
+                          <span className="min-w-0">
+                            {r.reviewer_name}
+                            {mine ? (
+                              <span className="ml-2 text-xs font-medium text-accent">Your review</span>
+                            ) : null}
+                          </span>
+                          <span
+                            role="img"
+                            aria-label={`${r.rating} out of 5 stars`}
+                            className="text-gold shrink-0 tracking-[0.05em]"
+                          >
+                            {"★".repeat(r.rating)}
+                          </span>
+                        </div>
+                        <time
+                          dateTime={new Date(r.created_at).toISOString()}
+                          className="block text-caption text-ink-soft mt-0.5"
+                        >
+                          {formatDate(r.created_at)}
+                        </time>
+                        <p className="text-sm text-foreground/85 mt-1.5 leading-relaxed max-w-[68ch]">{r.body}</p>
                       </div>
-                      <time dateTime={new Date(r.created_at).toISOString()} className="block text-xs text-ink-soft mt-0.5">
-                        {formatDate(r.created_at)}
-                      </time>
-                      <div className="text-[13px] text-ink-soft mt-1 leading-relaxed">{r.body}</div>
                     </li>
                   );
                 })}
@@ -371,14 +421,14 @@ export default async function VendorProfilePage({
             )}
 
             {isOwnListing ? null : myReview ? (
-              <p role="status" className="text-sm text-accent bg-accent-tint rounded-md px-3.5 py-3 mt-4">
+              <p role="status" className="alert-success mt-4">
                 Thanks for your review — it&apos;s highlighted above.
               </p>
             ) : session ? (
               <ReviewForm vendorId={vendor.id} />
             ) : (
-              <p className="text-sm text-ink-soft mt-4">
-                <Link href={loginHref} className="text-accent hover:underline">
+              <p className="text-sm text-ink-soft mt-5 rounded-card border border-dashed border-line-strong px-4 py-3.5">
+                <Link href={loginHref} className="font-medium text-accent underline-offset-2 hover:underline">
                   Sign in
                 </Link>{" "}
                 to leave a review.
@@ -387,28 +437,42 @@ export default async function VendorProfilePage({
           </section>
         </div>
 
-        <aside className="hidden lg:block sticky top-20 mt-[60px] bg-white border border-line rounded-xl p-5 shadow-[0_4px_18px_rgba(0,0,0,0.06)]">
-          <div className="text-xs text-ink-soft">Starting from</div>
-          <div className="text-accent font-semibold text-lg mb-4">{vendor.price_label}</div>
-          {actions}
+        <aside className="hidden lg:block sticky top-[calc(var(--header-h)+20px)] mt-[88px] card p-6 shadow-card">
+          <div className="text-caption text-ink-soft">Starting from</div>
+          <div className="font-display text-accent font-semibold text-heading mt-0.5">{vendor.price_label}</div>
+          <div className="mt-2">{ratingRow}</div>
+          <div className="mt-5 pt-5 border-t border-line">
+            {isOwnListing ? (
+              <div className="space-y-3">
+                {ownerBadge}
+                <Link href="/dashboard/edit-listing" className="btn btn-primary btn-lg btn-block">
+                  Edit listing
+                </Link>
+              </div>
+            ) : (
+              <div className="flex items-center gap-2.5">
+                <QuoteButton {...quoteProps} triggerClassName="btn btn-primary btn-lg flex-1" />
+                {favorite}
+              </div>
+            )}
+          </div>
         </aside>
       </div>
 
-      <div className="lg:hidden fixed bottom-0 inset-x-0 z-40 bg-white border-t border-line px-4 pt-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] flex items-center justify-between gap-3">
-        <div className="min-w-0">
-          <div className="text-[11px] text-ink-soft">Starting from</div>
-          <div className="text-accent font-semibold text-sm truncate">{vendor.price_label}</div>
+      <div className="lg:hidden fixed bottom-0 inset-x-0 z-40 bg-white/95 backdrop-blur border-t border-line shadow-[0_-6px_20px_rgb(32_33_36/0.06)] safe-bottom">
+        <div className="page pt-3 flex items-center justify-between gap-3">
+          <div className="min-w-0">
+            <div className="text-[11px] text-ink-soft">Starting from</div>
+            <div className="text-accent font-semibold text-[15px] truncate">{vendor.price_label}</div>
+          </div>
+          {isOwnListing ? (
+            <Link href="/dashboard/edit-listing" className="btn btn-primary shrink-0 px-6">
+              Edit listing
+            </Link>
+          ) : (
+            <QuoteButton {...quoteProps} triggerClassName="btn btn-primary shrink-0 px-6 sm:px-8" />
+          )}
         </div>
-        {isOwnListing ? (
-          <Link
-            href="/dashboard/edit-listing"
-            className="px-5 py-2.5 rounded-md bg-accent hover:bg-accent-hover text-white text-sm font-medium shrink-0"
-          >
-            Edit listing
-          </Link>
-        ) : (
-          <QuoteButton {...quoteProps} />
-        )}
       </div>
     </main>
   );
