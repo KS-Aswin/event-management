@@ -65,7 +65,11 @@ Vendor photos and videos are stored through a `StorageAdapter` (`lib/storage/`).
 - `MEDIA_VIDEO_UPLOADS` — `true`/`false`; MP4 uploads are on by default except in production.
 - `BILLING_ENABLED` — leave unset; until billing ships every vendor gets the Pro media limits.
 
-Image processing uses `sharp` (prebuilt binaries install with `npm install`).
+Image processing uses `sharp` (a regular dependency, MIT; prebuilt binaries for Windows, Linux and Vercel install with `npm install`). Each photo is checked by magic bytes (JPEG/PNG/WebP/HEIC, max 15 MB; MP4 max 50 MB), de-duplicated by sha256 and stored as `thumb`, `card` and `full` WebP variants without EXIF under `uploads/vendors/<vendorId>/<uuid>/`.
+
+Who can see a file under `/media`: approved media is public and cached for a year. Media that is still pending review, rejected or hidden, and every raw `upload.bin`, is served only to the owning vendor and admins (`Cache-Control: private, no-store`); everyone else gets 404. Paths with `..` get 400 and anything under `private/` is never served.
+
+To use another uploads folder, set `UPLOADS_DIR` in `.env.local`. Deleting `uploads/` loses the files but not the database rows; run `npm run db:seed -- --force` to rebuild the sample media.
 
 ### Production build (local check)
 
@@ -83,11 +87,17 @@ npm run start            # serves the build on http://localhost:3000 (add -- -p 
 - `/vendors/[id]` — real vendor profile page: about, packages, real reviews from the database, and a working "Request quote" modal that saves to the database
 - `/signup` — real signup form (customer or vendor role), creates a user in Postgres, hashes the password, signs the person in. Accepts `?role=vendor` to preset the role (used by the "For Vendors" page's CTA)
 - `/login` — real login form, verifies against the stored password hash
-- `/dashboard` — protected page (redirects to `/login` if not signed in), role-specific content: vendors see real leads/stats from `quote_requests` (or a prompt to create a listing), customers see their real submitted quote requests
-- `/dashboard/create-listing` — a vendor account creates their own listing, making them findable in `/search`
-- `/dashboard/edit-listing` — edit an existing listing (shares the same form component as create, via a `mode` prop)
-- `/dashboard/leads` — a vendor's full lead list with details, contact links and a status control
-- `/dashboard/services` — a vendor adds, edits and removes the services/packages shown on their profile
+- **Vendor workspace** (`role = vendor` only; customers are sent to their own area, signed-out users to `/login`). Vendors land here after login instead of the customer home:
+  - `/vendor/onboarding` — 6-step wizard (business type, categories, offerings from the taxonomy with "Other", packages, areas and contact, media), saved per step and resumable; submit moves the listing to `pending`
+  - `/vendor` — home: status banner, profile-strength checklist, new leads, bookings, 7-day stats
+  - `/vendor/leads`, `/vendor/leads/[id]` — leads inbox with the requested units, notes, follow-up date and WhatsApp link
+  - `/vendor/offerings` — offerings (service units with pricing unit, starting price, bookable separately or package-only) and packages built from them
+  - `/vendor/media` — photos and videos: logo, cover, albums with captions, reorder, delete, video links and small MP4s
+  - `/vendor/profile`, `/vendor/areas` — business details, capacity, languages and contact; service districts and travel
+  - `/vendor/reviews`, `/vendor/settings`, and "Preview public profile"
+  - Phone layout: bottom tab bar with a More sheet
+- `/dashboard/*` — kept only as redirects to the new role areas (see `docs/PRODUCT_PLAN.md` 2.6)
+- `/api/vendor/*` — the workspace API; every route checks `role = vendor` and that the record belongs to the signed-in vendor (another vendor's id gets 404/403). `GET /api/meta/taxonomy` returns categories, offering templates and event types from the database.
 - `/settings` — real profile editing (name/email) and notification preference toggles, all persisted to Postgres; logout
 - `/about`, `/help`, `/privacy`, `/for-vendors` — static informational pages
 - A single shared `<Header>` component (in `app/header.tsx`), rendered once in the root layout — handles back navigation, the logo, the search box (on `/search`), and signed-in/signed-out state consistently across every page
@@ -107,13 +117,15 @@ npm run start            # serves the build on http://localhost:3000 (add -- -p 
 
 ## Database schema
 
-See `db/migrations/`. Tables: `users`, `vendors`, `vendor_reviews`, `quote_requests`, `favorites`, `districts`, `categories`, `services`, `portfolio_items`, `quote_request_services`, `review_reports`, `quote_status_events` (plus `schema_migrations`, written by the migration runner). Run `npm run db:seed` after migrating to populate 12 sample vendors: the 9 used in the `/demo` mockup (so both stay consistent) plus an event company, a chenda troupe and a rental firm. Data lives in `db/seed-data.mjs`. Each vendor gets taxonomy offerings (package-only units, packages, add-ons), service areas, reviews and a logo, cover and gallery photos. The photos are generated placeholders in `db/fixtures/media` (license-free, each under 60 KB; redraw them with `node db/fixtures/make-media.mjs --force`), imported through the storage adapter into `uploads/` with the same WebP variants as real uploads.
+See `db/migrations/`. Tables: `users`, `vendors`, `vendor_reviews`, `quote_requests`, `favorites`, `districts`, `categories`, `services`, `portfolio_items`, `quote_request_services`, `review_reports`, `quote_status_events` (plus `schema_migrations`, written by the migration runner).
+
+`004_vendor_workspace.sql` adds the vendor workspace model: vendor statuses (`draft`, `pending`, `changes_requested`, `approved`, `rejected`, `suspended`) and onboarding progress, offering templates and event types (seeded), service units and packages with add-ons, service areas, `custom_offering_requests`, `media_assets` and `media_albums` (existing `portfolio_items` are copied in), lead unit snapshots and `users.session_version`. It is safe on a fresh or an existing database and a re-run is a no-op. It has only been applied to local databases; review it before running it anywhere else. Run `npm run db:seed` after migrating to populate 12 sample vendors: the 9 used in the `/demo` mockup (so both stay consistent) plus an event company, a chenda troupe and a rental firm. Data lives in `db/seed-data.mjs`. Each vendor gets taxonomy offerings (package-only units, packages, add-ons), service areas, reviews and a logo, cover and gallery photos. Six of them are the plan's archetypes and also get packages and an album: event company (Kerala Celebrations Co.), photographer (with a YouTube link), caterer, venue, chenda troupe (Guruvayur Chenda Sangham) and rental (Thrissur Tent & Rentals); the event company and the caterer each have a package-only unit. The photos are generated placeholders in `db/fixtures/media` (license-free, each under 60 KB; redraw them with `node db/fixtures/make-media.mjs --force`), imported through the storage adapter into `uploads/` with the same WebP variants as real uploads.
 
 **`db:seed` is destructive:** it deletes all vendors, reviews, quotes and favourites and re-inserts the samples. It refuses to run when the database holds non-seed data (extra or owned listings, quotes, real reviews, favourites) unless the database name ends in `_test` or you pass `npm run db:seed -- --force` (or set `SEED_CONFIRM=1`). Never point it at a database you care about.
 
 ## Testing
 
-There's a real automated test suite now: `web/tests/api.test.mjs` — about 120 checks covering registration validation, login (including CSRF Origin/Content-Type checks and the login rate limit), protected-route redirects, vendor search (all filter types + sort ordering), vendor detail lookup, quote request submission, vendor listing creation, editing a listing, quote status updates, review submission (including the vendor rating/count actually recalculating), **favorites** (add, idempotent re-add, remove, dashboard reflects it), **search suggestions** (category/location/vendor-name matches, short-query and no-match edge cases), settings updates, logout, and role-specific dashboard content reflecting real data.
+There's a real automated test suite now: `web/tests/api.test.mjs` — about 190 checks. Besides the vendor workspace (customers get 403 on `/api/vendor/*`, onboarding save/resume/submit gate, uploads with wrong type 415 / too large 413 / duplicates / another vendor 404, `/media` hiding pending photos, video links, "Other" offerings, package-only units, own leads only), it covers registration validation, login (including CSRF Origin/Content-Type checks and the login rate limit), protected-route redirects, vendor search (all filter types + sort ordering), vendor detail lookup, quote request submission, vendor listing creation, editing a listing, quote status updates, review submission (including the vendor rating/count actually recalculating), **favorites** (add, idempotent re-add, remove, dashboard reflects it), **search suggestions** (category/location/vendor-name matches, short-query and no-match edge cases), settings updates, logout, and role-specific dashboard content reflecting real data.
 
 To run it:
 ```bash
@@ -133,11 +145,11 @@ There is no separate `.env.test` / `DATABASE_URL_TEST` setup: the suite uses wha
 
 ### Browser (end-to-end) tests
 
-`e2e/` holds a Playwright suite (public pages, sign-up → listing → quote → lead flows, at a 390px phone and a 1440px desktop viewport). It starts its own dev server on port 3130 (build output in `.next-e2e/`, so it can run beside `npm run dev`) and uses the `DATABASE_URL` in `.env.local`, which must be on localhost. Users it creates match `e2e-(customer|vendor)-…@example.com` and are deleted before and after each run.
+`e2e/` holds a Playwright suite (public pages, sign-up → listing → quote → lead flows, and `vendor-workspace.spec.ts`: the onboarding wizard end to end, the media manager, the role redirect table, the public gallery and lightbox, and vendor nav at 390px; every test runs at a 390px phone and a 1440px desktop viewport). It starts its own dev server on port 3130 (build output in `.next-e2e/`, so it can run beside `npm run dev`) and uses the `DATABASE_URL` in `.env.local`, which must be on localhost. Users it creates match `e2e-(customer|vendor)-…@example.com` and are deleted before and after each run.
 
 ```bash
 npx playwright install chromium   # once, downloads the browser
-npm run db:seed                    # the suite expects the 9 sample vendors
+npm run db:seed                    # the suite expects the 12 sample vendors and their media
 npm run test:e2e                   # HEADED=1 npm run test:e2e to watch it
 ```
 
@@ -155,13 +167,13 @@ The code runs locally end to end, but these need a person (accounts, money, lega
 - No secrets are in the repo; `.env.example` holds placeholders only.
 
 **Production database and migrations**
-- Provision a managed PostgreSQL database (with backups) and run `npm run db:migrate` against it. Review the SQL in `db/migrations/` first; `003_data_integrity.sql` is new in this maintenance pass and has only been applied to local databases.
+- Provision a managed PostgreSQL database (with backups) and run `npm run db:migrate` against it. Review the SQL in `db/migrations/` first; `003_data_integrity.sql` and `004_vendor_workspace.sql` have only been applied to local databases.
 - Do **not** run `npm run db:seed` against production: it deletes vendors, quotes, reviews and favourites. Real vendor listings have to be created by vendors (or entered by hand).
 
 **External services (none are wired up yet)**
 - Email provider (e.g. Resend) and a sender domain: needed for password reset (EM-038), quote/lead notifications (EM-113) and email verification.
 - Google Cloud OAuth client: the "Continue with Google" button is disabled until one exists.
-- File storage bucket (e.g. Supabase Storage / S3) and its credentials: needed for portfolio and logo uploads (EM-118).
+- File storage bucket (e.g. Supabase Storage / S3 / R2) and its credentials for production uploads (EM-118). Locally the `local` driver writes to `uploads/`; a cloud driver for the `StorageAdapter` is planned for P3.
 - SMS / WhatsApp provider if phone sign-up or SMS alerts are wanted (EM-047, EM-072); Google Places API key for real place autocomplete.
 - A real support email or WhatsApp number to replace the placeholder on `/help` (EM-081).
 

@@ -912,8 +912,14 @@ async function p0VendorWorkspace({ vendorCookie, legacyLeadId }) {
     ["thumb", "card", "full"].every((k) => typeof firstAsset?.urls?.[k] === "string" && firstAsset.urls[k].startsWith("/media/")));
   check("upload: a draft vendor's photo waits for review", firstAsset?.status, "pending_review");
   if (firstAsset?.urls?.thumb) {
-    const media = await fetch(new URL(firstAsset.urls.thumb, BASE_URL));
-    check("upload: /media serves the variant as WebP", [media.status, media.headers.get("content-type")], [200, "image/webp"]);
+    const thumbUrl = new URL(firstAsset.urls.thumb, BASE_URL);
+    const media = await fetch(thumbUrl, { headers: { Cookie: wiz } });
+    check("upload: /media serves a pending variant to its vendor as WebP, uncached",
+      [media.status, media.headers.get("content-type"), media.headers.get("cache-control")], [200, "image/webp", "private, no-store"]);
+    check("upload: /media hides a pending photo from signed-out visitors (404)", (await fetch(thumbUrl)).status, 404);
+    check("upload: /media hides a pending photo from another vendor (404)", (await fetch(thumbUrl, { headers: { Cookie: other } })).status, 404);
+    const rawUrl = new URL(firstAsset.urls.thumb.replace(/[^/]+$/, "upload.bin"), BASE_URL);
+    check("upload: /media never serves a raw upload to visitors (404)", (await fetch(rawUrl)).status, 404);
   }
   r = await uploadImage(wiz, photos[0]);
   check("upload: the same file twice is a duplicate, not a second row", [r.status, r.data?.duplicate, r.data?.asset?.id], [200, true, firstAsset?.id]);

@@ -976,9 +976,9 @@ Every item ends with **acceptance criteria (AC)** that can be checked by API tes
 
 ### P0: Vendor workspace
 
-> **Status (2026-10-31, local commits on `ui-fixes-aswin`):** P0-1 to P0-16 built. Wave 1 (f13472f): migration 004, taxonomy, storage and media API, role guards, vendor nav. Wave 2: onboarding wizard (P0-10), offerings and packages (P0-11), vendor home (P0-12), profile and service areas (P0-13), leads inbox at `/vendor/leads` (P0-14), public gallery/lightbox/offerings and search-card covers (P0-15), seed archetypes with generated media in `db/fixtures/media` plus API and e2e tests (P0-16). Open follow-ups: cover/logo crop, multi-thumbnail search cards, "Report photo", offering-detail media, search by offering/district, `media:cleanup`, switching the remaining `CATEGORIES` users to `getTaxonomy()`, the plan's 6 lead tabs (DB has 4 statuses), and a "Small team" business type.
+> **Status (2026-10-31, local commits on `ui-fixes-aswin`):** P0-1 to P0-16 built. Wave 1 (f13472f): migration 004, taxonomy, storage and media API, role guards, vendor nav. Wave 2: onboarding wizard (P0-10), offerings and packages (P0-11), vendor home (P0-12), profile and service areas (P0-13), leads inbox at `/vendor/leads` (P0-14), public gallery/lightbox/offerings and search-card covers (P0-15), seed archetypes with generated media in `db/fixtures/media` plus API and e2e tests (P0-16). Open follow-ups: cover/logo crop, multi-thumbnail search cards, "Report photo", offering-detail media, search by offering/district, `media:cleanup`, switching the remaining `CATEGORIES` users to `getTaxonomy()`, the plan's 6 lead tabs (DB has 4 statuses), and a "Small team" business type. Final review: 14 of 16 items ticked below; P0-7 (crop) and P0-8 (legacy CATEGORIES users) stay open. /media now hides unapproved media from everyone except the owning vendor and admins.
 
-**P0-1 Migration 004 and seeds.** Write `004_vendor_workspace.sql` per section 5, with seeds for 19 categories, offering templates (all of 3.4), 15 event types and their bundles.
+[x] **P0-1 Migration 004 and seeds.** Write `004_vendor_workspace.sql` per section 5, with seeds for 19 categories, offering templates (all of 3.4), 15 event types and their bundles. _Status: Migration 004 applied locally (fresh + rerun no-op), seeds for categories, templates and event types; portfolio_items copied to media_assets._
 AC:
 - Migration applies on a fresh DB and on the current dev DB.
 - Re-running is a no-op.
@@ -987,7 +987,7 @@ AC:
 - Inserting an addon without a parent, a range with `price_to < price_from`, or a package item from another vendor fails.
 - An UPDATE on `admin_audit_log` fails.
 
-**P0-2 Role guards and role-based landing.** Add `requireRole()` in `app/api/_lib/auth.ts` (checks role, `status`, `session_version`), `web/proxy.ts`, layout guards for `/my`, `/vendor` and `/admin`, login/register `redirectTo`, and the `/dashboard/*` redirects.
+[x] **P0-2 Role guards and role-based landing.** Add `requireRole()` in `app/api/_lib/auth.ts` (checks role, `status`, `session_version`), `web/proxy.ts`, layout guards for `/my`, `/vendor` and `/admin`, login/register `redirectTo`, and the `/dashboard/*` redirects. _Status: requireRole() + proxy.ts + layout guards; role-based landing and the 2.6 redirect table are covered by e2e._
 AC:
 - Vendor login lands on `/vendor`, or `/vendor/onboarding` if not completed.
 - Customer login lands on `/my` (or `/` until P2-1 ships the page; the redirect target is configurable in one constant).
@@ -998,14 +998,14 @@ AC:
 - Every redirect in the 2.6 table is covered by an e2e test.
 - A `next` param pointing to another role's area is ignored.
 
-**P0-3 Role-specific headers and navigation.** One header with four configs (2.7), the vendor mobile bottom tab bar and the onboarding minimal header.
+[x] **P0-3 Role-specific headers and navigation.** One header with four configs (2.7), the vendor mobile bottom tab bar and the onboarding minimal header. _Status: Four header configs, vendor bottom tabs with a More sheet, status chip; checked at 390px in e2e._
 AC:
 - Snapshot tests for each role confirm that customers never see "For vendors" in the header and vendors see Leads, Offerings and Media.
 - The status chip reflects `vendors.status`.
 - There is no horizontal scroll at 360 px.
 - Every nav item is keyboard reachable with a visible focus ring.
 
-**P0-4 Storage adapter and local driver.** `lib/storage/{types,index,local}.ts` and `app/media/[...key]/route.ts` with Range support. Add `uploads/` to `.gitignore`.
+[x] **P0-4 Storage adapter and local driver.** `lib/storage/{types,index,local}.ts` and `app/media/[...key]/route.ts` with Range support. Add `uploads/` to `.gitignore`. _Status: StorageAdapter + LocalDiskAdapter, /media with Range 206, traversal 400, private/ 404; review fix: media that isn't approved (and raw upload.bin) now 404s for everyone but the owning vendor and admins, served `private, no-store`._
 AC:
 - Unit test: put → get → publicUrl → delete round-trip.
 - A `/media/..%2f..` traversal returns 400.
@@ -1013,7 +1013,7 @@ AC:
 - A Range request returns 206 with the correct bytes.
 - Switching `STORAGE_DRIVER` to an unknown value fails fast at startup with a clear error.
 
-**P0-5 Image upload pipeline.** Add the `sharp` dependency. Build the reserve / put / complete endpoints, magic-byte validation, variants, EXIF strip, sha256 dedupe, the entitlements stub `lib/entitlements.ts` (`getVendorEntitlements` returning Pro while `BILLING_ENABLED` is false) and moderation status rules (4.5).
+[x] **P0-5 Image upload pipeline.** Add the `sharp` dependency. Build the reserve / put / complete endpoints, magic-byte validation, variants, EXIF strip, sha256 dedupe, the entitlements stub `lib/entitlements.ts` (`getVendorEntitlements` returning Pro while `BILLING_ENABLED` is false) and moderation status rules (4.5). _Status: sharp pipeline: reserve/put/complete, magic bytes 415, 15 MB 413, thumb/card/full WebP without EXIF, sha256 dedupe, pending vs approved, entitlements stub._
 AC:
 - A 12 MB JPEG produces thumb, card and full WebP files with no EXIF (verified by reading the metadata back).
 - A PNG renamed `.jpg` is accepted, while a PDF renamed `.jpg` is rejected with 415.
@@ -1023,7 +1023,7 @@ AC:
 - Media from a pending vendor is `pending_review`, and from an approved vendor is `approved`.
 - Another vendor's asset id returns 404.
 
-**P0-6 Video links and small MP4.** Links endpoint with a YouTube/Instagram/Vimeo parser. MP4 via the same pipeline (size and type), poster upload, and the `MEDIA_VIDEO_UPLOADS` env flag (default true locally, false in production).
+[x] **P0-6 Video links and small MP4.** Links endpoint with a YouTube/Instagram/Vimeo parser. MP4 via the same pipeline (size and type), poster upload, and the `MEDIA_VIDEO_UPLOADS` env flag (default true locally, false in production). _Status: YouTube/Shorts/youtu.be/Instagram/Vimeo link parser (others 400), MP4 via the pipeline with Range seeking, MEDIA_VIDEO_UPLOADS flag._
 AC:
 - `youtu.be/ID`, `youtube.com/shorts/ID` and `instagram.com/reel/ID` all parse.
 - `example.com/video` gets 400.
@@ -1032,20 +1032,20 @@ AC:
 - MP4 plays and seeks on the profile.
 - With the flag off, the upload UI is hidden and the API returns 403.
 
-**P0-7 Media manager UI** (`/vendor/media`). Grid, albums, logo and cover crop, captions, featured, reorder, delete, consent checkbox, usage meter, per-file progress and retry.
+[ ] **P0-7 Media manager UI** (`/vendor/media`). Grid, albums, logo and cover crop, captions, featured, reorder, delete, consent checkbox, usage meter, per-file progress and retry. _Status: Grid, albums, captions, cover/logo, reorder, delete and per-file retry work at 390px. Missing: cover/logo crop._
 AC (e2e):
 - Upload 3 images, create an album, set the cover, reorder, delete one.
 - The public profile (owner preview) reflects every change.
 - A failed upload shows Retry without blocking the others.
 - It works at 360 px width.
 
-**P0-8 Taxonomy API as single source of truth.** `/api/meta/taxonomy`. Remove the hard-coded category merging in `lib/vendorVisuals.tsx` and `api/vendors/route.ts` (keep visuals keyed by slug only).
+[ ] **P0-8 Taxonomy API as single source of truth.** `/api/meta/taxonomy`. Remove the hard-coded category merging in `lib/vendorVisuals.tsx` and `api/vendors/route.ts` (keep visuals keyed by slug only). _Status: /api/meta/taxonomy feeds the wizard, offerings and filters. Missing: home page, search filters, /api/suggest and the legacy /api/vendors/[id] still read the hard-coded CATEGORIES list._
 AC:
 - Every category list in the UI (home chips, search filter, wizard) comes from the API.
 - Adding a category row in the DB shows it everywhere without a code change.
 - The response is cached (revalidate 300 s).
 
-**P0-9 Attribute schema validation.** `lib/offering-validation.ts` replaces and extends `lib/service-validation.ts`, validating `attributes` against the template schema (or the category base schema for custom), plus price mode, unit, qty and on-request rules.
+[x] **P0-9 Attribute schema validation.** `lib/offering-validation.ts` replaces and extends `lib/service-validation.ts`, validating `attributes` against the template schema (or the category base schema for custom), plus price mode, unit, qty and on-request rules. _Status: lib/offering-validation.ts validates attributes per template schema, strips unknown keys, enforces price mode/unit/on-request rules (unit tests)._
 AC:
 - Unit tests per field type.
 - An unknown attribute key is stripped.
@@ -1053,7 +1053,7 @@ AC:
 - `on_request` on a template that doesn't allow it gets 400.
 - A unit outside `allowed_price_units` gets 400.
 
-**P0-10 Onboarding wizard** (`/vendor/onboarding`, 6 steps per section 7). Draft listing created at step 1 (`status='draft'`). Each step PATCHes and saves `onboarding_step`. Submit validates the minimum and moves to `pending`.
+[x] **P0-10 Onboarding wizard** (`/vendor/onboarding`, 6 steps per section 7). Draft listing created at step 1 (`status='draft'`). Each step PATCHes and saves `onboarding_step`. Submit validates the minimum and moves to `pending`. _Status: 6-step wizard saved per step with resume, event-company checklist, submit gate (basics + priced unit + logo/cover + 3 images), owner preview._
 AC (e2e):
 - An individual photographer and an event company (with the EM checklist: 4 units, one package-only) each complete the wizard.
 - Closing the browser at step 3 and logging in again resumes at step 3.
@@ -1062,7 +1062,7 @@ AC (e2e):
 - The owner preview works.
 - The wizard can be used fully with the keyboard.
 
-**P0-11 Offerings and packages manager.** `/vendor/offerings` list and editor, Other/custom (creates a `custom_offering_requests` row, masks contact details), sale mode, fulfilment, add-ons, package composer, `incomplete` marking.
+[x] **P0-11 Offerings and packages manager.** `/vendor/offerings` list and editor, Other/custom (creates a `custom_offering_requests` row, masks contact details), sale mode, fulfilment, add-ons, package composer, `incomplete` marking. _Status: Offerings and packages manager: Other -> custom_offering_requests with contact masking, package composer from own units, incomplete marking, cross-vendor items 400, vendors.price recomputed._
 AC:
 - Creating "Other: Kolkali team" creates both the offering and a request row.
 - Typing a phone number into a custom name masks it and sets `flagged_contact`.
@@ -1070,26 +1070,26 @@ AC:
 - Package items from another vendor get 400.
 - `vendors.price` and `price_label` recompute to the cheapest separately-sellable priced offering.
 
-**P0-12 Vendor home** (`/vendor`). Status banner for all 6 statuses, profile-strength checklist, new leads, upcoming bookings, 7-day stats, quick actions.
+[x] **P0-12 Vendor home** (`/vendor`). Status banner for all 6 statuses, profile-strength checklist, new leads, upcoming bookings, 7-day stats, quick actions. _Status: /vendor home: banner for all 6 statuses, profile-strength checklist, new leads, bookings, 7-day stats._
 AC:
 - Each status shows the right banner and CTA (fixture per status).
 - The checklist percentage matches the rule set.
 - No customer data (favourites, "my requests") is queried. Asserted by API response shape.
 
-**P0-13 Business profile and service areas** (`/vendor/profile`, `/vendor/areas`). Edit all business fields. Editing name, category or phone on an approved listing records a re-review flag (admin queue), while the listing stays live.
+[x] **P0-13 Business profile and service areas** (`/vendor/profile`, `/vendor/areas`). Edit all business fields. Editing name, category or phone on an approved listing records a re-review flag (admin queue), while the listing stays live. _Status: Business profile and service areas with GSTIN/pincode/E.164 validation, districts + travel on the public profile, re-review flag on name/category/phone edits._
 AC:
 - GSTIN, pincode and E.164 validation.
 - Served districts are saved and shown on the profile with travel notes.
 - An approved vendor renaming appears in the admin "re-review" list (verified once P1-3 lands; the flag column is asserted now).
 
-**P0-14 Leads inbox move and cleanup** (`/vendor/leads`, `/vendor/leads/[id]`). Port the existing leads UI. Show requested units with quantity and snapshot, notes, follow-up date, WhatsApp click-to-chat. Marking booked writes `vendor_availability`. Remove the vendor branches from `/dashboard` and the legacy routes.
+[x] **P0-14 Leads inbox move and cleanup** (`/vendor/leads`, `/vendor/leads/[id]`). Port the existing leads UI. Show requested units with quantity and snapshot, notes, follow-up date, WhatsApp click-to-chat. Marking booked writes `vendor_availability`. Remove the vendor branches from `/dashboard` and the legacy routes. _Status: /vendor/leads with event context, unit snapshot, notes, follow-up, wa.me; booked writes availability; own leads only; /dashboard is redirects only. Follow-ups: the plan's 6 lead tabs (DB has 4 statuses), in-page confirm instead of window.confirm, 404 status (not 200) on another vendor's lead/package page._
 AC:
 - A lead shows event type, guests, district and units when provided.
 - Status changes still write `quote_status_events`.
 - A vendor sees only their own leads (403 on others).
 - The `/dashboard` files are gone except the redirects.
 
-**P0-15 Public display of real media and offerings.** Profile gallery (albums, videos, lightbox), offerings tree, search card image fallback chain, package-only enforcement in the quote API, `next.config` `images.remotePatterns` for `i.ytimg.com`.
+[x] **P0-15 Public display of real media and offerings.** Profile gallery (albums, videos, lightbox), offerings tree, search card image fallback chain, package-only enforcement in the quote API, `next.config` `images.remotePatterns` for `i.ytimg.com`. _Status: Public gallery with albums, lightbox, tap-to-load videos, offerings grouped by unit with Bookable separately badge, search-card cover fallback, PACKAGE_ONLY 400, unit-only enquiries._
 AC:
 - A vendor with uploaded media shows it on the profile and search card.
 - A vendor without media shows the gradient fallback.
@@ -1097,7 +1097,7 @@ AC:
 - An enquiry with only a package-only service gets 400 `PACKAGE_ONLY`.
 - An enquiry for a separately-sellable unit of an event company works and the vendor sees only that unit.
 
-**P0-16 Test and fixture pack.** Seed script fixtures for 6 vendor archetypes (event company, photographer, caterer, venue, chenda troupe, rental) with media files in `db/fixtures/media`. Extend the API tests and e2e per item above.
+[x] **P0-16 Test and fixture pack.** Seed script fixtures for 6 vendor archetypes (event company, photographer, caterer, venue, chenda troupe, rental) with media files in `db/fixtures/media`. Extend the API tests and e2e per item above. _Status: Seed: 12 vendors incl. the 6 archetypes with generated media in db/fixtures/media imported through the storage adapter; test:unit, test:storage, test:api and test:e2e green._
 AC:
 - `npm run db:seed` creates the archetypes with images on the local driver.
 - The full test suite is green in CI.
