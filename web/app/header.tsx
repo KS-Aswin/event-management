@@ -45,22 +45,23 @@ export default function Header({
 
   return (
     <header
-      className={`flex flex-wrap items-center justify-between gap-x-3 gap-y-2.5 px-4 sm:px-7 py-3 sticky top-0 bg-white z-20 ${
+      className={`sticky top-0 z-20 safe-top bg-white/95 backdrop-blur supports-[backdrop-filter]:bg-white/85 ${
         isHome ? "" : "border-b border-line"
       }`}
     >
       <a
         href="#content"
-        className="sr-only focus:not-sr-only focus:absolute focus:left-3 focus:top-3 focus:z-30 focus:bg-white focus:px-3 focus:py-2 focus:rounded-md focus:shadow"
+        className="sr-only focus:not-sr-only focus:absolute focus:left-3 focus:top-3 focus:z-30 focus:bg-white focus:px-3 focus:py-2 focus:rounded-md focus:shadow-pop"
       >
         Skip to content
       </a>
-      <div className="flex items-center gap-1.5 min-w-[34px] shrink-0">
+      <div className="page flex flex-wrap items-center justify-between gap-x-3 gap-y-2 py-2.5 sm:py-3 min-h-[var(--header-h)]">
+      <div className="flex items-center gap-1 min-w-[34px] shrink-0">
         {!isHome && (
           <button
             onClick={goBack}
             aria-label="Back"
-            className="w-10 h-10 -ml-1.5 flex items-center justify-center rounded-full hover:bg-gray-100 shrink-0"
+            className="w-11 h-11 -ml-2.5 flex items-center justify-center rounded-full text-foreground hover:bg-surface-muted active:bg-line shrink-0 transition-colors"
           >
             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
               <path d="M19 12H5M12 19l-7-7 7-7" />
@@ -68,7 +69,7 @@ export default function Header({
           </button>
         )}
         {!isHome && (
-          <Link href="/" className="inline-flex items-center min-h-10 font-display text-xl font-semibold text-accent whitespace-nowrap">
+          <Link href="/" className="inline-flex items-center min-h-11 px-1 font-display text-[22px] leading-none font-semibold tracking-tight text-accent whitespace-nowrap">
             Vel<span className="text-gold">a</span>
           </Link>
         )}
@@ -79,18 +80,19 @@ export default function Header({
       {session ? (
         <AccountMenu name={session.name} role={session.role} />
       ) : (
-        <nav aria-label="Main" className="flex items-center gap-4 sm:gap-5 text-sm whitespace-nowrap min-w-0">
-          <Link href="/for-vendors" className="hidden sm:inline hover:underline">
+        <nav aria-label="Main" className="flex items-center gap-1 sm:gap-2 text-sm whitespace-nowrap min-w-0">
+          <Link
+            href="/for-vendors"
+            className="hidden min-[360px]:inline-flex items-center min-h-11 px-2.5 sm:px-3 rounded-md text-foreground hover:bg-surface-muted hover:text-accent transition-colors"
+          >
             List your business
           </Link>
-          <Link
-            href="/login"
-            className="inline-flex items-center min-h-10 bg-accent hover:bg-accent-hover text-white px-4.5 py-2 rounded-md font-medium"
-          >
+          <Link href="/login" className="btn btn-primary px-4 sm:px-5">
             Sign in
           </Link>
         </nav>
       )}
+      </div>
     </header>
   );
 }
@@ -120,7 +122,7 @@ function HeaderSearchBox() {
     <form
       role="search"
       onSubmit={submit}
-      className="order-last basis-full md:order-none md:basis-auto flex items-center gap-2.5 md:flex-1 max-w-full md:max-w-[480px] min-w-0 border border-line rounded-full px-4 py-0 focus-within:border-accent"
+      className="order-last basis-full md:order-none md:basis-auto flex items-center gap-2.5 md:flex-1 max-w-full md:max-w-[520px] min-w-0 border border-line-strong bg-surface-muted rounded-full px-4 py-0 transition-colors focus-within:border-accent focus-within:bg-white focus-within:shadow-[0_0_0_3px_var(--color-accent-tint)]"
     >
       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="text-ink-soft shrink-0" aria-hidden="true">
         <circle cx="11" cy="11" r="8" />
@@ -132,7 +134,7 @@ function HeaderSearchBox() {
         onChange={(e) => setValue(e.target.value)}
         placeholder="Search vendors, categories, locations"
         aria-label="Search vendors"
-        className="flex-1 min-w-0 min-h-10 outline-none text-sm bg-transparent"
+        className="flex-1 min-w-0 min-h-11 outline-none text-sm bg-transparent placeholder:text-[#80868b]"
       />
     </form>
   );
@@ -178,7 +180,7 @@ function AccountMenu({ name, role }: { name: string; role: UserRole }) {
   }, [open]);
 
   const itemClass =
-    "flex items-center min-h-[44px] px-4 text-sm text-foreground hover:bg-gray-50 w-full text-left";
+    "flex items-center min-h-[44px] px-4 text-sm text-foreground hover:bg-surface-muted focus-visible:bg-surface-muted w-full text-left";
 
   return (
     <div ref={wrapRef} className="relative">
@@ -189,7 +191,7 @@ function AccountMenu({ name, role }: { name: string; role: UserRole }) {
         aria-haspopup="menu"
         aria-expanded={open}
         aria-controls="account-menu"
-        className="flex items-center gap-2 min-h-[44px] pl-1 pr-2 rounded-full hover:bg-gray-100 text-sm text-ink-soft"
+        className="flex items-center gap-2 min-h-[44px] pl-1 pr-2.5 rounded-full border border-transparent hover:border-line hover:bg-surface-muted aria-expanded:bg-surface-muted text-sm text-foreground transition-colors"
       >
         <span
           aria-hidden="true"
@@ -207,9 +209,9 @@ function AccountMenu({ name, role }: { name: string; role: UserRole }) {
         <div
           id="account-menu"
           role="menu"
-          className="absolute right-0 top-full mt-1.5 w-56 max-w-[calc(100vw-2rem)] bg-white border border-line rounded-lg shadow-lg py-1.5 z-30"
+          className="absolute right-0 top-full mt-2 w-60 max-w-[calc(100vw-2rem)] bg-white border border-line rounded-card shadow-pop py-1.5 z-30"
         >
-          <div className="px-4 py-2 text-xs text-ink-soft truncate">Signed in as {name}</div>
+          <div className="px-4 pt-2 pb-2.5 text-xs text-ink-soft truncate">Signed in as {name}</div>
           <Link role="menuitem" href="/dashboard" className={itemClass}>
             {role === "vendor" ? "Dashboard & leads" : "Dashboard, quotes & favourites"}
           </Link>
@@ -257,7 +259,7 @@ function LogoutButton({ className }: { className: string }) {
         {pending ? "Logging out…" : "Logout"}
       </button>
       {error && (
-        <p role="alert" className="px-4 pb-2 text-xs text-red-700">
+        <p role="alert" className="px-4 pb-2 text-xs text-danger">
           {error}
         </p>
       )}

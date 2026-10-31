@@ -100,7 +100,10 @@ export function VendorTile({
   return (
     <div
       className={`flex items-center justify-center shrink-0 ${className}`}
-      style={{ background: v.gradient }}
+      // A soft top-left highlight gives the flat gradient some depth.
+      style={{
+        background: `radial-gradient(120% 90% at 20% 0%, rgba(255,255,255,0.16), rgba(255,255,255,0) 55%), ${v.gradient}`,
+      }}
     >
       <svg width={size} height={size} viewBox="0 0 24 24" opacity={opacity} {...iconProps}>
         {v.icon}

@@ -74,7 +74,7 @@ export default function FavoriteButton({
         onClick={toggle}
         disabled={loading}
         aria-label={favorited ? "Remove from favorites" : "Save to favorites"}
-        className="shrink-0 -m-2.5 w-10 h-10 inline-flex items-center justify-center rounded-full hover:bg-gray-100 disabled:opacity-60"
+        className="group shrink-0 -m-3 w-11 h-11 inline-flex items-center justify-center rounded-full hover:bg-surface-muted active:bg-line disabled:opacity-60 transition-colors"
       >
         <svg
           width={dim}
@@ -83,7 +83,9 @@ export default function FavoriteButton({
           fill={favorited ? "#c9a227" : "none"}
           stroke={favorited ? "#c9a227" : "currentColor"}
           strokeWidth="1.8"
-          className={favorited ? "" : "text-ink-soft"}
+          className={`transition-transform duration-150 motion-safe:group-active:scale-90 ${
+            favorited ? "" : "text-ink-soft group-hover:text-foreground"
+          }`}
           aria-hidden="true"
         >
           <path d="M20.8 4.6a5.5 5.5 0 0 0-7.8 0L12 5.6l-1-1a5.5 5.5 0 0 0-7.8 7.8l1 1L12 21l7.8-7.6 1-1a5.5 5.5 0 0 0 0-7.8z" />
@@ -94,7 +96,7 @@ export default function FavoriteButton({
         aria-live="polite"
         className={
           error
-            ? "absolute top-full right-0 mt-1 z-10 whitespace-nowrap text-[11px] text-red-700 bg-white border border-red-100 rounded px-1.5 py-0.5 shadow-sm"
+            ? "absolute top-full right-0 mt-1 z-10 whitespace-nowrap text-xs text-danger bg-white border border-danger-tint rounded-md px-2 py-1 shadow-pop"
             : "sr-only"
         }
       >
