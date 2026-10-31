@@ -67,7 +67,7 @@ export default function SignupForm({
       const res = await fetch("/api/auth/register", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name, email, password, role }),
+        body: JSON.stringify({ name, email, password, role, next: next || undefined }),
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) {
@@ -80,7 +80,8 @@ export default function SignupForm({
         setLoading(false);
         return;
       }
-      router.push(next);
+      // Vendors continue to /vendor/onboarding; the server decides.
+      router.push(typeof data.redirectTo === "string" ? data.redirectTo : "/");
       router.refresh();
     } catch {
       setError("Could not reach the server. Please try again.");

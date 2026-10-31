@@ -126,8 +126,10 @@ test("dashboard and settings redirect to login when signed out", async ({ page }
   await expect(page).toHaveURL(/\/login/);
   await page.goto("/settings");
   await expect(page).toHaveURL(/\/login/);
+  // P0-2: the vendor workspace is guarded too and keeps the target in ?next=.
+  await page.goto("/vendor/leads");
+  await expect(page).toHaveURL(/\/login\?next=%2Fvendor%2Fleads/);
 });
-
 test("wrong password shows an error", async ({ page }) => {
   await page.goto("/login");
   await page.getByLabel("Email").fill("nobody-e2e@example.com");

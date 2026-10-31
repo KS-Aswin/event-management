@@ -173,7 +173,7 @@ export async function signIn(page: Page, creds: Creds) {
 
 export async function signOut(page: Page) {
   await page.getByRole("button", { name: /Hi, |Account menu for/ }).click();
-  await page.getByRole("menuitem", { name: "Logout" }).click();
+  await page.getByRole("menuitem", { name: /^Log ?out$/i }).click();
   await page.waitForURL((u) => u.pathname === "/");
   await expect(page.getByRole("link", { name: "Sign in" })).toBeVisible();
 }

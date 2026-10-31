@@ -56,6 +56,17 @@ Prisma needs to download a native query-engine binary from `binaries.prisma.sh` 
    ```
    Visit http://localhost:3000 (use `npm run dev -- -p 3100` for another port).
 
+### Media uploads (vendor workspace)
+
+Vendor photos and videos are stored through a `StorageAdapter` (`lib/storage/`). Locally the `local` driver writes to `web/uploads/` (git-ignored) and the app serves files at `/media/<key>`. Optional env vars:
+
+- `STORAGE_DRIVER` — `local` (default). `s3`, `r2` and `supabase` are reserved and fail at startup until implemented (P3).
+- `UPLOADS_DIR` (or `STORAGE_LOCAL_ROOT`) — another folder for local uploads.
+- `MEDIA_VIDEO_UPLOADS` — `true`/`false`; MP4 uploads are on by default except in production.
+- `BILLING_ENABLED` — leave unset; until billing ships every vendor gets the Pro media limits.
+
+Image processing uses `sharp` (prebuilt binaries install with `npm install`).
+
 ### Production build (local check)
 
 ```bash
@@ -111,6 +122,8 @@ npm run db:seed      # ensures the 9 sample vendors exist
 npm run dev           # in one terminal, leave running
 npm run test:api      # in another terminal
 ```
+
+Unit tests that need no server or database: `npm run test:unit` (offering/attribute validation) and `npm run test:storage` (storage adapter, `/media` route, image processing, video links).
 
 The suite talks to `http://localhost:3000` by default. If your server runs elsewhere, set `BASE_URL` (it must be a localhost URL), e.g. `BASE_URL=http://localhost:3100 npm run test:api` (PowerShell: `$env:BASE_URL="http://localhost:3100"; npm run test:api`). It works against `npm run dev` or a production `npm run start`.
 

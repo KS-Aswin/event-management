@@ -20,6 +20,16 @@ const nextConfig: NextConfig = {
   ...(process.env.DEV_ORIGINS
     ? { allowedDevOrigins: process.env.DEV_ORIGINS.split(",").map((s) => s.trim()) }
     : {}),
+  // YouTube video-link thumbnails (docs/PRODUCT_PLAN.md 4.5).
+  images: {
+    remotePatterns: [{ protocol: "https", hostname: "i.ytimg.com", pathname: "/vi/**" }],
+  },
+  experimental: {
+    // Uploads go through the local-driver PUT route (MP4 up to 50 MB). When
+    // proxy.ts is present Next buffers request bodies up to this size; the
+    // default 10 MB would truncate them.
+    proxyClientMaxBodySize: "60mb",
+  },
   async headers() {
     return [{ source: "/(.*)", headers: securityHeaders }];
   },
