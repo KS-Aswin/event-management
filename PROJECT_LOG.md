@@ -41,12 +41,12 @@
 - `/settings` — real profile edit (name/email) + notification toggles, persisted to Postgres
 - `/about`, `/help`, `/privacy`, `/for-vendors` — static pages with real written copy
 - `web/db/seed.mjs` — seeds 9 sample vendors + reviews matching `/demo`'s data, so both versions are consistent
-- **`web/tests/api.test.mjs`** — real automated test suite, 84 checks, run with `npm run test:api` against a live dev server. See Session 6–10 log entries.
+- **`web/tests/api.test.mjs`** — real automated test suite (about 120 checks as of the Oct 2026 maintenance run), run with `npm run test:api` against a live dev server. Re-runnable: it deletes the test users/listings it creates. See Session 6–10 log entries.
 - Tested via `npm run build` (must pass — TypeScript + compile check) plus the automated suite above before every commit.
 - `/demo` mockup now has a live shareable link via GitHub Pages (`gh-pages` branch) — see Session 9 for how that was set up.
 
 **Known limitations / deliberate decisions:**
-- **Not using Prisma.** Its query-engine binary is hosted on `binaries.prisma.sh`, unreachable from this sandbox's network. Using the plain `pg` driver + hand-written SQL instead (`web/db/schema.sql` + `web/db/migrate.mjs`). Worth reconsidering if developing somewhere with normal network access.
+- **Not using Prisma.** Its query-engine binary is hosted on `binaries.prisma.sh`, unreachable from this sandbox's network. Using the plain `pg` driver + hand-written SQL instead (originally `web/db/schema.sql`, now numbered files in `web/db/migrations/` + `web/db/migrate.mjs`). Worth reconsidering if developing somewhere with normal network access.
 - **Not using `next/font/google`.** Same class of problem (fetches at build time). Using a plain CSS `@import` in `globals.css` instead — arguably more robust anyway, not just a workaround.
 - **No NextAuth/Auth.js.** Hand-rolled auth (bcrypt + jose + httpOnly cookies) to avoid a third dependency-compatibility risk after the above two surprises. Legitimate common pattern, not a hack — revisit if the project wants more OAuth providers later.
 - **This Next.js version (16.2.12) is newer than what's likely in Claude's training data** — read `node_modules/next/dist/docs/` before assuming an API. Confirmed so far: `cookies()`, page `params`, and `searchParams` are all `Promise`s that need `await`.
@@ -222,7 +222,7 @@ Both `npm run build` and `npm run test:api` should pass with zero failures befor
 - Reconfirmed the sandbox quirk from Session 5: Postgres + the dev server must be started together with the test run in one shell invocation, or they get killed between tool calls. Added a proper readiness poll (`curl` retry loop) instead of a fixed `sleep`, since route count has grown enough that a fixed sleep occasionally wasn't long enough.
 
 ### 2026-07-28 — Session 5 (vendor search, profiles, quotes, settings)
-- Extended the schema: `vendors`, `vendor_reviews`, `quote_requests` tables, plus `email_notifications`/`sms_notifications` columns on `users` (see `web/db/schema.sql`).
+- Extended the schema: `vendors`, `vendor_reviews`, `quote_requests` tables, plus `email_notifications`/`sms_notifications` columns on `users` (originally in `web/db/schema.sql`; now `web/db/migrations/001_baseline.sql`).
 - Wrote `web/db/seed.mjs` — seeds the same 9 sample vendors + reviews used in `/demo`, so both versions show consistent data. Idempotent (clears and re-inserts).
 - Added DB query functions in `lib/db.ts`: `findVendors` (with query/category/location/minRating/sort filters), `findVendorById`, `findAllLocations`, `findReviewsByVendor`, `createQuoteRequest`, `updateUser`.
 - Built `lib/vendorVisuals.tsx` — React port of the demo's illustrated category tiles (gradient + SVG icon per category), so vendor "photos" render consistently without depending on external images.
@@ -240,7 +240,7 @@ Both `npm run build` and `npm run test:api` should pass with zero failures befor
 - Installed PostgreSQL locally in the dev sandbox and created a `vela_dev` database, to actually build and test against instead of writing backend code blind.
 - Scaffolded the Next.js app in `/web` via `create-next-app`.
 - **Hit two dependency/network dead-ends in this sandbox, worked around both rather than faking success:**
-  - Prisma's query-engine binary is hosted on `binaries.prisma.sh`, which this sandbox's network policy blocks (confirmed with `PRISMA_ENGINES_CHECKSUM_IGNORE_MISSING=1` — still 403'd on the actual binary fetch, not just the checksum). Removed Prisma, switched to the plain `pg` driver with hand-written SQL (`web/db/schema.sql` + `web/db/migrate.mjs`).
+  - Prisma's query-engine binary is hosted on `binaries.prisma.sh`, which this sandbox's network policy blocks (confirmed with `PRISMA_ENGINES_CHECKSUM_IGNORE_MISSING=1` — still 403'd on the actual binary fetch, not just the checksum). Removed Prisma, switched to the plain `pg` driver with hand-written SQL (`web/db/schema.sql` + `web/db/migrate.mjs`; schema.sql was later replaced by `web/db/migrations/`).
   - `next/font/google` (used by default in the create-next-app template) also fetches at build time from a Google-owned CDN — same class of problem. Removed it, switched to a plain CSS `@import` in `globals.css` (fetched by the browser at runtime instead, which sidesteps the issue entirely).
 - Read this Next.js version's bundled docs (`node_modules/next/dist/docs/`) before writing route handlers, since `web/AGENTS.md` explicitly warns this version (16.2.12) has API changes from what's likely in training data — confirmed e.g. `cookies()` is `async` here.
 - Built real signup (`POST /api/auth/register`) and login (`POST /api/auth/login`) API routes: bcrypt password hashing, duplicate-email rejection (409), weak-password rejection (400), generic error on wrong password (401, doesn't reveal whether the email exists), JWT session cookie (via `jose`) on success.

@@ -1,15 +1,21 @@
 // Seeds sample vendors, reviews and services (Kerala) using the same vendors
 // as /demo, so both versions of the app show consistent data.
-// Safe to re-run: clears and re-inserts rather than duplicating.
+// DESTRUCTIVE: it deletes ALL vendors, quote requests, reviews, services,
+// portfolio items and favourites, then re-inserts the 9 sample vendors (vendor
+// ids restart at 1). To protect real data it refuses to run when the database
+// holds anything the seed did not create (owned or extra vendors, quote
+// requests, user-written reviews, favourites), unless the database name ends
+// in "_test" or you pass --force (or set SEED_CONFIRM=1).
 // Requires migrations first: npm run db:migrate
 //
-// Run with: node db/seed.mjs
+// Run with: npm run db:seed            (reads DATABASE_URL from .env.local)
+//           npm run db:seed -- --force (wipe even if non-seed data exists)
 
 import pg from "pg";
 
 const connectionString = process.env.DATABASE_URL;
 if (!connectionString) {
-  console.error("DATABASE_URL is not set. Copy .env.example to .env.local and fill it in.");
+  console.error("DATABASE_URL not found in the environment or .env.local. Copy .env.example to .env.local and fill it in.");
   process.exit(1);
 }
 
@@ -214,13 +220,38 @@ const reviewsByVendorIndex = {
   8: [{ name: "Anu B.", rating: 5, body: "The same-day edit at the reception made everyone emotional." }],
 };
 
+const force = process.argv.includes("--force") || process.env.SEED_CONFIRM === "1";
+
 const client = new pg.Client({ connectionString });
 
 try {
   await client.connect();
+
+  // Guard: never silently wipe data the seed did not create.
+  const { rows: [db] } = await client.query("SELECT current_database() AS name");
+  if (!force && !db.name.endsWith("_test")) {
+    const { rows: [c] } = await client.query(
+      `SELECT
+         (SELECT count(*) FROM vendors WHERE owner_id IS NOT NULL OR NOT (name = ANY($1::text[])))::int AS vendors,
+         (SELECT count(*) FROM quote_requests)::int AS quotes,
+         (SELECT count(*) FROM vendor_reviews WHERE customer_id IS NOT NULL)::int AS reviews,
+         (SELECT count(*) FROM favorites)::int AS favorites`,
+      [vendors.map((v) => v.name)]
+    );
+    if (c.vendors + c.quotes + c.reviews + c.favorites > 0) {
+      console.error(
+        `✗ Refusing to seed "${db.name}": it contains non-seed data ` +
+          `(${c.vendors} extra/owned vendors, ${c.quotes} quote requests, ${c.reviews} user reviews, ${c.favorites} favourites).\n` +
+          `  Seeding DELETES all of it. Re-run with --force (npm run db:seed -- --force) or SEED_CONFIRM=1 if that is what you want.`
+      );
+      await client.end();
+      process.exit(1);
+    }
+  }
+
   await client.query("BEGIN");
 
-  // Idempotent: wipe and re-insert rather than trying to upsert-match by name.
+  // Wipe and re-insert rather than trying to upsert-match by name.
   await client.query("DELETE FROM vendor_reviews");
   await client.query("DELETE FROM quote_requests");
   await client.query("DELETE FROM vendors"); // services and portfolio cascade
@@ -253,6 +284,19 @@ try {
       );
     }
   }
+
+  // Seed baseline (migration 003): the part of rating/reviews_count not backed
+  // by vendor_reviews rows, so the first real review adds to it.
+  await client.query(
+    `UPDATE vendors v SET
+       seed_reviews_count = GREATEST(v.reviews_count - r.n, 0),
+       seed_rating = CASE WHEN v.reviews_count - r.n > 0
+         THEN LEAST(5, GREATEST(0, (v.rating * v.reviews_count - r.total) / (v.reviews_count - r.n)))
+         ELSE 0 END
+     FROM (SELECT v2.id, count(rv.id)::int AS n, COALESCE(sum(rv.rating), 0) AS total
+           FROM vendors v2 LEFT JOIN vendor_reviews rv ON rv.vendor_id = v2.id GROUP BY v2.id) r
+     WHERE r.id = v.id`
+  );
 
   await client.query("COMMIT");
   console.log(`✓ Seeded ${vendors.length} vendors with reviews and services.`);

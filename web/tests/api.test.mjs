@@ -4,29 +4,88 @@
 // Sessions 4 and 5 (see PROJECT_LOG.md) with a real, repeatable script.
 //
 // Prerequisites:
-//   1. Postgres running, schema applied, vendors seeded:
+//   1. Postgres running, schema applied, vendors seeded (once):
 //        npm run db:migrate && npm run db:seed
 //   2. Dev server running in another terminal:
 //        npm run dev
 //
 // Then run:
-//   npm run test:api
+//   npm run test:api      (loads DATABASE_URL from .env.local)
 //
-// Each run uses randomized emails for anything that creates a user, so
-// it's safe to run repeatedly without manual cleanup between runs.
-//
-// IMPORTANT: this suite also creates a real vendor listing (via
-// POST /api/vendors) as part of testing that flow, and that listing is
-// NOT cleaned up afterward. The vendor-count/category-count assertions
-// near the top assume exactly the 9 seeded vendors exist and run BEFORE
-// the listing-creation section for that reason. If you run this suite
-// twice in a row without re-running `npm run db:seed` in between, the
-// count-based assertions will fail (correctly — the counts really did
-// change) even though nothing is actually broken. Re-seed before each
-// run to get a clean comparison.
+// Re-runnable: every user, listing and quote this suite creates is tagged
+// with a unique RUN_ID and deleted again at the end (leftovers from earlier,
+// interrupted runs are removed at the start), so the count assertions on the
+// 9 seeded vendors keep passing without re-seeding. Cleanup talks to the
+// database in DATABASE_URL directly and only touches rows matching the test
+// patterns below (<prefix>-<digits>@example.com users and what they own).
+// Both BASE_URL and DATABASE_URL must point at localhost.
+
+import pg from "pg";
 
 const BASE_URL = process.env.BASE_URL ?? "http://localhost:3000";
 const RUN_ID = Date.now();
+const DATABASE_URL = process.env.DATABASE_URL;
+const TEST_IP = `10.${Math.floor(RUN_ID / 65536) % 256}.${Math.floor(RUN_ID / 256) % 256}.${RUN_ID % 256}`;
+
+function isLocalHost(url) {
+  try {
+    return ["localhost", "127.0.0.1", "::1", "[::1]"].includes(new URL(url).hostname);
+  } catch {
+    return false;
+  }
+}
+if (!isLocalHost(BASE_URL)) {
+  console.error(`Refusing to run against non-local BASE_URL ${BASE_URL}.`);
+  process.exit(1);
+}
+
+// Users this suite creates: <prefix>-<digits>@example.com
+const TEST_EMAIL_REGEX =
+  "^(test-customer|test-vendor|other-vendor|weak|badrole|nobody|ratelimit)-[0-9]+@example[.]com$";
+
+async function cleanupTestData(label) {
+  if (!DATABASE_URL || !isLocalHost(DATABASE_URL)) {
+    console.log(`(skipping ${label} DB cleanup: DATABASE_URL missing or not localhost)`);
+    return;
+  }
+  const client = new pg.Client({ connectionString: DATABASE_URL });
+  try {
+    await client.connect();
+    await client.query("BEGIN");
+    const users = await client.query("SELECT id FROM users WHERE email ~ $1", [TEST_EMAIL_REGEX]);
+    const ids = users.rows.map((r) => r.id);
+    // Owned listings first (their services, reviews and quotes cascade), then users.
+    const v = await client.query("DELETE FROM vendors WHERE owner_id = ANY($1::int[])", [ids]);
+    const q = await client.query(
+      "DELETE FROM quote_requests WHERE message LIKE 'Automated test run %' OR customer_id = ANY($1::int[])",
+      [ids]
+    );
+    const r = await client.query("DELETE FROM vendor_reviews WHERE customer_id = ANY($1::int[])", [ids]);
+    const u = await client.query("DELETE FROM users WHERE id = ANY($1::int[])", [ids]);
+    await client.query("COMMIT");
+    if (u.rowCount || v.rowCount || q.rowCount || r.rowCount) {
+      console.log(
+        `(${label} cleanup: removed ${u.rowCount} users, ${v.rowCount} listings, ${q.rowCount} quotes, ${r.rowCount} reviews)`
+      );
+    }
+  } catch (err) {
+    await client.query("ROLLBACK").catch(() => {});
+    console.log(`(${label} DB cleanup failed: ${err.message})`);
+  } finally {
+    await client.end().catch(() => {});
+  }
+}
+
+// The 9 vendors db/seed.mjs inserts (same as the /demo mockup).
+const SEEDED_VENDOR_NAMES = new Set([
+  "Backwater Grand Palace", "Studio Frames by Arun", "Malabar Spice Caterers",
+  "Petal & Palm Decor", "DJ Rhythm Kerala", "Glow Bridal Studio", "Henna Dreams",
+  "Grand Vista Convention Centre", "Momentz Cinematics",
+]);
+function seededCount(res) {
+  const list = res.data?.vendors;
+  return Array.isArray(list) ? list.filter((v) => SEEDED_VENDOR_NAMES.has(v.name)).length : undefined;
+}
 
 let pass = 0;
 let fail = 0;
@@ -60,6 +119,10 @@ async function request(path, { method = "GET", body, cookie } = {}) {
     method,
     headers: {
       "Content-Type": "application/json",
+      // Per-run client IP, so the server's in-memory per-IP rate limits
+      // (quotes, register) start fresh for each run instead of tripping on a
+      // quick re-run. Only works because the local server trusts this header.
+      "X-Forwarded-For": TEST_IP,
       ...(cookie ? { Cookie: cookie } : {}),
     },
     body: body ? JSON.stringify(body) : undefined,
@@ -77,6 +140,7 @@ async function request(path, { method = "GET", body, cookie } = {}) {
 
 async function main() {
   console.log(`Running against ${BASE_URL} (run id ${RUN_ID})\n`);
+  await cleanupTestData("pre-run");
 
   // ---------- Auth: registration ----------
   const customerEmail = `test-customer-${RUN_ID}@example.com`;
@@ -137,28 +201,77 @@ async function main() {
   check("login: nonexistent email gives same generic error", loginNoUser.data?.error, loginBad.data?.error);
   check("login: nonexistent email also 401 (not 404 — no enumeration)", loginNoUser.status, 401);
 
+  // ---------- Auth: CSRF + rate limiting ----------
+  const loginTextPlain = await fetch(`${BASE_URL}/api/auth/login`, {
+    method: "POST",
+    headers: { "Content-Type": "text/plain" },
+    body: JSON.stringify({ email: customerEmail, password: "password123" }),
+  });
+  check("login: text/plain body rejected (415, blocks form-based login CSRF)", loginTextPlain.status, 415);
+
+  const loginCrossSite = await fetch(`${BASE_URL}/api/auth/login`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", Origin: "https://evil.example" },
+    body: JSON.stringify({ email: customerEmail, password: "password123" }),
+  });
+  check("login: cross-site Origin rejected (403)", loginCrossSite.status, 403);
+
+  const logoutCrossSite = await fetch(`${BASE_URL}/api/auth/logout`, {
+    method: "POST",
+    headers: { Origin: "https://evil.example" },
+  });
+  check("logout: cross-site Origin rejected (403)", logoutCrossSite.status, 403);
+
+  const rlEmail = `ratelimit-${RUN_ID}@example.com`;
+  let rlStatus = null;
+  let rlRetryAfter = null;
+  for (let i = 0; i < 11; i++) {
+    const res = await fetch(`${BASE_URL}/api/auth/login`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ email: rlEmail, password: "wrongpassword" }),
+    });
+    rlStatus = res.status;
+    rlRetryAfter = res.headers.get("retry-after");
+    await res.text();
+  }
+  check("login: 11th failed attempt for one email is rate-limited (429)", rlStatus, 429);
+  checkTrue("login: 429 includes a Retry-After header", !!rlRetryAfter);
+
   // ---------- Protected routes ----------
   const dashNoAuth = await request("/dashboard", { });
-  checkTrue("dashboard: redirects when logged out (30x)", dashNoAuth.status >= 300 && dashNoAuth.status < 400);
+  // With a loading.tsx boundary the page streams, so redirect() arrives as a
+  // 200 carrying a NEXT_REDIRECT to /login instead of a 30x status.
+  checkTrue(
+    "dashboard: redirects to /login when logged out",
+    (dashNoAuth.status >= 300 && dashNoAuth.status < 400) ||
+      (dashNoAuth.status === 200 && dashNoAuth.text.includes("NEXT_REDIRECT;replace;/login"))
+  );
 
   const dashAuth = await request("/dashboard", { cookie: customerCookie });
   check("dashboard: accessible with valid session (200)", dashAuth.status, 200);
 
   // ---------- Vendors: search/filter ----------
+  // Counts are scoped to the 9 seeded vendors (by name), so listings created
+  // by hand or by other tools in the same local DB don't break these checks.
   const allVendors = await request("/api/vendors");
-  check("vendors: all 9 seeded vendors returned", allVendors.data?.vendors?.length, 9);
+  check("vendors: all 9 seeded vendors returned", seededCount(allVendors), 9);
 
   const byCategory = await request("/api/vendors?category=Photography");
-  check("vendors: category filter (Photography = 2)", byCategory.data?.vendors?.length, 2);
+  check("vendors: category filter (Photography = 2)", seededCount(byCategory), 2);
+  checkTrue("vendors: category filter returns only Photography",
+    (byCategory.data?.vendors ?? []).every((v) => v.category === "Photography"));
 
   const byLocation = await request("/api/vendors?location=Kochi");
-  check("vendors: location filter (Kochi = 2)", byLocation.data?.vendors?.length, 2);
+  // Kochi also matches vendors in Ernakulam district (Kochi is in Ernakulam):
+  // the two Kochi vendors plus DJ Rhythm Kerala.
+  check("vendors: location filter (Kochi = 3 incl. Ernakulam district)", seededCount(byLocation), 3);
 
   const byRating = await request("/api/vendors?minRating=4.8");
-  check("vendors: min rating filter (4.8+ = 4)", byRating.data?.vendors?.length, 4);
+  check("vendors: min rating filter (4.8+ = 4)", seededCount(byRating), 4);
 
   const byQuery = await request("/api/vendors?q=drone");
-  check("vendors: text search on tags (drone = 1)", byQuery.data?.vendors?.length, 1);
+  check("vendors: text search on tags (drone = 1)", seededCount(byQuery), 1);
 
   const sortedByPriceLow = await request("/api/vendors?sort=priceLow");
   const prices = sortedByPriceLow.data?.vendors?.map((v) => v.price) ?? [];
@@ -593,7 +706,10 @@ async function main() {
   const svcDeleteOk = await request(`/api/services/${newServiceId}`, { method: "DELETE", cookie: vendorCookie });
   check("services: owner can delete (200)", svcDeleteOk.status, 200);
   const svcDeleteAgain = await request(`/api/services/${newServiceId}`, { method: "DELETE", cookie: vendorCookie });
-  check("services: deleting twice returns 404", svcDeleteAgain.status, 404);
+  // A service that past enquiries refer to is kept (deactivated) rather than
+  // deleted, so removing it again is a harmless 200; a real delete gives 404.
+  check("services: deleting twice returns 404 (or 200 if kept for past leads)",
+    svcDeleteAgain.status, svcDeleteOk.data?.mode === "deactivated" ? 200 : 404);
 
   // ---------- Logout ----------
   const logout = await request("/api/auth/logout", { method: "POST", cookie: customerCookie });
@@ -610,8 +726,10 @@ async function main() {
   check("vendor dashboard: reachable with vendor session (200)", vendorDashHtml.status, 200);
   checkTrue(
     "vendor dashboard: shows vendor-specific content (stats), not customer content",
-    vendorDashHtml.text.includes("Profile visitors") && !vendorDashHtml.text.includes("Venue — booked")
+    vendorDashHtml.text.includes("Total leads") && !vendorDashHtml.text.includes("Venue — booked")
   );
+
+  await cleanupTestData("post-run");
 
   // ---------- Summary ----------
   console.log(`\n${pass} passed, ${fail} failed`);
