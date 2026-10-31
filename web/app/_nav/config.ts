@@ -13,7 +13,16 @@ export type NavIcon =
   | "settings"
   | "preview"
   | "more"
-  | "help";
+  | "help"
+  | "vendors"
+  | "taxonomy"
+  | "custom"
+  | "users"
+  | "enquiries"
+  | "audit"
+  | "analytics"
+  | "external"
+  | "logout";
 
 export interface NavItem {
   href: string;
@@ -67,8 +76,25 @@ export const CUSTOMER_MENU: MenuLink[] = [
   { href: "/help", label: "Help" },
 ];
 
-/** Admin links; the P1 admin pages add Vendors, Reviews, Media, ... here. */
-export const ADMIN_LINKS: MenuLink[] = [{ href: ADMIN_HOME, label: "Today" }];
+/**
+ * Admin area navigation (PRODUCT_PLAN 2.5): the admin shell sidebar / phone
+ * drawer. The most specific match wins (Custom offerings over Taxonomy).
+ */
+export const ADMIN_NAV: NavItem[] = [
+  { href: ADMIN_HOME, label: "Today", icon: "home", exact: true },
+  { href: "/admin/vendors", label: "Vendors", icon: "vendors" },
+  { href: "/admin/media", label: "Media", icon: "media" },
+  { href: "/admin/reviews", label: "Reviews", icon: "reviews" },
+  { href: "/admin/taxonomy", label: "Taxonomy", icon: "taxonomy" },
+  { href: "/admin/taxonomy/custom", label: "Custom offerings", icon: "custom" },
+  { href: "/admin/users", label: "Users", icon: "users" },
+  { href: "/admin/enquiries", label: "Enquiries", icon: "enquiries" },
+  { href: "/admin/analytics", label: "Analytics", icon: "analytics" },
+  { href: "/admin/audit", label: "Audit log", short: "Audit", icon: "audit" },
+];
+
+/** Kept for the public header (an admin browsing the public site). */
+export const ADMIN_LINKS: MenuLink[] = [{ href: ADMIN_HOME, label: "Admin" }];
 
 export const ADMIN_MENU: MenuLink[] = [
   { href: ADMIN_HOME, label: "Admin home" },

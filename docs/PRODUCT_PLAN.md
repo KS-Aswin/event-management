@@ -1104,14 +1104,14 @@ AC:
 
 ### P1: Admin area
 
-**P1-1 Admin bootstrap and guard.** `npm run admin:create` script, `/admin` layout (noindex, no-store), `requireRole('admin')` on all `/api/admin/*`, suspension and `session_version` enforcement in `getLiveSession`.
+[x] **P1-1 Admin bootstrap and guard.** `npm run admin:create` script, `/admin` layout (noindex, no-store), `requireRole('admin')` on all `/api/admin/*`, suspension and `session_version` enforcement in `getLiveSession`. _Status: admin:create (idempotent create/promote, ADMIN_PASSWORD or hidden prompt, localhost-only unless --allow-remote, audited); `requireAdmin()` in every /api/admin handler (owner decision: 401 signed out, 403 non-admin/suspended; /admin pages stay a 404, re-checked against the DB in proxy.ts); admin shell replaces public chrome on /admin; migration 005 (actor FKs ON DELETE SET NULL, queue indexes); tests/admin-guard.test.mjs + e2e/admin-shell.spec.ts._
 AC:
 - The script creates or promotes an admin idempotently.
 - Register can never create an admin.
 - A suspended user's existing cookie is rejected on the next request.
 - `force_logout` invalidates the cookie.
 
-**P1-2 Audit log.** `lib/audit.ts` `audit(actor, action, entity, before, after, reason)` called inside the same transaction as each admin mutation, plus the `/admin/audit` viewer with filters.
+**P1-2 Audit log.** (Helper done in the foundation: `lib/admin/audit.ts` `audit(client, {...})` + `lib/admin/tx.ts` `withTransaction`; viewer pending.) `lib/audit.ts` `audit(actor, action, entity, before, after, reason)` called inside the same transaction as each admin mutation, plus the `/admin/audit` viewer with filters.
 AC:
 - Every `/api/admin/*` mutation test asserts exactly one audit row.
 - Audit rows cannot be updated or deleted (DB trigger).

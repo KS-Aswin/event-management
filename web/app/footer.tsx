@@ -1,4 +1,7 @@
+"use client";
+
 import Link from "next/link";
+import { usePathname } from "next/navigation";
 
 const LINKS = [
   { href: "/search", label: "Find vendors" },
@@ -8,7 +11,10 @@ const LINKS = [
   { href: "/privacy", label: "Privacy" },
 ];
 
-export default function Footer() {
+// Public footer. Hidden inside the admin area, which has its own shell.
+export default function Footer({ role }: { role?: string | null }) {
+  const pathname = usePathname();
+  if (role === "admin" && (pathname === "/admin" || pathname.startsWith("/admin/"))) return null;
   return (
     <footer className="border-t border-line bg-surface-muted mt-auto pb-[env(safe-area-inset-bottom)]">
       <div className="page py-8 sm:py-7 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-5 sm:gap-6 text-sm text-ink-soft">

@@ -91,7 +91,7 @@ export default async function RootLayout({
         <div id="content" tabIndex={-1} className="flex-1 flex flex-col">
           {children}
         </div>
-        <Footer />
+        <Footer role={session?.role ?? null} />
       </body>
     </html>
   );

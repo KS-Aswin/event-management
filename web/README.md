@@ -71,6 +71,18 @@ Who can see a file under `/media`: approved media is public and cached for a yea
 
 To use another uploads folder, set `UPLOADS_DIR` in `.env.local`. Deleting `uploads/` loses the files but not the database rows; run `npm run db:seed -- --force` to rebuild the sample media.
 
+### Admin account
+
+There is no admin sign-up (register only accepts customer or vendor) and the seed creates no admin. Create one, or promote an existing account, with:
+
+```bash
+npm run admin:create -- --email you@example.com --name "Your Name"   # or: npm run admin:create -- you@example.com
+```
+
+For a new account the password comes from the `ADMIN_PASSWORD` environment variable or a hidden prompt (min 12 characters); it is never printed. Running it again for the same email changes nothing. It refuses a non-localhost `DATABASE_URL` unless you add `--allow-remote`, and it won't promote an account that owns a vendor listing or is suspended. Promoting bumps `session_version`, so the account's old sessions are signed out. Then sign in at `/login`; admins land on `/admin`.
+
+The `/admin` pages are a plain 404 for anyone who is not a live admin. `/api/admin/*` answers 401 when signed out and 403 for customers, vendors and suspended accounts (`requireAdmin()` in each handler). Every admin change writes one row to the append-only `admin_audit_log` in the same transaction.
+
 ### Production build (local check)
 
 ```bash
@@ -154,6 +166,12 @@ npm run test:e2e                   # HEADED=1 npm run test:e2e to watch it
 ```
 
 Results land in `playwright-report/results.json` and failure traces in `test-results/` (both git-ignored). Full-page screenshots of every screen are written **outside the repo**, to `event-management-test-run/` in the folder that contains the repo; set `E2E_SHOT_DIR` to put them somewhere else. `node e2e/make-report.mjs` turns the last run into an HTML report (by default `../../event-management-test-report.html`, outside the repo).
+
+To run beside another suite, set `E2E_PORT` (default 3130) and `E2E_DIST_DIR` (default `.next-e2e`), e.g. `E2E_PORT=3170 E2E_DIST_DIR=.next-e2e-2 npm run test:e2e`.
+
+### Admin API tests
+
+`npm run test:admin` runs `tests/admin-*.test.mjs` (Node's test runner, one file at a time) against a running dev server (`BASE_URL`, localhost only). `tests/admin-helpers.mjs` creates throw-away users (`admtest-<prefix>-<digits>@example.com`), promotes test admins directly in the local DB and deletes them again afterwards. Audit rows are never deleted (the table is append-only); a deleted test admin's audit rows keep their content with `actor_id` set to NULL (migration 005 makes every admin "actor" column `ON DELETE SET NULL`).
 
 Type checking: `npm run typecheck`. Linting: `npm run lint`.
 

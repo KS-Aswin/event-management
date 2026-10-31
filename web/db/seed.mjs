@@ -3,6 +3,13 @@
 // versions of the app show consistent data; 3 more complete the P0-16
 // archetypes (event company, chenda troupe, rental). Data: db/seed-data.mjs.
 //
+// Admin queue fixtures (P1, not public): 3 non-approved listings (2 pending,
+// one with photos awaiting review; 1 changes requested), 3 "Kolkali" custom
+// offerings, open review and media reports, a re-review flag, and sample
+// enquiries including a spam burst (one phone to 11 vendors within 30 min).
+// Their enquiry messages start with "[seed]". No admin user is created: use
+// npm run admin:create.
+//
 // Media: placeholder photos are drawn by db/fixtures/make-media.mjs (our own
 // gradients and text, license-free, each < 60 KB, committed under
 // db/fixtures/media) and imported through the storage adapter
@@ -26,7 +33,7 @@ import { existsSync, readFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import pg from "pg";
-import { vendors, reviewsByVendor, mediaPlan, fixtureSpecs } from "./seed-data.mjs";
+import { allSeedVendors as vendors, reviewsByVendor, mediaPlan, fixtureSpecs, kolkaliOfferings } from "./seed-data.mjs";
 import { ensureFixtures, FIXTURE_DIR } from "./fixtures/make-media.mjs";
 
 const WEB = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
@@ -71,7 +78,7 @@ try {
     const { rows: [c] } = await client.query(
       `SELECT
          (SELECT count(*) FROM vendors WHERE owner_id IS NOT NULL OR NOT (name = ANY($1::text[])))::int AS vendors,
-         (SELECT count(*) FROM quote_requests)::int AS quotes,
+         (SELECT count(*) FROM quote_requests WHERE message IS NULL OR message NOT LIKE '[seed]%')::int AS quotes,
          (SELECT count(*) FROM vendor_reviews WHERE customer_id IS NOT NULL)::int AS reviews,
          (SELECT count(*) FROM favorites)::int AS favorites`,
       [vendors.map((v) => v.name)]
@@ -136,14 +143,17 @@ try {
       `INSERT INTO vendors (name, category, location, price, price_label, rating, reviews_count, experience, tags, about,
                             vendor_type, district_id, status, phone, whatsapp, primary_category_id, legal_name,
                             years_experience, team_size, languages, max_guests, max_events_per_day, fssai_no,
-                            travel_outside_kerala, onboarding_step, onboarding_completed_at, submitted_at, reviewed_at)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,'approved',$13,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,6,
-               now(), now(), now())
+                            travel_outside_kerala, onboarding_step, onboarding_completed_at, submitted_at, reviewed_at,
+                            status_reason)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$23,$13,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,6,
+               now(), now() - make_interval(hours => $24::int),
+               CASE WHEN $23 IN ('approved','changes_requested') THEN now() END, $25)
        RETURNING id`,
       [
         v.name, v.category, v.location, v.price ?? 0, v.priceLabel ?? "Price on request", v.rating, v.reviewsCount, v.experience,
         v.tags, v.about, v.vendorType, districtId, phone, primaryId, v.legalName ?? null, v.years, v.team ?? null,
         v.languages ?? ["Malayalam", "English"], v.maxGuests ?? null, v.perDay ?? 1, v.fssai ?? null, !!v.travelOutside,
+        v.status ?? "approved", v.submittedHoursAgo ?? 0, v.statusReason ?? null,
       ]
     );
 
@@ -242,11 +252,12 @@ try {
       const { rows: [row] } = await client.query(
         `INSERT INTO media_assets (uuid, vendor_id, album_id, purpose, kind, storage_driver, storage_key, variants, mime, bytes,
                                    width, height, sha256, placeholder_color, caption, alt_text, status, is_featured, sort_order)
-         VALUES ($1,$2,$3,$4,'image',$5,$6,$7,'image/jpeg',$8,$9,$10,$11,$12,$13,$14,'approved',$15,$16) RETURNING id`,
+         VALUES ($1,$2,$3,$4,'image',$5,$6,$7,'image/jpeg',$8,$9,$10,$11,$12,$13,$14,$17,$15,$16) RETURNING id`,
         [
           uuid, vendorId, inAlbum ? albumId : null, m.purpose, driver, baseKey, JSON.stringify(variants), buf.byteLength,
           processed.width || null, processed.height || null, createHash("sha256").update(buf).digest("hex"),
           processed.placeholderColor, m.caption, m.alt, gallery && gallerySort === 0, gallery ? gallerySort : 0,
+          v.mediaStatus ?? "approved",
         ]
       );
       if (gallery) gallerySort++;
@@ -278,6 +289,101 @@ try {
         vendorId, r.name, r.rating, r.body,
       ]);
     }
+  }
+
+  // ---- Admin queue fixtures (P1) ----------------------------------------
+  const idOf = async (name) => (await client.query("SELECT id FROM vendors WHERE name = $1", [name])).rows[0].id;
+  const { normaliseCustomName } = await tsImport("lib/offering-validation.ts");
+
+  // Status history for the non-approved listings (vendor-visible timeline).
+  for (const v of vendors.filter((x) => x.status && x.status !== "approved")) {
+    const id = await idOf(v.name);
+    await client.query(
+      `INSERT INTO vendor_status_events (vendor_id, from_status, to_status, reason, created_at)
+       VALUES ($1, 'draft', 'pending', NULL, now() - make_interval(hours => $2::int))`,
+      [id, v.submittedHoursAgo ?? 0]
+    );
+    if (v.status === "changes_requested") {
+      await client.query(
+        "INSERT INTO vendor_status_events (vendor_id, from_status, to_status, reason) VALUES ($1, 'pending', 'changes_requested', $2)",
+        [id, v.statusReason ?? null]
+      );
+    }
+  }
+
+  // Three vendors typed the same "Other" offering (P1-8 promote AC).
+  const artsId = need(cats, "Traditional & Live Arts", "category");
+  for (const k of kolkaliOfferings) {
+    const vendorId = await idOf(k.vendor);
+    const { rows: [svc] } = await client.query(
+      `INSERT INTO services (vendor_id, category_id, title, description, price_from, price_unit, sort_order, custom_name, kind)
+       VALUES ($1, $2, $3, 'Kolkali troupe (12 dancers) for wedding eve and cultural programmes.', $4, 'event', 50, $3, 'unit')
+       RETURNING id`,
+      [vendorId, artsId, k.title, k.price]
+    );
+    await client.query("INSERT INTO vendor_categories (vendor_id, category_id) VALUES ($1,$2) ON CONFLICT DO NOTHING", [vendorId, artsId]);
+    await client.query(
+      `INSERT INTO custom_offering_requests (service_id, vendor_id, category_id, raw_name, normalised_name)
+       VALUES ($1, $2, $3, $4, $5)`,
+      [svc.id, vendorId, artsId, k.title, normaliseCustomName(k.title)]
+    );
+    offeringCount++;
+  }
+
+  // Open review reports (anonymous reporters, so no users are needed).
+  const reviewReports = [
+    ["Rahul P.", "This review mentions a delay that never happened. I think it is from a competitor."],
+    ["Kiran J.", "Reviewer was not a customer of this venue."],
+  ];
+  for (const [reviewer, reason] of reviewReports) {
+    await client.query(
+      `INSERT INTO review_reports (review_id, reason, created_at)
+       SELECT id, $2, now() - interval '3 hours' FROM vendor_reviews WHERE reviewer_name = $1 LIMIT 1`,
+      [reviewer, reason]
+    );
+  }
+
+  // Two reported photos (one report each: still approved, in the Reported tab).
+  const reportedMedia = await client.query(
+    `SELECT m.id FROM media_assets m JOIN vendors v ON v.id = m.vendor_id
+      WHERE v.name IN ('Glow Bridal Studio', 'DJ Rhythm Kerala') AND m.purpose = 'gallery' AND m.status = 'approved'
+      ORDER BY v.name, m.sort_order LIMIT 2`
+  );
+  const mediaReasons = ["Looks like a stock photo, not their own work.", "Shows a guest's face without consent."];
+  for (const [i, row] of reportedMedia.rows.entries()) {
+    await client.query("INSERT INTO media_reports (media_id, reason) VALUES ($1, $2)", [row.id, mediaReasons[i]]);
+    await client.query("UPDATE media_assets SET report_count = report_count + 1 WHERE id = $1", [row.id]);
+  }
+
+  // An approved vendor renamed itself: shows in the re-review list.
+  await client.query(
+    `UPDATE vendors SET rereview_required = true, rereview_fields = ARRAY['name'],
+            rereview_requested_at = now() - interval '20 hours' WHERE name = 'Henna Dreams'`
+  );
+
+  // Sample enquiries ([seed] messages): a few ordinary ones and a spam burst
+  // (one phone to 11 approved vendors within 30 minutes, P1-13 flag).
+  const approved = (await client.query("SELECT id FROM vendors WHERE status = 'approved' ORDER BY id")).rows.map((r) => r.id);
+  const ordinary = [
+    ["Anjali Menon", "+919847100201", "[seed] Wedding on 14 Feb, about 600 guests. Is the date free?", 26],
+    ["Rahul Nair", "+919847100202", "[seed] Need a quote for a reception for 300 guests.", 9],
+    ["Fathima K.", "+919847100203", "[seed] Mehendi for 15 guests the evening before the nikah.", 2],
+  ];
+  for (const [i, [name, phone, message, hoursAgo]] of ordinary.entries()) {
+    await client.query(
+      `INSERT INTO quote_requests (vendor_id, name, phone, message, created_at)
+       VALUES ($1, $2, $3, $4, now() - make_interval(hours => $5::int))`,
+      [approved[i % approved.length], name, phone, message, hoursAgo]
+    );
+  }
+  const burst = approved.slice(0, 11);
+  for (const [i, vendorId] of burst.entries()) {
+    await client.query(
+      `INSERT INTO quote_requests (vendor_id, name, phone, message, created_at)
+       VALUES ($1, 'Best Price Deals', '+919800000999', '[seed] Cheapest package? Call now for bulk offers.',
+               now() - make_interval(mins => $2::int))`,
+      [vendorId, 30 - i * 3]
+    );
   }
 
   // Seed baseline (migration 003): the part of rating/reviews_count not backed

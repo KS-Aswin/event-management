@@ -72,10 +72,15 @@ export function sessionVersionOf(user: UserRecord): number {
   return typeof v === "number" ? v : 0;
 }
 
+// Guard responses are per-user: never cache them.
+const NO_STORE = { "Cache-Control": "private, no-store" };
+
 /**
  * API guard for /api/vendor/*, /api/my/*, /api/admin/*. Returns the live
  * session, or a response to send back:
- *   signed out -> 401, wrong role -> 403, admin routes -> 404 for non-admins.
+ *   signed out -> 401, suspended -> 403, wrong role -> 403.
+ * Admin APIs answer 401/403 like the others (owner decision for P1); only
+ * the /admin PAGES stay a plain 404 for non-admins (requirePageRole).
  *
  *   const auth = await requireRole("vendor");
  *   if (auth instanceof Response) return auth;
@@ -86,20 +91,31 @@ export async function requireRole(
   role: UserRole | UserRole[]
 ): Promise<SessionPayload | NextResponse> {
   const roles = Array.isArray(role) ? role : [role];
-  const adminOnly = roles.length === 1 && roles[0] === "admin";
   const r = await resolveLiveSession();
   if (r.state !== "ok") {
-    if (adminOnly) return NextResponse.json({ error: "Not found." }, { status: 404 });
     return NextResponse.json(
       { error: r.state === "suspended" ? "This account is suspended." : "Please sign in." },
-      { status: r.state === "suspended" ? 403 : 401 }
+      { status: r.state === "suspended" ? 403 : 401, headers: NO_STORE }
     );
   }
   if (!roles.includes(r.session.role)) {
-    if (adminOnly) return NextResponse.json({ error: "Not found." }, { status: 404 });
-    return NextResponse.json({ error: "You don't have access to this." }, { status: 403 });
+    return NextResponse.json({ error: "You don't have access to this." }, { status: 403, headers: NO_STORE });
   }
   return r.session;
+}
+
+/**
+ * Server-side guard for every /api/admin/* handler (P1-1). Reloads the user
+ * from the DB, so a demoted, suspended or force-logged-out admin is refused
+ * on the next request: signed out -> 401, signed in but not an active
+ * admin (customer, vendor, suspended) -> 403.
+ *
+ *   const auth = await requireAdmin();
+ *   if (auth instanceof Response) return auth;
+ *   // auth.userId is the acting admin: pass it to audit() as actorId.
+ */
+export async function requireAdmin(): Promise<SessionPayload | NextResponse> {
+  return requireRole("admin");
 }
 
 /** Current path as forwarded by proxy.ts (x-vela-path), for ?next= links. */
