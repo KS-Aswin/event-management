@@ -173,7 +173,7 @@ export default function HomeSearch() {
             e.preventDefault();
             search({ q: value });
           }}
-          className={`flex items-center gap-3 border rounded-full px-5 py-3 transition-shadow relative z-10 bg-white ${
+          className={`flex items-center gap-3 border rounded-full px-5 py-1 transition-shadow relative z-10 bg-white ${
             focused ? "shadow-[0_1px_6px_rgba(32,33,36,0.18)] border-transparent" : "border-line"
           }`}
         >
@@ -204,7 +204,7 @@ export default function HomeSearch() {
               aria-activedescendant={active >= 0 ? options[active].id : undefined}
               autoComplete="off"
               enterKeyHint="search"
-              className="w-full outline-none text-base bg-transparent relative"
+              className="w-full min-h-10 outline-none text-base bg-transparent relative"
             />
           </div>
         </form>

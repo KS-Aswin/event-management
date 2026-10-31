@@ -68,7 +68,7 @@ export default function Header({
           </button>
         )}
         {!isHome && (
-          <Link href="/" className="font-display text-xl font-semibold text-accent whitespace-nowrap">
+          <Link href="/" className="inline-flex items-center min-h-10 font-display text-xl font-semibold text-accent whitespace-nowrap">
             Vel<span className="text-gold">a</span>
           </Link>
         )}
@@ -85,7 +85,7 @@ export default function Header({
           </Link>
           <Link
             href="/login"
-            className="bg-accent hover:bg-accent-hover text-white px-4.5 py-2 rounded-md font-medium"
+            className="inline-flex items-center min-h-10 bg-accent hover:bg-accent-hover text-white px-4.5 py-2 rounded-md font-medium"
           >
             Sign in
           </Link>
@@ -120,7 +120,7 @@ function HeaderSearchBox() {
     <form
       role="search"
       onSubmit={submit}
-      className="order-last basis-full md:order-none md:basis-auto flex items-center gap-2.5 md:flex-1 max-w-full md:max-w-[480px] min-w-0 border border-line rounded-full px-4 py-2 focus-within:border-accent"
+      className="order-last basis-full md:order-none md:basis-auto flex items-center gap-2.5 md:flex-1 max-w-full md:max-w-[480px] min-w-0 border border-line rounded-full px-4 py-0 focus-within:border-accent"
     >
       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="text-ink-soft shrink-0" aria-hidden="true">
         <circle cx="11" cy="11" r="8" />
@@ -132,7 +132,7 @@ function HeaderSearchBox() {
         onChange={(e) => setValue(e.target.value)}
         placeholder="Search vendors, categories, locations"
         aria-label="Search vendors"
-        className="flex-1 min-w-0 outline-none text-sm bg-transparent"
+        className="flex-1 min-w-0 min-h-10 outline-none text-sm bg-transparent"
       />
     </form>
   );

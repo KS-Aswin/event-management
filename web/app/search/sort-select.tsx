@@ -22,7 +22,7 @@ export default function SortSelect({ value }: { value: string }) {
           const qs = params.toString();
           startTransition(() => router.replace(qs ? `/search?${qs}` : "/search"));
         }}
-        className={`px-2.5 py-1.5 border border-line rounded-md text-sm text-foreground bg-white ${pending ? "opacity-60" : ""}`}
+        className={`min-h-10 px-2.5 py-1.5 border border-line rounded-md text-sm text-foreground bg-white ${pending ? "opacity-60" : ""}`}
       >
         <option value="rating">Highest rated</option>
         <option value="reviews">Most reviewed</option>

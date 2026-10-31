@@ -5,6 +5,7 @@ import {
   findVendorByOwner,
   createVendorListing,
   districtExists,
+  findCategories,
   toPublicVendor,
 } from "@/lib/db";
 import { CATEGORIES } from "@/lib/vendorVisuals";
@@ -75,7 +76,11 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Invalid request body." }, { status: 400 });
   }
 
-  const parsed = validateListingFields(body, { partial: false, categories: CATEGORIES });
+  const parsed = validateListingFields(body, {
+    partial: false,
+    // The form offers the categories table; keep the legacy 7 valid too.
+    categories: [...new Set<string>([...CATEGORIES, ...(await findCategories())])],
+  });
   if (!parsed.ok) {
     return NextResponse.json({ field: parsed.field, error: parsed.error }, { status: 400 });
   }
@@ -96,6 +101,8 @@ export async function POST(request: Request) {
     tags: f.tags ?? [],
     about: f.about as string,
     districtId: f.districtId,
+    phone: f.phone,
+    whatsapp: f.whatsapp,
   });
 
   // null = a concurrent request created this owner's listing first.

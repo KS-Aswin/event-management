@@ -100,7 +100,7 @@ export default function QuoteButton({
 
   const triggerClass =
     variant === "link"
-      ? "text-[13px] text-accent hover:underline font-medium"
+      ? "inline-flex items-center min-h-10 text-[13px] text-accent hover:underline font-medium"
       : "px-5 py-2.5 rounded-md bg-accent hover:bg-accent-hover text-white text-sm font-medium";
 
   return (
@@ -161,7 +161,7 @@ export default function QuoteButton({
                 <button
                   type="button"
                   onClick={closeDialog}
-                  className="px-4 py-2 rounded-md bg-accent hover:bg-accent-hover text-white text-sm"
+                  className="min-h-11 px-4 py-2 rounded-md bg-accent hover:bg-accent-hover text-white text-sm"
                 >
                   Done
                 </button>
@@ -184,7 +184,7 @@ export default function QuoteButton({
                     </legend>
                     <div className="space-y-1.5">
                       {services.map((s) => (
-                        <label key={s.id} className="flex items-center gap-2 text-sm">
+                        <label key={s.id} className="flex items-center gap-2 min-h-10 text-sm">
                           <input
                             type="checkbox"
                             name="serviceIds"
@@ -214,14 +214,14 @@ export default function QuoteButton({
                   <button
                     type="button"
                     onClick={closeDialog}
-                    className="px-4 py-2 rounded-md bg-gray-100 hover:bg-gray-200 text-sm"
+                    className="min-h-11 px-4 py-2 rounded-md bg-gray-100 hover:bg-gray-200 text-sm"
                   >
                     Cancel
                   </button>
                   <button
                     type="submit"
                     disabled={loading}
-                    className="px-4 py-2 rounded-md bg-accent hover:bg-accent-hover text-white text-sm disabled:opacity-70"
+                    className="min-h-11 px-4 py-2 rounded-md bg-accent hover:bg-accent-hover text-white text-sm disabled:opacity-70"
                   >
                     {loading ? "Sending…" : "Send request"}
                   </button>

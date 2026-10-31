@@ -86,6 +86,9 @@ export type ListingFields = {
   tags?: string[];
   about?: string;
   districtId?: number;
+  /** null clears the number; undefined leaves it unchanged. */
+  phone?: string | null;
+  whatsapp?: string | null;
 };
 
 /**
@@ -172,6 +175,22 @@ export function validateListingFields(
       return { ok: false, field: "districtId", error: "Please choose a valid district." };
     }
     fields.districtId = n;
+  }
+  for (const k of ["phone", "whatsapp"] as const) {
+    if (!(k in raw)) continue;
+    const v = raw[k];
+    if (v === null || (typeof v === "string" && v.trim() === "")) {
+      fields[k] = null;
+      continue;
+    }
+    if (typeof v !== "string" || !/^\+?[\d\s-]{10,15}$/.test(v.trim())) {
+      return {
+        ok: false,
+        field: k,
+        error: k === "phone" ? "Enter a 10-digit mobile number." : "Enter a 10-digit WhatsApp number.",
+      };
+    }
+    fields[k] = v.trim();
   }
   return { ok: true, fields };
 }

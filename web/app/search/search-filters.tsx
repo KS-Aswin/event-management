@@ -58,8 +58,8 @@ export default function SearchFilters({
   const panel = (
     <>
       <fieldset className="mb-2 relative">
-        <legend className="text-[13px] uppercase tracking-wide text-ink-soft mt-0 mb-3.5">Category</legend>
-        <button type="button" onClick={clearAll} className="absolute right-0 top-0 text-[12.5px] text-accent hover:underline">
+        <legend className="text-[13px] uppercase tracking-wide text-ink-soft mt-0 mb-6">Category</legend>
+        <button type="button" onClick={clearAll} className="absolute right-0 -top-9 min-h-10 px-1 text-[12.5px] text-accent hover:underline">
           Clear all
         </button>
         {CATEGORIES.map((c) => {
@@ -99,7 +99,7 @@ export default function SearchFilters({
         id="filter-location"
         value={activeLocation}
         onChange={(e) => updateParams((p) => (e.target.value ? p.set("location", e.target.value) : p.delete("location")))}
-        className="w-full px-2.5 py-2 border border-line rounded-md text-sm"
+        className="w-full min-h-11 px-2.5 py-2 border border-line rounded-md text-sm"
       >
         <option value="">All Kerala</option>
         {locations.map((l) => (
@@ -118,7 +118,7 @@ export default function SearchFilters({
         onChange={(e) =>
           updateParams((p) => (e.target.value !== "0" ? p.set("minRating", e.target.value) : p.delete("minRating")))
         }
-        className="w-full px-2.5 py-2 border border-line rounded-md text-sm"
+        className="w-full min-h-11 px-2.5 py-2 border border-line rounded-md text-sm"
       >
         <option value="0">Any</option>
         <option value="4.5">4.5+</option>

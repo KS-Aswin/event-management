@@ -74,7 +74,7 @@ export default function FavoriteButton({
         onClick={toggle}
         disabled={loading}
         aria-label={favorited ? "Remove from favorites" : "Save to favorites"}
-        className="shrink-0 disabled:opacity-60"
+        className="shrink-0 -m-2.5 w-10 h-10 inline-flex items-center justify-center rounded-full hover:bg-gray-100 disabled:opacity-60"
       >
         <svg
           width={dim}

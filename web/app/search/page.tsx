@@ -135,7 +135,7 @@ export default async function SearchPage({ searchParams }: { searchParams: Promi
   return (
     <main className="max-w-[1180px] mx-auto px-4 sm:px-6 py-6 flex flex-col md:flex-row gap-x-8 w-full">
       {/* Query box for phones; the header search box covers md and up. */}
-      <form action="/search" method="get" role="search" className="md:hidden mb-4 flex items-center gap-2 border border-line rounded-full px-4 py-2.5 bg-white">
+      <form action="/search" method="get" role="search" className="md:hidden mb-4 flex items-center gap-2 border border-line rounded-full px-4 py-0 bg-white">
         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="text-ink-soft shrink-0" aria-hidden="true">
           <circle cx="11" cy="11" r="8" />
           <path d="m21 21-4.35-4.35" />
@@ -148,7 +148,7 @@ export default async function SearchPage({ searchParams }: { searchParams: Promi
           aria-label="Search vendors"
           placeholder="Search vendors"
           enterKeyHint="search"
-          className="flex-1 min-w-0 outline-none text-base bg-transparent"
+          className="flex-1 min-w-0 min-h-11 outline-none text-base bg-transparent"
         />
         {categories.map((c) => (
           <input key={c} type="hidden" name="category" value={c} />
@@ -156,7 +156,7 @@ export default async function SearchPage({ searchParams }: { searchParams: Promi
         {location && <input type="hidden" name="location" value={location} />}
         {minRating && <input type="hidden" name="minRating" value={String(minRating)} />}
         {sort !== "rating" && <input type="hidden" name="sort" value={sort} />}
-        <button type="submit" className="text-sm text-accent font-medium px-1">
+        <button type="submit" className="min-h-11 text-sm text-accent font-medium px-1">
           Search
         </button>
       </form>
@@ -182,7 +182,7 @@ export default async function SearchPage({ searchParams }: { searchParams: Promi
               <li key={c.label}>
                 <Link
                   href={c.href}
-                  className="inline-flex items-center gap-1.5 bg-accent-tint text-accent text-[12.5px] rounded-full pl-3 pr-2 py-1 hover:underline"
+                  className="inline-flex items-center gap-1.5 bg-accent-tint text-accent text-[12.5px] rounded-full pl-3 pr-2 py-1 min-h-10 hover:underline"
                   aria-label={`Remove filter ${c.label}`}
                 >
                   {c.label}
@@ -192,7 +192,7 @@ export default async function SearchPage({ searchParams }: { searchParams: Promi
             ))}
             {chips.length > 1 && (
               <li>
-                <Link href={href({ q: null, categories: [], location: null, minRating: null })} className="inline-flex text-[12.5px] text-accent py-1 px-1 hover:underline">
+                <Link href={href({ q: null, categories: [], location: null, minRating: null })} className="inline-flex items-center min-h-10 text-[12.5px] text-accent py-1 px-1 hover:underline">
                   Clear all
                 </Link>
               </li>
@@ -226,7 +226,7 @@ export default async function SearchPage({ searchParams }: { searchParams: Promi
         {pageCount > 1 && (
           <nav aria-label="Pagination" className="flex items-center justify-between gap-3 mt-6 text-sm">
             {page > 1 ? (
-              <Link href={href({ page: page - 1 })} className="px-3.5 py-2 border border-line rounded-md hover:border-accent">
+              <Link href={href({ page: page - 1 })} className="inline-flex items-center min-h-10 px-3.5 py-2 border border-line rounded-md hover:border-accent">
                 ← Previous
               </Link>
             ) : (
@@ -236,7 +236,7 @@ export default async function SearchPage({ searchParams }: { searchParams: Promi
               Page {page} of {pageCount}
             </span>
             {page < pageCount ? (
-              <Link href={href({ page: page + 1 })} className="px-3.5 py-2 border border-line rounded-md hover:border-accent">
+              <Link href={href({ page: page + 1 })} className="inline-flex items-center min-h-10 px-3.5 py-2 border border-line rounded-md hover:border-accent">
                 Next →
               </Link>
             ) : (
