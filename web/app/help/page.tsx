@@ -60,31 +60,46 @@ const faqJsonLd = {
 
 export default function HelpPage() {
   return (
-    <main className="max-w-[760px] mx-auto px-4 sm:px-6 py-10 w-full">
+    <main className="page-narrow py-10 sm:py-16">
       <script
         type="application/ld+json"
         dangerouslySetInnerHTML={{ __html: JSON.stringify(faqJsonLd).replace(/</g, "\u003c") }}
       />
-      <h1 className="text-display font-semibold mb-2">Help centre</h1>
-      <p className="text-ink-soft text-sm mb-6">
-        Answers to the most common questions. Can&apos;t find yours? Email help@vela.example.
+      <p className="eyebrow text-accent mb-3">Support</p>
+      <h1 className="text-display sm:text-[32px] font-semibold mb-3">Help centre</h1>
+      <p className="text-ink-soft text-[16px] leading-relaxed mb-10 max-w-[60ch]">
+        Answers to the most common questions. Can&apos;t find yours? Email{" "}
+        <a
+          href="mailto:help@vela.example"
+          className="text-accent font-medium underline-offset-2 hover:underline"
+        >
+          help@vela.example
+        </a>
+        .
       </p>
       {SECTIONS.map((section) => (
-        <section key={section.id} aria-labelledby={section.id} className="mb-8">
-          <h2 id={section.id} className="text-title font-semibold mb-1">
+        <section key={section.id} aria-labelledby={section.id} className="mb-10">
+          <h2 id={section.id} className="text-title font-semibold mb-3">
             {section.title}
           </h2>
-          {section.faqs.map((f) => (
-            <details key={f.id} id={f.id} className="group border-b border-line">
-              <summary className="flex items-center justify-between gap-3 min-h-[44px] py-2.5 cursor-pointer list-none text-body font-semibold [&::-webkit-details-marker]:hidden">
-                {f.q}
-                <span aria-hidden="true" className="text-ink-soft transition-transform group-open:rotate-45 text-lg leading-none">
-                  +
-                </span>
-              </summary>
-              <p className="text-sm text-ink-soft leading-relaxed pb-3.5">{f.a}</p>
-            </details>
-          ))}
+          <div className="rounded-card border border-line bg-surface divide-y divide-line overflow-hidden">
+            {section.faqs.map((f) => (
+              <details key={f.id} id={f.id} className="group">
+                <summary className="flex items-center justify-between gap-4 min-h-[56px] px-4 sm:px-5 py-3 cursor-pointer list-none text-[15.5px] font-semibold transition-colors hover:bg-surface-muted [&::-webkit-details-marker]:hidden">
+                  {f.q}
+                  <span
+                    aria-hidden="true"
+                    className="grid shrink-0 place-items-center w-7 h-7 rounded-full bg-surface-muted text-ink-soft text-lg leading-none transition-transform group-open:rotate-45 group-open:bg-accent-tint group-open:text-accent motion-reduce:transition-none"
+                  >
+                    +
+                  </span>
+                </summary>
+                <p className="px-4 sm:px-5 pb-4 pr-12 sm:pr-14 text-[15px] text-ink-soft leading-relaxed max-w-[65ch]">
+                  {f.a}
+                </p>
+              </details>
+            ))}
+          </div>
         </section>
       ))}
     </main>

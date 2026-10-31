@@ -3,13 +3,13 @@ export default function Loading() {
     <div
       role="status"
       aria-live="polite"
-      className="flex-1 flex items-center justify-center py-20 w-full"
+      className="flex-1 flex flex-col items-center justify-center gap-3 min-h-[50vh] py-20 w-full"
     >
       <span
         aria-hidden="true"
-        className="w-8 h-8 rounded-full border-2 border-line border-t-accent animate-spin"
+        className="w-8 h-8 rounded-full border-[3px] border-accent-tint border-t-accent animate-spin"
       />
-      <span className="sr-only">Loading…</span>
+      <span className="text-caption text-ink-soft">Loading…</span>
     </div>
   );
 }
