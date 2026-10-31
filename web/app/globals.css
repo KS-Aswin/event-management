@@ -1,3 +1,33 @@
+/* ==========================================================================
+   Vela design system (globals.css)
+
+   Tokens: colours live on :root and are exposed to Tailwind via @theme
+   (bg-accent, text-ink-soft, border-line, bg-surface-muted, text-danger,
+   text-gold-ink...). Type scale: text-caption / text-body / text-lead /
+   text-title / text-heading / text-display. Radii: rounded-control (8px),
+   rounded-card (12px). Shadows: shadow-card, shadow-pop.
+
+   Shared classes (@layer components, so Tailwind utilities still override):
+     .btn             base button: 44px tall on phone, 40px from sm up
+     .btn-primary     filled green call to action
+     .btn-secondary   white, bordered secondary action
+     .btn-ghost       text-only green action with a tinted hover
+     .btn-sm/.btn-lg  size modifiers (sm keeps the 44px tap height on phone)
+     .btn-block       full width (sticky mobile bars, forms)
+     .field / .input  text input, select or textarea (16px on phone: no iOS
+                      zoom; focus ring; aria-invalid turns the border red)
+     .label           form label above a .field
+     .hint            helper text under a field
+     .card            bordered white surface, 12px radius, 20px padding
+     .card-link       add to a .card that is a link: hover border + shadow
+     .chip            small grey pill (services, tags)
+     .eyebrow         small uppercase section label
+     .alert-error / .alert-success   inline status messages
+     .page            centred page column (max 1180px, 16px / 28px gutters)
+     .page-narrow     centred reading column (max 720px)
+     .safe-bottom     bottom padding >= env(safe-area-inset-bottom) for
+                      fixed bottom bars; .safe-top does the same at the top
+   ========================================================================== */
 @import url('https://fonts.googleapis.com/css2?family=Poppins:wght@500;600&family=Inter:wght@400;500;600&display=swap');
 @import "tailwindcss";
 
@@ -8,15 +38,19 @@
   --color-accent-hover: #0b5940;
   --color-accent-tint: #e6f2ee;
   --color-gold: #c9a227;
+  /* Gold dark enough for text on white (AA 4.5:1). */
+  --color-gold-ink: #876a0c;
   --color-ink-soft: #5f6368;
-  --color-line: #e8eaed;
+  --color-line: #e3e5e8;
+  --color-line-strong: #c9cdd2;
   /* Surfaces and status colours (use these instead of raw gray-* / red-*). */
   --color-surface: #ffffff;
-  --color-surface-muted: #f8f9fa;
+  --color-surface-muted: #f6f7f8;
   --color-danger: #b3261e;
   --color-danger-tint: #fdecea;
   --color-success-tint: #e6f2ee;
   --color-focus: #0f6d52;
+  --header-h: 64px;
 }
 
 @theme inline {
@@ -26,14 +60,21 @@
   --color-accent-hover: var(--color-accent-hover);
   --color-accent-tint: var(--color-accent-tint);
   --color-gold: var(--color-gold);
+  --color-gold-ink: var(--color-gold-ink);
   --color-ink-soft: var(--color-ink-soft);
   --color-line: var(--color-line);
+  --color-line-strong: var(--color-line-strong);
   --color-surface: var(--color-surface);
   --color-surface-muted: var(--color-surface-muted);
   --color-danger: var(--color-danger);
   --color-danger-tint: var(--color-danger-tint);
-  --font-sans: "Inter", -apple-system, BlinkMacSystemFont, sans-serif;
-  --font-display: "Poppins", -apple-system, sans-serif;
+  --font-sans: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  --font-display: "Poppins", "Inter", -apple-system, sans-serif;
+
+  --radius-control: 8px;
+  --radius-card: 12px;
+  --shadow-card: 0 1px 2px rgb(32 33 36 / 0.05), 0 1px 3px rgb(32 33 36 / 0.06);
+  --shadow-pop: 0 4px 12px rgb(32 33 36 / 0.08), 0 12px 32px rgb(32 33 36 / 0.1);
 
   /* Type scale: prefer these over one-off text-[Npx] sizes.
      text-caption 12.5 / text-body 14.5 / text-lead 15 / text-title 18 /
@@ -43,7 +84,7 @@
   --text-body: 14.5px;
   --text-body--line-height: 1.6;
   --text-lead: 15px;
-  --text-lead--line-height: 1.5;
+  --text-lead--line-height: 1.55;
   --text-title: 18px;
   --text-title--line-height: 1.35;
   --text-heading: 22px;
@@ -52,9 +93,34 @@
   --text-display--line-height: 1.25;
 }
 
+html {
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
+  /* Anchor targets are not hidden under the sticky header. */
+  scroll-padding-top: calc(var(--header-h) + 12px);
+  -webkit-tap-highlight-color: transparent;
+}
+
 body {
   background: var(--background);
   color: var(--foreground);
+  /* Landscape phones with a notch (viewport-fit=cover). */
+  padding-left: env(safe-area-inset-left);
+  padding-right: env(safe-area-inset-right);
+}
+
+h1,
+h2,
+h3 {
+  text-wrap: balance;
+}
+p {
+  text-wrap: pretty;
+}
+
+::selection {
+  background: var(--color-accent-tint);
+  color: var(--color-accent-hover);
 }
 
 /* Visible keyboard focus everywhere. Mouse/touch focus stays unstyled. */
@@ -75,11 +141,22 @@ textarea:focus-visible {
   outline: none;
 }
 
+/* Phones: text controls at 16px so iOS Safari never zooms on focus. Unlayered
+   on purpose so it beats text-sm / text-[14px] utilities on any field. */
+@media (max-width: 639.98px) {
+  input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="file"]),
+  select,
+  textarea {
+    font-size: 16px;
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,
   *::after {
     animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
     transition-duration: 0.01ms !important;
     scroll-behavior: auto !important;
   }
@@ -93,18 +170,25 @@ textarea:focus-visible {
     align-items: center;
     justify-content: center;
     gap: 0.5rem;
-    min-height: 40px;
-    padding: 0.5rem 1.25rem;
-    border-radius: 0.375rem;
+    min-height: 44px;
+    padding: 0.625rem 1.25rem;
+    border: 1px solid transparent;
+    border-radius: var(--radius-control);
     font-size: 0.875rem;
     font-weight: 500;
     line-height: 1.25rem;
-    transition: background-color 0.15s, border-color 0.15s;
+    text-align: center;
+    white-space: nowrap;
+    transition: background-color 0.15s, border-color 0.15s, color 0.15s, transform 0.1s;
     cursor: pointer;
+    user-select: none;
+  }
+  .btn:active:not(:disabled) {
+    transform: translateY(1px);
   }
   .btn:disabled,
   .btn[aria-disabled="true"] {
-    opacity: 0.6;
+    opacity: 0.55;
     cursor: not-allowed;
   }
   .btn-primary {
@@ -117,35 +201,169 @@ textarea:focus-visible {
   .btn-secondary {
     background: var(--color-surface);
     color: var(--foreground);
-    border: 1px solid var(--color-line);
+    border-color: var(--color-line-strong);
   }
   .btn-secondary:hover:not(:disabled) {
     background: var(--color-surface-muted);
   }
+  .btn-ghost {
+    background: transparent;
+    color: var(--color-accent);
+  }
+  .btn-ghost:hover:not(:disabled) {
+    background: var(--color-accent-tint);
+  }
+  .btn-sm {
+    padding: 0.5rem 0.875rem;
+    font-size: 0.8125rem;
+  }
+  .btn-lg {
+    min-height: 48px;
+    padding: 0.75rem 1.5rem;
+    font-size: 0.9375rem;
+  }
+  .btn-block {
+    display: flex;
+    width: 100%;
+  }
+  @media (min-width: 640px) {
+    .btn {
+      min-height: 40px;
+      padding-top: 0.5rem;
+      padding-bottom: 0.5rem;
+    }
+    .btn-sm {
+      min-height: 34px;
+    }
+    .btn-lg {
+      min-height: 46px;
+    }
+  }
+
+  .field,
   .input {
     display: block;
     width: 100%;
-    min-height: 40px;
+    min-height: 44px;
     padding: 0.5rem 0.75rem;
-    border: 1px solid var(--color-line);
-    border-radius: 0.375rem;
+    border: 1px solid var(--color-line-strong);
+    border-radius: var(--radius-control);
     background: var(--color-surface);
-    font-size: 0.875rem;
+    color: var(--foreground);
+    font-size: 16px;
+    line-height: 1.4;
+    transition: border-color 0.15s, box-shadow 0.15s;
   }
+  .field::placeholder,
+  .input::placeholder {
+    color: #80868b;
+  }
+  .field:focus,
   .input:focus {
     border-color: var(--color-accent);
+    box-shadow: 0 0 0 3px var(--color-accent-tint);
+    outline: none;
   }
+  .field[aria-invalid="true"],
+  .input[aria-invalid="true"] {
+    border-color: var(--color-danger);
+  }
+  textarea.field,
+  textarea.input {
+    min-height: 96px;
+    resize: vertical;
+  }
+  @media (min-width: 640px) {
+    .field,
+    .input {
+      min-height: 40px;
+      font-size: 0.875rem;
+    }
+  }
+  .label {
+    display: block;
+    margin-bottom: 0.375rem;
+    font-size: 0.875rem;
+    font-weight: 500;
+    color: var(--foreground);
+  }
+  .hint {
+    margin-top: 0.375rem;
+    font-size: 0.8125rem;
+    color: var(--color-ink-soft);
+  }
+
   .card {
     background: var(--color-surface);
     border: 1px solid var(--color-line);
-    border-radius: 0.75rem;
+    border-radius: var(--radius-card);
     padding: 1.25rem;
+  }
+  .card-link {
+    transition: border-color 0.15s, box-shadow 0.15s;
+  }
+  .card-link:hover {
+    border-color: var(--color-line-strong);
+    box-shadow: var(--shadow-card);
+  }
+  .chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.25rem;
+    padding: 0.1875rem 0.625rem;
+    border-radius: 999px;
+    background: var(--color-surface-muted);
+    color: #3c4043;
+    font-size: 0.75rem;
+    line-height: 1.25rem;
+    white-space: nowrap;
+  }
+  .eyebrow {
+    font-size: 0.75rem;
+    font-weight: 600;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--color-ink-soft);
+  }
+
+  .alert-error,
+  .alert-success {
+    border-radius: var(--radius-control);
+    padding: 0.625rem 0.875rem;
+    font-size: 0.875rem;
   }
   .alert-error {
     background: var(--color-danger-tint);
     color: var(--color-danger);
-    border-radius: 0.375rem;
-    padding: 0.625rem 0.875rem;
-    font-size: 0.875rem;
+  }
+  .alert-success {
+    background: var(--color-success-tint);
+    color: var(--color-accent-hover);
+  }
+
+  .page,
+  .page-narrow {
+    width: 100%;
+    margin-inline: auto;
+    padding-inline: 1rem;
+  }
+  .page {
+    max-width: 1180px;
+  }
+  .page-narrow {
+    max-width: 720px;
+  }
+  @media (min-width: 640px) {
+    .page,
+    .page-narrow {
+      padding-inline: 1.75rem;
+    }
+  }
+
+  .safe-bottom {
+    padding-bottom: max(0.75rem, env(safe-area-inset-bottom));
+  }
+  .safe-top {
+    padding-top: env(safe-area-inset-top);
   }
 }
