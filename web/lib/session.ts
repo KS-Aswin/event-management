@@ -7,9 +7,12 @@ const SESSION_DURATION_SECONDS = 60 * 60 * 24 * 7; // 7 days
 
 function getSecretKey() {
   const secret = process.env.SESSION_SECRET;
-  if (!secret || secret.length < 16) {
+  // Reject missing/short secrets and the placeholders shipped in templates, so
+  // nobody runs with a publicly known signing key.
+  if (!secret || secret.length < 32 || /your_|change_?me|placeholder/i.test(secret)) {
     throw new Error(
-      "SESSION_SECRET is not set (or too short). Set a long random string in .env.local."
+      "SESSION_SECRET is not set, too short (min 32 chars) or still a placeholder. " +
+        "Set a long random string in .env.local (e.g. `openssl rand -base64 48`)."
     );
   }
   return new TextEncoder().encode(secret);

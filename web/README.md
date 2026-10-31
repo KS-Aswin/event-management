@@ -25,7 +25,9 @@ Prisma needs to download a native query-engine binary from `binaries.prisma.sh` 
    cp .env.example .env.local
    ```
    - `DATABASE_URL` — your Postgres connection string
-   - `SESSION_SECRET` — a long random string, e.g. `openssl rand -base64 32`
+   - `SESSION_SECRET` — a long random string (at least 32 characters; placeholder values are rejected), e.g. `openssl rand -base64 48`
+
+   `npm run db:migrate`, `npm run db:seed` and `npm run test:api` load `.env.local` automatically (Node 20.19+ `--env-file-if-exists`).
 
 3. **Install dependencies:**
    ```bash
@@ -34,7 +36,7 @@ Prisma needs to download a native query-engine binary from `binaries.prisma.sh` 
 
 4. **Apply the database schema:**
    ```bash
-   node db/migrate.mjs
+   npm run db:migrate
    ```
    (This applies the numbered SQL files in `db/migrations/` to `DATABASE_URL`, in order. Each file runs once and is recorded in a `schema_migrations` table, so it is safe to re-run.)
 
@@ -69,11 +71,13 @@ Prisma needs to download a native query-engine binary from `binaries.prisma.sh` 
 
 ## Database schema
 
-See `db/migrations/`. Tables: `users`, `vendors`, `vendor_reviews`, `quote_requests`, `favorites`, `districts`, `categories`, `services`, `portfolio_items`, `quote_request_services`. Run `node db/seed.mjs` after migrating to populate sample vendors (the same 9 used in the `/demo` mockup, so both stay consistent) — safe to re-run, it clears and re-inserts rather than duplicating.
+See `db/migrations/`. Tables: `users`, `vendors`, `vendor_reviews`, `quote_requests`, `favorites`, `districts`, `categories`, `services`, `portfolio_items`, `quote_request_services`. Run `npm run db:seed` after migrating to populate sample vendors (the same 9 used in the `/demo` mockup, so both stay consistent).
+
+**`db:seed` is destructive:** it deletes all vendors, reviews, quotes and favourites and re-inserts the samples. It refuses to run when the database holds non-seed data (extra or owned listings, quotes, real reviews, favourites) unless the database name ends in `_test` or you pass `npm run db:seed -- --force` (or set `SEED_CONFIRM=1`). Never point it at a database you care about.
 
 ## Testing
 
-There's a real automated test suite now: `web/tests/api.test.mjs` — 84 checks covering registration validation, login, protected-route redirects, vendor search (all filter types + sort ordering), vendor detail lookup, quote request submission, vendor listing creation, editing a listing, quote status updates, review submission (including the vendor rating/count actually recalculating), **favorites** (add, idempotent re-add, remove, dashboard reflects it), **search suggestions** (category/location/vendor-name matches, short-query and no-match edge cases), settings updates, logout, and role-specific dashboard content reflecting real data.
+There's a real automated test suite now: `web/tests/api.test.mjs` — about 120 checks covering registration validation, login (including CSRF Origin/Content-Type checks and the login rate limit), protected-route redirects, vendor search (all filter types + sort ordering), vendor detail lookup, quote request submission, vendor listing creation, editing a listing, quote status updates, review submission (including the vendor rating/count actually recalculating), **favorites** (add, idempotent re-add, remove, dashboard reflects it), **search suggestions** (category/location/vendor-name matches, short-query and no-match edge cases), settings updates, logout, and role-specific dashboard content reflecting real data.
 
 To run it:
 ```bash
@@ -83,5 +87,9 @@ npm run dev           # in one terminal, leave running
 npm run test:api      # in another terminal
 ```
 
-It's safe to re-run repeatedly — anything that creates a user uses a timestamp-based unique email each run, so it won't collide with previous runs' data.
+It's safe to re-run repeatedly. Every user it creates uses a run-unique `<prefix>-<RUN_ID>@example.com` email, and at the start and end of each run it deletes those test users and the listings, quotes and reviews they own (directly in the `DATABASE_URL` database, which must be on localhost; it refuses a non-local `BASE_URL`). So the absolute count checks on the 9 seeded vendors keep passing without re-seeding. If a run is interrupted, the next run cleans up the leftovers.
+
+There is no separate `.env.test` / `DATABASE_URL_TEST` setup: the suite uses whatever database the dev server uses. To keep test data away from your dev data, create a `vela_test` database, point `DATABASE_URL` at it for both the dev server and the tests, and run `npm run db:migrate && npm run db:seed` once (seeding a `_test` database never needs `--force`).
+
+Type checking: `npm run typecheck`.
 

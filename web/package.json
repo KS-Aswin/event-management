@@ -7,14 +7,15 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
-    "db:migrate": "node db/migrate.mjs",
-    "db:seed": "node db/seed.mjs",
-    "test:api": "node tests/api.test.mjs"
+    "typecheck": "tsc --noEmit",
+    "db:migrate": "node --env-file-if-exists=.env.local db/migrate.mjs",
+    "db:seed": "node --env-file-if-exists=.env.local db/seed.mjs",
+    "test:api": "node --env-file-if-exists=.env.local tests/api.test.mjs"
   },
   "dependencies": {
     "bcryptjs": "^3.0.3",
     "jose": "^6.2.4",
-    "next": "16.2.12",
+    "next": "16.4.3",
     "pg": "^8.22.0",
     "react": "19.2.4",
     "react-dom": "19.2.4"
@@ -27,8 +28,11 @@
     "@types/react": "^19",
     "@types/react-dom": "^19",
     "eslint": "^9",
-    "eslint-config-next": "16.2.12",
+    "eslint-config-next": "16.4.3",
     "tailwindcss": "^4",
     "typescript": "^5"
+  },
+  "engines": {
+    "node": ">=20.19.0"
   }
 }

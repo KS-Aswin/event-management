@@ -2,12 +2,26 @@ import { NextResponse } from "next/server";
 import { createUser, findUserByEmail } from "@/lib/db";
 import { hashPassword } from "@/lib/password";
 import { createSessionCookie } from "@/lib/session";
+import { checkRateLimit, clientIp } from "@/lib/rate-limit";
+import { rejectCrossSite, tooManyRequests } from "../_guard";
+
+const WINDOW_MS = 60 * 60 * 1000;
+// Registrations per IP per hour. Also caps how cheaply the 409 "email already
+// exists" response can be used to enumerate accounts.
+const PER_IP_MAX = process.env.NODE_ENV === "production" ? 10 : 200;
 
 function isValidEmail(email: string) {
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
 }
 
 export async function POST(request: Request) {
+  const blocked = rejectCrossSite(request);
+  if (blocked) return blocked;
+
+  if (!checkRateLimit(`register:ip:${clientIp(request.headers)}`, PER_IP_MAX, WINDOW_MS)) {
+    return tooManyRequests(WINDOW_MS / 1000);
+  }
+
   let body: unknown;
   try {
     body = await request.json();
