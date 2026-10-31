@@ -22,7 +22,7 @@ export default function Footer() {
           <ul className="flex flex-wrap gap-x-5 gap-y-1">
             {LINKS.map((l) => (
               <li key={l.href}>
-                <Link href={l.href} className="inline-flex items-center min-h-[36px] hover:underline">
+                <Link href={l.href} className="inline-flex items-center justify-center min-h-10 min-w-10 hover:underline">
                   {l.label}
                 </Link>
               </li>

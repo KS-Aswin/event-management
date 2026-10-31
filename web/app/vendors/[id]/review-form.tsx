@@ -70,7 +70,7 @@ export default function ReviewForm({ vendorId }: { vendorId: number }) {
             <label
               key={n}
               onMouseEnter={() => setHoverRating(n)}
-              className="text-2xl leading-none cursor-pointer rounded has-[:focus-visible]:outline-2 has-[:focus-visible]:outline-accent"
+              className="inline-flex items-center justify-center w-10 h-10 text-2xl leading-none cursor-pointer rounded has-[:focus-visible]:outline-2 has-[:focus-visible]:outline-accent"
             >
               <input
                 type="radio"
@@ -104,7 +104,7 @@ export default function ReviewForm({ vendorId }: { vendorId: number }) {
       <button
         type="submit"
         disabled={loading}
-        className="px-4 py-2 rounded-md bg-accent hover:bg-accent-hover text-white text-sm font-medium disabled:opacity-70"
+        className="min-h-11 px-4 py-2 rounded-md bg-accent hover:bg-accent-hover text-white text-sm font-medium disabled:opacity-70"
       >
         {loading ? "Posting…" : "Post review"}
       </button>

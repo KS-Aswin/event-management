@@ -64,7 +64,7 @@ export default async function Home() {
               <li key={c.name} className="shrink-0">
                 <Link
                   href={`/search?category=${encodeURIComponent(c.name)}`}
-                  className="inline-flex items-center gap-1.5 border border-line rounded-full px-4 py-2 text-[13px] text-ink-soft hover:bg-accent-tint hover:text-accent hover:border-accent-tint whitespace-nowrap"
+                  className="inline-flex items-center min-h-10 gap-1.5 border border-line rounded-full px-4 py-2 text-[13px] text-ink-soft hover:bg-accent-tint hover:text-accent hover:border-accent-tint whitespace-nowrap"
                 >
                   {c.name}
                   <span className="text-[11.5px] opacity-75">{c.count}</span>
@@ -77,10 +77,10 @@ export default async function Home() {
         {districts.length > 0 && (
           <nav aria-label="Browse by district" className="w-full max-w-[660px] mt-4 text-[13px] text-ink-soft">
             <ul className="flex gap-x-3 gap-y-1.5 flex-nowrap overflow-x-auto -mx-5 px-5 sm:mx-0 sm:px-0 sm:flex-wrap sm:justify-center sm:overflow-visible">
-              <li className="shrink-0">Districts:</li>
+              <li className="shrink-0 inline-flex items-center min-h-10">Districts:</li>
               {districts.map(([name, count]) => (
                 <li key={name} className="shrink-0">
-                  <Link href={`/search?location=${encodeURIComponent(name)}`} className="hover:text-accent hover:underline whitespace-nowrap">
+                  <Link href={`/search?location=${encodeURIComponent(name)}`} className="inline-flex items-center min-h-10 hover:text-accent hover:underline whitespace-nowrap">
                     {name} <span className="opacity-75">({count})</span>
                   </Link>
                 </li>
@@ -96,7 +96,7 @@ export default async function Home() {
             <h2 id="top-rated" className="text-xl font-semibold">
               Top-rated vendors
             </h2>
-            <Link href="/search" className="text-sm text-accent hover:underline whitespace-nowrap">
+            <Link href="/search" className="inline-flex items-center min-h-10 text-sm text-accent hover:underline whitespace-nowrap">
               See all {vendors.length} vendors
             </Link>
           </div>
@@ -156,7 +156,7 @@ export default async function Home() {
               Searching, comparing and requesting quotes costs you nothing.
             </p>
           </div>
-          <Link href="/for-vendors" className="text-sm text-accent hover:underline whitespace-nowrap">
+          <Link href="/for-vendors" className="inline-flex items-center min-h-10 text-sm text-accent hover:underline whitespace-nowrap">
             Are you a vendor? List your business
           </Link>
         </div>

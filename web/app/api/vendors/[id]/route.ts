@@ -6,6 +6,7 @@ import {
   findPortfolioByVendor,
   updateVendorListing,
   districtExists,
+  findCategories,
   toPublicVendor,
 } from "@/lib/db";
 import { getSession } from "@/lib/session";
@@ -69,7 +70,10 @@ export async function PATCH(
 
   // Same rules and messages as create; a field that is sent but invalid is a
   // 400 instead of being silently ignored.
-  const parsed = validateListingFields(body, { partial: true, categories: CATEGORIES });
+  const parsed = validateListingFields(body, {
+    partial: true,
+    categories: [...new Set<string>([...CATEGORIES, ...(await findCategories())])],
+  });
   if (!parsed.ok) {
     return NextResponse.json({ field: parsed.field, error: parsed.error }, { status: 400 });
   }
@@ -88,6 +92,8 @@ export async function PATCH(
     tags: f.tags,
     about: f.about,
     districtId: f.districtId,
+    phone: f.phone,
+    whatsapp: f.whatsapp,
   });
 
   // updateVendorListing's WHERE clause matches on (id AND owner_id) together,

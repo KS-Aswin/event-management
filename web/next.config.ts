@@ -12,6 +12,9 @@ const securityHeaders = [
 ];
 
 const nextConfig: NextConfig = {
+  // Lets the e2e suite run its own dev server beside another one (separate
+  // build dir and dev lock). Unset in normal use, so the default .next is kept.
+  ...(process.env.NEXT_DIST_DIR ? { distDir: process.env.NEXT_DIST_DIR } : {}),
   async headers() {
     return [{ source: "/(.*)", headers: securityHeaders }];
   },

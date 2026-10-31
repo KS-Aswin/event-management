@@ -524,6 +524,8 @@ export async function createVendorListing(params: {
   about: string;
   /** Optional; when omitted it is derived from the location text where possible. */
   districtId?: number | null;
+  phone?: string | null;
+  whatsapp?: string | null;
 }): Promise<VendorRecord | null> {
   const districtId = params.districtId ?? (await districtIdForLocation(params.location));
   // The vendor and its first service are created together in one statement
@@ -531,8 +533,8 @@ export async function createVendorListing(params: {
   try {
     const result = await pool.query<VendorRecord>(
       `WITH new_vendor AS (
-         INSERT INTO vendors (owner_id, name, category, location, price, price_label, experience, tags, about, rating, reviews_count, district_id)
-         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,0,0,$10)
+         INSERT INTO vendors (owner_id, name, category, location, price, price_label, experience, tags, about, rating, reviews_count, district_id, phone, whatsapp)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,0,0,$10,$11,$12)
          RETURNING *
        ), new_service AS (
          INSERT INTO services (vendor_id, category_id, title, description, price_from, price_unit)
@@ -552,6 +554,8 @@ export async function createVendorListing(params: {
         params.tags,
         params.about,
         districtId,
+        params.phone ?? null,
+        params.whatsapp ?? null,
       ]
     );
     return result.rows[0];
@@ -637,6 +641,9 @@ export async function updateVendorListing(
     tags?: string[];
     about?: string;
     districtId?: number;
+    /** null clears; undefined keeps the stored number. */
+    phone?: string | null;
+    whatsapp?: string | null;
   }
 ): Promise<VendorRecord | null> {
   // The ownerId check is done in the same query (WHERE owner_id = $X) rather
@@ -672,7 +679,9 @@ export async function updateVendorListing(
          experience = COALESCE($8, experience),
          tags = COALESCE($9, tags),
          about = COALESCE($10, about),
-         district_id = COALESCE($11, district_id)
+         district_id = COALESCE($11, district_id),
+         phone = CASE WHEN $12::boolean THEN $13 ELSE phone END,
+         whatsapp = CASE WHEN $14::boolean THEN $15 ELSE whatsapp END
        WHERE id = $1 AND owner_id = $2
        RETURNING *`,
       [
@@ -687,6 +696,10 @@ export async function updateVendorListing(
         fields.tags ?? null,
         fields.about ?? null,
         districtId,
+        fields.phone !== undefined,
+        fields.phone ?? null,
+        fields.whatsapp !== undefined,
+        fields.whatsapp ?? null,
       ]
     );
     const updated = result.rows[0];

@@ -273,7 +273,7 @@ export default function ListingForm({
                 type="button"
                 onClick={() => setTags((prev) => prev.filter((x) => x !== t))}
                 aria-label={`Remove tag ${t}`}
-                className="w-6 h-6 rounded-full hover:bg-white/70 leading-none"
+                className="-my-2 -mr-1 w-10 h-10 rounded-full hover:bg-white/70 leading-none"
               >
                 ×
               </button>
@@ -297,7 +297,7 @@ export default function ListingForm({
               }
             }}
             onBlur={() => addTag(tagDraft)}
-            className="flex-1 min-w-[120px] px-1 py-1 text-sm outline-none bg-transparent"
+            className="flex-1 min-w-[120px] min-h-10 px-1 py-1 text-sm outline-none bg-transparent"
           />
         </div>
       </div>
@@ -330,7 +330,7 @@ export default function ListingForm({
         >
           {loading ? (mode === "edit" ? "Saving…" : "Creating…") : mode === "edit" ? "Save changes" : "Create listing"}
         </button>
-        <Link href="/dashboard" className="px-3 py-2.5 text-sm text-ink-soft hover:text-accent">
+        <Link href="/dashboard" className="inline-flex items-center min-h-10 px-3 py-2.5 text-sm text-ink-soft hover:text-accent">
           Cancel
         </Link>
       </div>

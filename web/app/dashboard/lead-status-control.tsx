@@ -94,7 +94,7 @@ export default function LeadStatusControl({
         disabled={saving}
         aria-label={leadName ? `Status of enquiry from ${leadName}` : "Enquiry status"}
         onChange={(e) => change(asStatus(e.target.value))}
-        className="text-xs border border-[#80868b] rounded-md px-2 py-1.5 min-h-9 bg-white disabled:opacity-60"
+        className="text-xs border border-[#80868b] rounded-md px-2 py-1.5 min-h-10 bg-white disabled:opacity-60"
       >
         {STATUS_OPTIONS.filter((s) => options.includes(s)).map((s) => (
           <option key={s} value={s}>

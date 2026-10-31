@@ -94,7 +94,7 @@ export function MyRequestsAndFavorites({
               className={`py-2.5 text-sm ${i < quotes.length - 1 ? "border-b border-line" : ""}`}
             >
               <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
-                <Link href={`/vendors/${q.vendor_id}`} className="font-medium hover:underline">
+                <Link href={`/vendors/${q.vendor_id}`} className="inline-flex items-center min-h-10 font-medium hover:underline">
                   {q.vendor_name}
                 </Link>
                 <span className="text-ink-soft">({q.vendor_category})</span>
@@ -107,7 +107,7 @@ export function MyRequestsAndFavorites({
               {asStatus(q.status) === "declined" && (
                 <Link
                   href={`/search?category=${encodeURIComponent(q.vendor_category)}`}
-                  className="inline-block text-xs text-accent hover:underline mt-1"
+                  className="inline-flex items-center min-h-10 text-xs text-accent hover:underline"
                 >
                   Find similar vendors
                 </Link>
@@ -132,7 +132,7 @@ export function MyRequestsAndFavorites({
               }`}
             >
               <div>
-                <Link href={`/vendors/${f.id}`} className="font-medium hover:underline">
+                <Link href={`/vendors/${f.id}`} className="inline-flex items-center min-h-10 font-medium hover:underline">
                   {f.name}
                 </Link>{" "}
                 <span className="text-ink-soft">

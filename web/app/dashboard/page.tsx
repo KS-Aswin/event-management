@@ -57,7 +57,7 @@ export default async function DashboardPage({
           className="flex items-start justify-between gap-3 mb-5 text-sm text-accent bg-accent-tint border border-accent/30 rounded-md px-3.5 py-2.5"
         >
           <span>{banner}</span>
-          <Link href="/dashboard" aria-label="Dismiss" className="text-accent hover:underline shrink-0">
+          <Link href="/dashboard" aria-label="Dismiss" className="-my-2.5 -mr-2 inline-flex items-center justify-center w-10 h-10 text-accent hover:underline shrink-0">
             ✕
           </Link>
         </div>
@@ -166,7 +166,7 @@ async function VendorDashboard({
         <div className="flex items-center justify-between gap-2 mb-1">
           <h2 className="text-[15px] font-semibold">Recent enquiries</h2>
           {leads.length > 0 && (
-            <Link href="/dashboard/leads" className="text-[13px] text-accent hover:underline">
+            <Link href="/dashboard/leads" className="inline-flex items-center justify-center min-h-10 min-w-10 text-[13px] text-accent hover:underline">
               {leads.length > RECENT_LEADS ? `See all ${leads.length}` : "See all"}
             </Link>
           )}
@@ -248,7 +248,7 @@ function OnboardingChecklist({ vendor, services }: { vendor: VendorRecord; servi
                 <span className="sr-only"> (done)</span>
               </span>
             ) : (
-              <Link href={item.href} className="text-accent hover:underline">
+              <Link href={item.href} className="inline-flex items-center min-h-10 text-accent hover:underline">
                 {item.label}
               </Link>
             )}
