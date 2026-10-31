@@ -1,8 +1,11 @@
 import { getStorage, isPrivateKey, isSafeKey } from "@/lib/storage";
+import { pool } from "@/lib/db";
+import { getLiveSession } from "@/app/api/_lib/auth";
 
 // Serves stored media for the local driver (docs/PRODUCT_PLAN.md 4.4):
 // correct Content-Type, immutable caching (keys are content-unique),
-// HTTP Range for MP4 seeking, traversal -> 400, private/ -> 404.
+// HTTP Range for MP4 seeking, traversal -> 400, private/ -> 404, and media
+// that isn't approved yet -> 404 for everyone but its vendor and admins.
 
 export const dynamic = "force-dynamic";
 
@@ -31,6 +34,35 @@ function keyFromSegments(segments: string[]): string | null {
   }
   const key = parts.join("/");
   return isSafeKey(key) ? key : null;
+}
+
+const ASSET_KEY = /^(vendors\/\d+\/[0-9a-f-]{36})\/([^/]+)$/i;
+
+/**
+ * Who may see this key. Approved media of a vendor upload is public; media
+ * that is still uploading, pending review, rejected or hidden (and every raw
+ * upload.bin) is only served to the owning vendor or an admin, uncached.
+ * Keys outside vendors/<id>/<uuid>/ (none today) stay public.
+ */
+async function accessFor(key: string): Promise<"public" | "private" | "deny"> {
+  const m = ASSET_KEY.exec(key);
+  if (!m) return "public";
+  const [, base, file] = m;
+  const { rows } = await pool.query<{ status: string; owner_id: number | null }>(
+    `SELECT m.status, v.owner_id
+       FROM media_assets m JOIN vendors v ON v.id = m.vendor_id
+      WHERE m.storage_key = $1
+      LIMIT 1`,
+    [base]
+  );
+  const row = rows[0];
+  if (!row) return "deny";
+  if (row.status === "approved" && file !== "upload.bin") return "public";
+  const session = await getLiveSession();
+  if (!session) return "deny";
+  if (session.role === "admin") return "private";
+  if (session.role === "vendor" && row.owner_id === session.userId) return "private";
+  return "deny";
 }
 
 /** Parses a single "bytes=a-b" range. Returns "invalid" when unsatisfiable, null when absent/ignored. */
@@ -62,6 +94,8 @@ async function serve(request: Request, { params }: Ctx, headOnly: boolean) {
   const key = keyFromSegments(segments ?? []);
   if (!key) return plain(400, "Bad request");
   if (isPrivateKey(key)) return plain(404, "Not found");
+  const access = await accessFor(key);
+  if (access === "deny") return plain(404, "Not found");
 
   const storage = getStorage("local");
   const info = await storage.head(key);
@@ -69,7 +103,7 @@ async function serve(request: Request, { params }: Ctx, headOnly: boolean) {
 
   const base: Record<string, string> = {
     "Content-Type": info.contentType,
-    "Cache-Control": "public, max-age=31536000, immutable",
+    "Cache-Control": access === "public" ? "public, max-age=31536000, immutable" : "private, no-store",
     "Accept-Ranges": "bytes",
     "X-Content-Type-Options": "nosniff",
     // Raw, not-yet-processed uploads are never rendered inline.
