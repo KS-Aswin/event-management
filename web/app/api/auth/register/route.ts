@@ -4,6 +4,8 @@ import { hashPassword } from "@/lib/password";
 import { createSessionCookie } from "@/lib/session";
 import { checkRateLimit, clientIp } from "@/lib/rate-limit";
 import { rejectCrossSite, tooManyRequests } from "../_guard";
+import { landingFor, sessionVersionOf } from "../../_lib/auth";
+import { safeNext } from "@/app/login/safe-next";
 
 const WINDOW_MS = 60 * 60 * 1000;
 // Registrations per IP per hour. Also caps how cheaply the 409 "email already
@@ -29,7 +31,7 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Invalid request body." }, { status: 400 });
   }
 
-  const { name, email, password, role } = (body ?? {}) as Record<string, unknown>;
+  const { name, email, password, role, next } = (body ?? {}) as Record<string, unknown>;
 
   if (typeof name !== "string" || name.trim().length < 2) {
     return NextResponse.json({ error: "Please enter your name." }, { status: 400 });
@@ -58,10 +60,18 @@ export async function POST(request: Request) {
   const passwordHash = await hashPassword(password);
   const user = await createUser({ name: name.trim(), email, passwordHash, role });
 
-  await createSessionCookie({ userId: user.id, name: user.name, role: user.role });
+  await createSessionCookie({
+    userId: user.id,
+    name: user.name,
+    role: user.role,
+    sessionVersion: sessionVersionOf(user),
+  });
+
+  // New vendors have no listing yet, so this sends them to /vendor/onboarding.
+  const redirectTo = await landingFor(user, safeNext(next, ""));
 
   return NextResponse.json(
-    { user: { id: user.id, name: user.name, email: user.email, role: user.role } },
+    { user: { id: user.id, name: user.name, email: user.email, role: user.role }, redirectTo },
     { status: 201 }
   );
 }

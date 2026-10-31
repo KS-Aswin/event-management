@@ -48,3 +48,9 @@ next-env.d.ts
 /test-results/
 /playwright-report/
 /playwright/.cache/
+
+# local media uploads (STORAGE_DRIVER=local)
+/uploads/
+
+# per-worker dev build dirs
+/.next-build*/

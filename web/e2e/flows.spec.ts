@@ -25,50 +25,55 @@ test.describe("vendor and customer journey", () => {
     customer = { name: `Cara Customer ${tag}`, email: `e2e-customer-${tag}@example.com`, password: "e2e-pass-12345" };
   });
 
-  test("vendor signs up and sees the empty dashboard", async ({ page, diag }, testInfo) => {
+  // P0 wave 1: vendors now land in the /vendor workspace. The onboarding
+  // wizard, offerings and leads pages arrive in wave 2, so until then the
+  // listing is created through the API and only the shipped pages are checked.
+  test("vendor signs up and lands in the workspace", async ({ page }) => {
     await signUp(page, "vendor", vendor);
+    await expect(page).toHaveURL(/\/vendor\/onboarding/);
     await page.goto("/dashboard");
-    await expect(page.getByRole("link", { name: "Create your listing" })).toBeVisible();
-    await checkScreen(page, diag, testInfo, "dashboard-vendor-empty");
+    await expect(page).toHaveURL(/\/vendor(\/|\?|$)/);
+    // The customer area is off-limits for vendors.
+    await page.goto("/my");
+    await expect(page).toHaveURL(/\/vendor(\/|\?|$)/);
   });
 
-  test("vendor creates a listing", async ({ page, diag }, testInfo) => {
+  test("vendor creates a listing", async ({ page }) => {
     await signIn(page, vendor);
-    await page.goto("/dashboard/create-listing");
-    await checkScreen(page, diag, testInfo, "create-listing");
-    await page.getByLabel("Business name").fill(business());
-    await page.getByLabel("Category").selectOption({ index: 1 });
-    await page.getByLabel("District").selectOption({ index: 1 });
-    await page.getByLabel("Town or city").fill("Kochi");
-    await page.getByLabel("Phone (optional)").fill("9876543210");
-    await page.getByLabel("Starting price (₹)").fill("25000");
-    await page.getByLabel("Years of experience").fill("5");
-    const tags = page.getByLabel("Tags (optional)");
-    await tags.fill("Candid");
-    await tags.press("Enter");
-    await page.getByLabel("About your business").fill("Automated e2e listing for testing the Vela flows.");
-    await page.getByRole("button", { name: "Create listing" }).click();
-    await page.waitForURL(/\/dashboard\?created=1/);
-    await expect(page.getByRole("status").filter({ hasText: "Your listing is live" })).toBeVisible();
-    await checkScreen(page, diag, testInfo, "dashboard-vendor");
-    vendorPath = (await page.locator('a[href^="/vendors/"]').first().getAttribute("href")) ?? "";
-    expect(vendorPath).toMatch(/^\/vendors\/\d+/);
+    const res = await page.request.post("/api/vendors", {
+      data: {
+        name: business(),
+        category: "Photography",
+        location: "Kochi",
+        phone: "9876543210",
+        price: 25000,
+        experience: "5 yrs",
+        about: "Automated e2e listing for testing the Vela flows.",
+      },
+    });
+    expect(res.status()).toBe(201);
+    const body = await res.json();
+    const id = body.vendor?.id ?? body.id;
+    expect(typeof id).toBe("number");
+    vendorPath = `/vendors/${id}`;
   });
 
-  test("vendor manages services", async ({ page, diag }, testInfo) => {
+  test("vendor workspace pages render", async ({ page, diag }, testInfo) => {
     await signIn(page, vendor);
+    for (const [path, name] of [["/vendor/reviews", "vendor-reviews"], ["/vendor/settings", "vendor-settings"]] as const) {
+      const res = await page.goto(path);
+      expect(res?.status()).toBe(200);
+      await expect(page.locator("h1").first()).toBeVisible();
+      await checkScreen(page, diag, testInfo, name);
+    }
+    // Old dashboard links move permanently to the workspace.
     await page.goto("/dashboard/services");
-    await expect(page.locator("h1")).toBeVisible();
-    await checkScreen(page, diag, testInfo, "dashboard-services");
-    await page.goto("/dashboard/edit-listing");
-    await expect(page.getByLabel("Business name")).toHaveValue(business());
-    // The phone entered at creation is stored and shown again.
-    await expect(page.getByLabel("Phone (optional)")).toHaveValue("9876543210");
-    await checkScreen(page, diag, testInfo, "edit-listing");
+    await expect(page).toHaveURL(/\/vendor\/offerings/);
   });
 
   test("vendor signs out", async ({ page }) => {
     await signIn(page, vendor);
+    await page.goto("/");
     await signOut(page);
   });
 
@@ -119,18 +124,15 @@ test.describe("vendor and customer journey", () => {
     await signOut(page);
   });
 
-  test("vendor sees the lead and changes its status", async ({ page, diag }, testInfo) => {
+  // Wave 2 (P0-15) brings the /vendor/leads page; re-enable the UI check then.
+  test.fixme("vendor sees the lead and changes its status", async ({ page, diag }, testInfo) => {
     await signIn(page, vendor);
-    await page.goto("/dashboard/leads");
+    await page.goto("/vendor/leads");
     const status = page.getByRole("combobox", { name: /Status of enquiry from/ }).first();
     await expect(status).toBeVisible();
-    await checkScreen(page, diag, testInfo, "dashboard-leads");
+    await checkScreen(page, diag, testInfo, "vendor-leads");
     await status.selectOption("responded");
-    await expect(page.getByText(/Changed to/)).toBeVisible();
     await page.reload();
     await expect(page.getByRole("combobox", { name: /Status of enquiry from/ }).first()).toHaveValue("responded");
-    await page.goto("/dashboard");
-    await checkScreen(page, diag, testInfo, "dashboard-vendor-with-lead");
-    await signOut(page);
   });
 });

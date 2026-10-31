@@ -9,9 +9,11 @@ import { withNext } from "./safe-next";
 export default function LoginForm({
   next,
   initialEmail,
+  notice = null,
 }: {
   next: string;
   initialEmail: string;
+  notice?: string | null;
 }) {
   const router = useRouter();
   const [email, setEmail] = useState(initialEmail);
@@ -32,7 +34,7 @@ export default function LoginForm({
       const res = await fetch("/api/auth/login", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email, password }),
+        body: JSON.stringify({ email, password, next: next || undefined }),
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) {
@@ -40,7 +42,8 @@ export default function LoginForm({
         setLoading(false);
         return;
       }
-      router.push(next);
+      // The server picks the landing page for the user's role.
+      router.push(typeof data.redirectTo === "string" ? data.redirectTo : "/");
       router.refresh();
     } catch {
       setError("Could not reach the server. Please try again.");
@@ -61,6 +64,12 @@ export default function LoginForm({
         <p className="text-[15px] leading-relaxed text-ink-soft mt-2 mb-6">
           Sign in to manage your events or your vendor profile
         </p>
+
+        {notice && !error && (
+          <div role="status" className="alert-error mb-4">
+            {notice}
+          </div>
+        )}
 
         {error && (
           <div

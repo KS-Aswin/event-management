@@ -8,7 +8,6 @@ import {
   findCategories,
   toPublicVendor,
 } from "@/lib/db";
-import { CATEGORIES } from "@/lib/vendorVisuals";
 import { getLiveSession } from "../_lib/auth";
 import { parseId, validateListingFields } from "../_lib/validation";
 
@@ -78,8 +77,8 @@ export async function POST(request: Request) {
 
   const parsed = validateListingFields(body, {
     partial: false,
-    // The form offers the categories table; keep the legacy 7 valid too.
-    categories: [...new Set<string>([...CATEGORIES, ...(await findCategories())])],
+    // Valid categories come from the categories table only (P0-8).
+    categories: await findCategories(),
   });
   if (!parsed.ok) {
     return NextResponse.json({ field: parsed.field, error: parsed.error }, { status: 400 });

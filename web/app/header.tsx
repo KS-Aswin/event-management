@@ -4,6 +4,18 @@ import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import type { UserRole } from "@/lib/db";
+import {
+  ADMIN_LINKS,
+  ADMIN_MENU,
+  CUSTOMER_LINKS,
+  CUSTOMER_MENU,
+  VENDOR_HEADER_LINKS,
+  VENDOR_MENU,
+  VENDOR_NAV,
+  isActive,
+  type MenuLink,
+} from "./_nav/config";
+import { ADMIN_HOME, VENDOR_HOME, VENDOR_ONBOARDING } from "./_nav/routes";
 
 // Where the Back button goes when there is no in-app history to return to
 // (page opened from a shared link, bookmark or new tab).
@@ -11,10 +23,18 @@ let navigatedInApp = false;
 
 function parentRoute(pathname: string): string {
   if (pathname.startsWith("/vendors/")) return "/search";
+  if (pathname.startsWith("/vendor/")) return VENDOR_HOME;
+  if (pathname.startsWith("/admin/")) return ADMIN_HOME;
   if (pathname.startsWith("/dashboard/")) return "/dashboard";
   return "/";
 }
 
+function under(pathname: string, prefix: string) {
+  return pathname === prefix || pathname.startsWith(prefix + "/");
+}
+
+// One header, four nav configs (PRODUCT_PLAN 2.7). The role comes from the
+// server session passed in by the root layout, never from a client-only check.
 export default function Header({
   session,
 }: {
@@ -22,8 +42,11 @@ export default function Header({
 }) {
   const pathname = usePathname();
   const router = useRouter();
+  const role = session?.role ?? null;
   const isHome = pathname === "/";
   const isSearch = pathname === "/search";
+  const inWorkspace = role === "vendor" && under(pathname, VENDOR_HOME);
+  const inOnboarding = role === "vendor" && under(pathname, VENDOR_ONBOARDING);
   const initialPath = useRef(pathname);
 
   // Remember once the user has navigated inside the app (resets on a full load).
@@ -43,10 +66,20 @@ export default function Header({
     else router.push(parentRoute(pathname));
   }
 
+  // Workspace sections are reached from the sidebar / tab bar, so Back only
+  // shows on deeper workspace pages (an offering editor, a lead).
+  const topLevelWorkspace = inWorkspace && VENDOR_NAV.some((i) => i.href === pathname);
+  const showBack = !isHome && !topLevelWorkspace && !inOnboarding && pathname !== ADMIN_HOME;
+  const logoHref = role === "vendor" ? VENDOR_HOME : role === "admin" ? ADMIN_HOME : "/";
+  // On the home page the hero carries the brand; vendors and admins always
+  // see the logo so the way back to their own area is obvious.
+  const showLogo = !isHome || role === "vendor" || role === "admin";
+
   return (
     <header
+      data-role={role ?? "public"}
       className={`sticky top-0 z-20 safe-top bg-white/95 backdrop-blur supports-[backdrop-filter]:bg-white/85 ${
-        isHome ? "" : "border-b border-line"
+        isHome && !showLogo ? "" : "border-b border-line"
       }`}
     >
       <a
@@ -57,7 +90,7 @@ export default function Header({
       </a>
       <div className="page flex flex-wrap items-center justify-between gap-x-3 gap-y-2 py-2.5 sm:py-3 min-h-[var(--header-h)]">
       <div className="flex items-center gap-1 min-w-[34px] shrink-0">
-        {!isHome && (
+        {showBack && (
           <button
             onClick={goBack}
             aria-label="Back"
@@ -68,32 +101,119 @@ export default function Header({
             </svg>
           </button>
         )}
-        {!isHome && (
-          <Link href="/" className="inline-flex items-center min-h-11 px-1 font-display text-[22px] leading-none font-semibold tracking-tight text-accent whitespace-nowrap">
+        {showLogo && (
+          <Link
+            href={logoHref}
+            aria-label={role === "vendor" ? "Vela, workspace home" : role === "admin" ? "Vela, admin home" : "Vela home"}
+            className="inline-flex items-center min-h-11 px-1 font-display text-[22px] leading-none font-semibold tracking-tight text-accent whitespace-nowrap"
+          >
             Vel<span className="text-gold">a</span>
           </Link>
+        )}
+        {role === "vendor" && (
+          // Outside the workspace the phone header shows a "Workspace" button
+          // instead, so the pill only appears where there is room.
+          <span className={`ml-1 ${inWorkspace ? "inline-flex" : "hidden sm:inline-flex"} items-center rounded-full bg-accent-tint text-accent-hover px-2 py-0.5 text-[11px] font-semibold uppercase tracking-wide`}>
+            Workspace
+          </span>
+        )}
+        {role === "admin" && (
+          <span className="ml-1 inline-flex items-center rounded-full bg-danger text-white px-2 py-0.5 text-[11px] font-semibold uppercase tracking-wide">
+            Admin
+          </span>
         )}
       </div>
 
       {isSearch && <KeyedHeaderSearchBox />}
 
-      {session ? (
-        <AccountMenu name={session.name} role={session.role} />
+      {inOnboarding ? (
+        // Onboarding saves every step, so leaving is always safe.
+        <Link href={VENDOR_HOME} className="btn btn-secondary btn-sm">
+          Save &amp; exit
+        </Link>
+      ) : session && role === "vendor" ? (
+        <div className="flex items-center gap-1 min-w-0">
+          {!inWorkspace && (
+            <>
+              <nav aria-label="Workspace" className="hidden lg:flex items-center gap-0.5 text-sm">
+                {VENDOR_HEADER_LINKS.map((item) => (
+                  <HeaderLink
+                    key={item.href}
+                    href={item.href}
+                    label={item.short ?? item.label}
+                    active={isActive(pathname, item)}
+                  />
+                ))}
+              </nav>
+              <Link href={VENDOR_HOME} className="btn btn-secondary btn-sm lg:hidden">
+                Workspace
+              </Link>
+            </>
+          )}
+          <AccountMenu name={session.name} links={VENDOR_MENU} />
+        </div>
+      ) : session && role === "admin" ? (
+        <div className="flex items-center gap-1 min-w-0">
+          <nav aria-label="Admin" className="hidden md:flex items-center gap-0.5 text-sm">
+            {ADMIN_LINKS.map((l) => (
+              <HeaderLink key={l.href} href={l.href} label={l.label} active={pathname === l.href} />
+            ))}
+          </nav>
+          <AccountMenu name={session.name} links={ADMIN_MENU} />
+        </div>
+      ) : session ? (
+        // Customers: no "For vendors" here (footer only).
+        <div className="flex items-center gap-1 min-w-0">
+          <nav aria-label="Main" className="hidden md:flex items-center gap-0.5 text-sm">
+            {CUSTOMER_LINKS.map((l) => (
+              <HeaderLink key={l.label} href={l.href} label={l.label} active={pathname === l.href} />
+            ))}
+          </nav>
+          <AccountMenu name={session.name} links={CUSTOMER_MENU} />
+        </div>
       ) : (
-        <nav aria-label="Main" className="flex items-center gap-1 sm:gap-2 text-sm whitespace-nowrap min-w-0">
+        <nav aria-label="Main" className="flex items-center gap-0.5 sm:gap-1 text-sm whitespace-nowrap min-w-0">
+          <Link
+            href="/search"
+            className="hidden md:inline-flex items-center min-h-11 px-3 rounded-md text-foreground hover:bg-surface-muted hover:text-accent transition-colors"
+          >
+            Browse vendors
+          </Link>
           <Link
             href="/for-vendors"
-            className="hidden min-[360px]:inline-flex items-center min-h-11 px-2.5 sm:px-3 rounded-md text-foreground hover:bg-surface-muted hover:text-accent transition-colors"
+            className="hidden sm:inline-flex items-center min-h-11 px-3 rounded-md text-foreground hover:bg-surface-muted hover:text-accent transition-colors"
           >
-            List your business
+            For vendors
           </Link>
-          <Link href="/login" className="btn btn-primary px-4 sm:px-5">
+          <Link
+            href="/login"
+            className="inline-flex items-center min-h-11 px-2.5 sm:px-3 rounded-md text-foreground font-medium hover:bg-surface-muted hover:text-accent transition-colors"
+          >
             Sign in
+          </Link>
+          <Link href="/signup" className="btn btn-primary px-4 sm:px-5">
+            Sign up
           </Link>
         </nav>
       )}
       </div>
     </header>
+  );
+}
+
+function HeaderLink({ href, label, active }: { href: string; label: string; active: boolean }) {
+  return (
+    <Link
+      href={href}
+      aria-current={active ? "page" : undefined}
+      className={`inline-flex items-center min-h-11 px-3 rounded-md whitespace-nowrap transition-colors ${
+        active
+          ? "text-accent font-medium bg-accent-tint"
+          : "text-foreground hover:bg-surface-muted hover:text-accent"
+      }`}
+    >
+      {label}
+    </Link>
   );
 }
 
@@ -140,7 +260,7 @@ function HeaderSearchBox() {
   );
 }
 
-function AccountMenu({ name, role }: { name: string; role: UserRole }) {
+function AccountMenu({ name, links }: { name: string; links: MenuLink[] }) {
   const [open, setOpen] = useState(false);
   const wrapRef = useRef<HTMLDivElement>(null);
   const buttonRef = useRef<HTMLButtonElement>(null);
@@ -212,12 +332,11 @@ function AccountMenu({ name, role }: { name: string; role: UserRole }) {
           className="absolute right-0 top-full mt-2 w-60 max-w-[calc(100vw-2rem)] bg-white border border-line rounded-card shadow-pop py-1.5 z-30"
         >
           <div className="px-4 pt-2 pb-2.5 text-xs text-ink-soft truncate">Signed in as {name}</div>
-          <Link role="menuitem" href="/dashboard" className={itemClass}>
-            {role === "vendor" ? "Dashboard & leads" : "Dashboard, quotes & favourites"}
-          </Link>
-          <Link role="menuitem" href="/settings" className={itemClass}>
-            Settings
-          </Link>
+          {links.map((l) => (
+            <Link key={l.label} role="menuitem" href={l.href} className={itemClass}>
+              {l.label}
+            </Link>
+          ))}
           <div className="border-t border-line my-1.5" />
           <LogoutButton className={itemClass} />
         </div>
@@ -256,7 +375,7 @@ function LogoutButton({ className }: { className: string }) {
         aria-busy={pending}
         className={`${className} disabled:opacity-60`}
       >
-        {pending ? "Logging out…" : "Logout"}
+        {pending ? "Logging out…" : "Log out"}
       </button>
       {error && (
         <p role="alert" className="px-4 pb-2 text-xs text-danger">

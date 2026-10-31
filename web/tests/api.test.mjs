@@ -114,6 +114,28 @@ function extractCookie(res) {
   return raw.split(";")[0];
 }
 
+// Read-only helper for checks that have no public page yet (e.g. the vendor
+// workspace replaced the old /dashboard HTML; its pages land in P0 wave 2).
+async function dbQuery(sql, params = []) {
+  if (!DATABASE_URL || !isLocalHost(DATABASE_URL)) return null;
+  const client = new pg.Client({ connectionString: DATABASE_URL });
+  await client.connect();
+  try {
+    return (await client.query(sql, params)).rows;
+  } finally {
+    await client.end();
+  }
+}
+
+function isVendorPath(location) {
+  const p = new URL(location ?? "/", BASE_URL).pathname;
+  return p === "/vendor" || p.startsWith("/vendor/");
+}
+
+function redirectsToVendor(res) {
+  return [307, 308].includes(res.status) && isVendorPath(res.headers?.location);
+}
+
 async function request(path, { method = "GET", body, cookie } = {}) {
   const res = await fetch(`${BASE_URL}${path}`, {
     method,
@@ -135,7 +157,7 @@ async function request(path, { method = "GET", body, cookie } = {}) {
   } catch {
     // non-JSON response (e.g. an HTML page) — that's fine, `text` still has it
   }
-  return { status: res.status, data, text, cookie: extractCookie(res) };
+  return { status: res.status, data, text, cookie: extractCookie(res), headers: { location: res.headers.get("location") } };
 }
 
 async function main() {
@@ -373,11 +395,9 @@ async function main() {
   });
   check("create listing: second listing for same owner rejected (409)", listingDuplicate.status, 409);
 
+  // P0-2: /dashboard is retired for vendors; they are sent to the /vendor workspace.
   const vendorDashAfterListing = await request("/dashboard", { cookie: vendorCookie });
-  checkTrue(
-    "vendor dashboard: shows the new listing's stats after creating it",
-    vendorDashAfterListing.text.includes("Total leads")
-  );
+  checkTrue("vendor dashboard: /dashboard redirects a vendor to /vendor", redirectsToVendor(vendorDashAfterListing));
 
   // ---------- Customer dashboard reflects a real quote request ----------
   const customerQuote = await request(`/api/vendors/${createdVendorId}/quotes`, {
@@ -460,11 +480,8 @@ async function main() {
   check("quote status: owner can update status (200)", statusOk.status, 200);
   check("quote status: status actually changed", statusOk.data?.quote?.status, "responded");
 
-  const vendorDashAfterStatusChange = await request("/dashboard", { cookie: vendorCookie });
-  checkTrue(
-    "vendor dashboard: status dropdown reflects the update",
-    vendorDashAfterStatusChange.text.includes("responded")
-  );
+  const statusRows = await dbQuery("SELECT status FROM quote_requests WHERE id = $1", [quoteIdForStatusTest]);
+  if (statusRows) check("quote status: change is stored", statusRows[0]?.status, "responded");
 
   // ---------- Reviews ----------
   const vendorBeforeReview = await request(`/api/vendors/${createdVendorId}`);
@@ -691,9 +708,13 @@ async function main() {
     body: { name: "Modular Customer", phone: "9999966666", serviceIds: "all" },
   });
   check("quote with services: malformed serviceIds rejected (400)", quoteBadIds.status, 400);
-  const vendorDashWithLead = await request("/dashboard", { cookie: vendorCookie });
-  checkTrue("vendor dashboard: lead shows which service was asked for",
-    vendorDashWithLead.text.includes("Wedding film (updated)"));
+  // The lead keeps a snapshot of the unit(s) the customer asked for (P0-15 data side).
+  const leadUnitRows = await dbQuery(
+    "SELECT snapshot->>'title' AS title FROM quote_request_services WHERE quote_request_id = $1",
+    [quoteWithServices.data?.quote?.id ?? quoteWithServices.data?.id ?? -1]
+  );
+  if (leadUnitRows) checkTrue("lead units: lead stores which service was asked for",
+    leadUnitRows.some((r) => r.title === "Wedding film (updated)"));
 
   // Deactivated services disappear from the public list; delete is owner-only.
   const svcDeactivate = await request(`/api/services/${newServiceId}`, { method: "PATCH", body: { active: false }, cookie: vendorCookie });
@@ -723,11 +744,14 @@ async function main() {
   );
 
   const vendorDashHtml = await request("/dashboard", { cookie: vendorCookie });
-  check("vendor dashboard: reachable with vendor session (200)", vendorDashHtml.status, 200);
-  checkTrue(
-    "vendor dashboard: shows vendor-specific content (stats), not customer content",
-    vendorDashHtml.text.includes("Total leads") && !vendorDashHtml.text.includes("Venue — booked")
-  );
+  checkTrue("vendor dashboard: vendor session on /dashboard is sent to /vendor", redirectsToVendor(vendorDashHtml));
+  const customerOnVendor = await request("/vendor/leads", { cookie: customerCookie });
+  checkTrue("role guard: customer on /vendor/* is redirected away",
+    [307, 308].includes(customerOnVendor.status) && !isVendorPath(customerOnVendor.headers.location));
+  const legacyLeads = await request("/dashboard/leads/5", { cookie: vendorCookie });
+  check("legacy redirect: /dashboard/leads/5 -> /vendor/leads/5 (308)", `${legacyLeads.status} ${new URL(legacyLeads.headers.location ?? "/", BASE_URL).pathname}`, "308 /vendor/leads/5");
+  const adminAsVendor = await request("/admin", { cookie: vendorCookie });
+  check("role guard: /admin is 404 for a vendor", adminAsVendor.status, 404);
 
   await cleanupTestData("post-run");
 

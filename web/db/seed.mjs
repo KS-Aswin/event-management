@@ -261,9 +261,10 @@ try {
     const v = vendors[i];
     const extra = vendorExtras[v.name];
     const result = await client.query(
-      `INSERT INTO vendors (name, category, location, price, price_label, rating, reviews_count, experience, tags, about, vendor_type, district_id)
+      `INSERT INTO vendors (name, category, location, price, price_label, rating, reviews_count, experience, tags, about, vendor_type, district_id, status)
        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,
-               (SELECT id FROM districts WHERE state = 'Kerala' AND name = $12))
+               (SELECT id FROM districts WHERE state = 'Kerala' AND name = $12),
+               'approved')
        RETURNING id`,
       [v.name, v.category, v.location, v.price, v.priceLabel, v.rating, v.reviewsCount, v.experience, v.tags, v.about, extra.vendorType, extra.district]
     );

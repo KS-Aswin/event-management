@@ -11,7 +11,9 @@
     "db:migrate": "node --env-file-if-exists=.env.local db/migrate.mjs",
     "db:seed": "node --env-file-if-exists=.env.local db/seed.mjs",
     "test:api": "node --env-file-if-exists=.env.local tests/api.test.mjs",
-    "test:e2e": "playwright test"
+    "test:e2e": "playwright test",
+    "test:unit": "node --test tests/offering-validation.test.mjs",
+    "test:storage": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON tests/storage.test.mjs"
   },
   "dependencies": {
     "bcryptjs": "^3.0.3",
@@ -19,7 +21,8 @@
     "next": "16.4.3",
     "pg": "^8.22.0",
     "react": "19.2.4",
-    "react-dom": "19.2.4"
+    "react-dom": "19.2.4",
+    "sharp": "^0.35.5"
   },
   "devDependencies": {
     "@playwright/test": "^1.64.1",

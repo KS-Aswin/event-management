@@ -22,6 +22,8 @@ export interface SessionPayload {
   userId: number;
   name: string;
   role: UserRole;
+  /** users.session_version when the cookie was issued (migration 004); bumping it logs the user out. */
+  sessionVersion?: number;
 }
 
 export async function createSessionCookie(payload: SessionPayload) {
@@ -52,6 +54,7 @@ export async function getSession(): Promise<SessionPayload | null> {
       userId: payload.userId as number,
       name: payload.name as string,
       role: payload.role as UserRole,
+      sessionVersion: typeof payload.sessionVersion === "number" ? payload.sessionVersion : undefined,
     };
   } catch {
     // Expired or tampered token — treat as logged out rather than throwing,

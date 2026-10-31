@@ -4,6 +4,8 @@ import { verifyPassword } from "@/lib/password";
 import { createSessionCookie } from "@/lib/session";
 import { checkRateLimit, clientIp } from "@/lib/rate-limit";
 import { rejectCrossSite, tooManyRequests } from "../_guard";
+import { landingFor, sessionVersionOf } from "../../_lib/auth";
+import { safeNext } from "@/app/login/safe-next";
 
 // Compared against when the email is unknown, so "no such user" takes as long
 // as "wrong password" and response timing doesn't reveal registered emails.
@@ -24,7 +26,7 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Invalid request body." }, { status: 400 });
   }
 
-  const { email, password } = (body ?? {}) as Record<string, unknown>;
+  const { email, password, next } = (body ?? {}) as Record<string, unknown>;
 
   if (typeof email !== "string" || typeof password !== "string") {
     return NextResponse.json({ error: "Email and password are required." }, { status: 400 });
@@ -54,9 +56,28 @@ export async function POST(request: Request) {
   const valid = await verifyPassword(password, user.password_hash);
   if (!valid) return genericError;
 
-  await createSessionCookie({ userId: user.id, name: user.name, role: user.role });
+  // users.status arrives with migration 004; absent before it.
+  const status = (user as { status?: string | null }).status;
+  if (status === "suspended") {
+    return NextResponse.json(
+      { error: "This account is suspended. Contact support if you think this is a mistake." },
+      { status: 403 }
+    );
+  }
+  if (status === "deleted") return genericError;
+
+  await createSessionCookie({
+    userId: user.id,
+    name: user.name,
+    role: user.role,
+    sessionVersion: sessionVersionOf(user),
+  });
+
+  // Role-based landing (PRODUCT_PLAN 2.6); a next into another role's area is ignored.
+  const redirectTo = await landingFor(user, safeNext(next, ""));
 
   return NextResponse.json({
     user: { id: user.id, name: user.name, email: user.email, role: user.role },
+    redirectTo,
   });
 }
