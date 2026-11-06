@@ -398,6 +398,7 @@ export async function proxy(request: NextRequest) {
   const target = roleRedirect(role, pathname);
   if (target === null && role === "admin" && cookie && (pathname === "/admin" || pathname.startsWith("/admin/"))) {
     if (!(await adminStillLive(cookie))) return notFoundPage(request);
+    if (!(await adminRecordExists(pathname))) return adminNotFoundPage(request);
   }
   if (target === "404") return notFoundPage(request);
   if (target === null && role === "vendor" && cookie && !(await vendorOwnsRecord(pathname, cookie.userId))) {

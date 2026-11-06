@@ -29,6 +29,77 @@ const TYPE_LABELS: Record<AttributeType, string> = {
   tags: "Free tags",
 };
 
+type ReorderKind = "categories" | "templates" | "event-types";
+
+/**
+ * QA-049: move an active item one place up or down among the active items of
+ * its list (retired ones stay at the end) and save the whole order at once.
+ */
+function useReorder(onDone: (msg: string) => Promise<void>) {
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const move = useCallback(
+    async <T extends { id: number; active: boolean }>(
+      kind: ReorderKind,
+      list: T[],
+      item: T,
+      dir: -1 | 1,
+      label: string,
+      categoryId?: number
+    ) => {
+      const active = list.filter((x) => x.active);
+      const i = active.findIndex((x) => x.id === item.id);
+      const j = i + dir;
+      if (i < 0 || j < 0 || j >= active.length) return;
+      const next = [...active];
+      [next[i], next[j]] = [next[j], next[i]];
+      const ids = [...next, ...list.filter((x) => !x.active)].map((x) => x.id);
+      setBusy(true);
+      setError(null);
+      try {
+        await adminApi("/api/admin/taxonomy/reorder", { body: { kind, ids, ...(categoryId ? { categoryId } : {}) } });
+        await onDone(`Moved "${label}" ${dir < 0 ? "up" : "down"}.`);
+      } catch (err) {
+        setError(err instanceof ApiError ? err.message : "Could not save the new order.");
+      } finally {
+        setBusy(false);
+      }
+    },
+    [onDone]
+  );
+  return { busy, error, move };
+}
+
+function MoveButtons({
+  label,
+  first,
+  last,
+  busy,
+  onMove,
+}: {
+  label: string;
+  first: boolean;
+  last: boolean;
+  busy: boolean;
+  onMove: (dir: -1 | 1) => void;
+}) {
+  const cls = "btn btn-secondary btn-sm min-h-11 min-w-11 px-0";
+  return (
+    <div className="flex gap-2" role="group" aria-label={`Order of ${label}`}>
+      <button type="button" className={cls} aria-label={`Move up: ${label}`} title="Move up" disabled={busy || first} onClick={() => onMove(-1)}>
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
+          <path d="M12 19V5M5 12l7-7 7 7" />
+        </svg>
+      </button>
+      <button type="button" className={cls} aria-label={`Move down: ${label}`} title="Move down" disabled={busy || last} onClick={() => onMove(1)}>
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
+          <path d="M12 5v14M5 12l7 7 7-7" />
+        </svg>
+      </button>
+    </div>
+  );
+}
+
 export function TaxonomyManager({
   initialTab,
   initialCategoryId,
@@ -120,6 +191,8 @@ function CategoriesPanel({
 }) {
   const [editing, setEditing] = useState<number | "new" | null>(null);
   const [retiring, setRetiring] = useState<AdminCategory | null>(null);
+  const order = useReorder(onDone);
+  const activeIds = data.categories.filter((c) => c.active).map((c) => c.id);
   const icons = useMemo(
     () => [...new Set(data.categories.map((c) => c.icon).filter((x): x is string => !!x))].sort(),
     [data.categories]
@@ -129,7 +202,8 @@ function CategoriesPanel({
     <section aria-label="Categories">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <p className="text-body text-ink-soft">
-          {data.categories.filter((c) => c.active).length} active · {data.categories.filter((c) => !c.active).length} retired
+          {data.categories.filter((c) => c.active).length} active · {data.categories.filter((c) => !c.active).length} retired.
+          Customers see active categories in this order.
         </p>
         {editing !== "new" && (
           <button type="button" className="btn btn-primary" onClick={() => setEditing("new")}>
@@ -156,6 +230,7 @@ function CategoriesPanel({
         </div>
       )}
 
+      <ErrorNote message={order.error} />
       <ul className="mt-4 space-y-3">
         {data.categories.map((c) => (
           <li key={c.id} className={`card ${c.active ? "" : "bg-surface-muted"}`} data-testid={`category-${c.slug}`}>
@@ -199,6 +274,15 @@ function CategoriesPanel({
                   </p>
                 </div>
                 <div className="flex flex-wrap gap-2 sm:shrink-0">
+                  {c.active && activeIds.length > 1 && (
+                    <MoveButtons
+                      label={c.display_name}
+                      first={activeIds[0] === c.id}
+                      last={activeIds[activeIds.length - 1] === c.id}
+                      busy={order.busy}
+                      onMove={(dir) => order.move("categories", data.categories, c, dir, c.display_name)}
+                    />
+                  )}
                   <button type="button" className="btn btn-secondary btn-sm" onClick={() => setEditing(c.id)}>
                     Edit<span className="sr-only"> {c.display_name}</span>
                   </button>
@@ -450,6 +534,8 @@ function TemplatesPanel({
   const [editing, setEditing] = useState<AdminTemplate | "new" | null>(null);
   const category = data.categories.find((c) => c.id === categoryId);
   const list = data.templates.filter((t) => t.category_id === categoryId);
+  const order = useReorder(onDone);
+  const activeIds = list.filter((t) => t.active).map((t) => t.id);
 
   return (
     <section aria-label="Offering templates">
@@ -483,6 +569,8 @@ function TemplatesPanel({
           </p>
         </div>
       ) : (
+        <>
+        <ErrorNote message={order.error} />
         <ul className="mt-4 grid gap-3 lg:grid-cols-2">
           {list.map((t) => (
             <li key={t.id} className={`card flex flex-col gap-3 ${t.active ? "" : "bg-surface-muted"}`} data-testid={`template-${t.code}`}>
@@ -505,6 +593,15 @@ function TemplatesPanel({
                 </p>
               </div>
               <div className="mt-auto flex flex-wrap gap-2">
+                {t.active && activeIds.length > 1 && (
+                  <MoveButtons
+                    label={t.name}
+                    first={activeIds[0] === t.id}
+                    last={activeIds[activeIds.length - 1] === t.id}
+                    busy={order.busy}
+                    onMove={(dir) => order.move("templates", list, t, dir, t.name, categoryId)}
+                  />
+                )}
                 <button type="button" className="btn btn-secondary btn-sm" onClick={() => setEditing(t)}>
                   Edit<span className="sr-only"> {t.name}</span>
                 </button>
@@ -512,6 +609,7 @@ function TemplatesPanel({
             </li>
           ))}
         </ul>
+        </>
       )}
 
       <TemplateEditor
@@ -814,6 +912,8 @@ function TemplateEditor({
 function EventTypesPanel({ data, onDone }: { data: Data; onDone: (msg: string) => Promise<void> }) {
   const [editing, setEditing] = useState<number | "new" | null>(null);
   const catName = useMemo(() => new Map(data.categories.map((c) => [c.id, c.display_name])), [data.categories]);
+  const order = useReorder(onDone);
+  const activeIds = data.eventTypes.filter((e) => e.active).map((e) => e.id);
 
   return (
     <section aria-label="Event types">
@@ -840,6 +940,7 @@ function EventTypesPanel({ data, onDone }: { data: Data; onDone: (msg: string) =
           />
         </div>
       )}
+      <ErrorNote message={order.error} />
       <ul className="mt-4 space-y-3">
         {data.eventTypes.map((e) => (
           <li key={e.id} className={`card ${e.active ? "" : "bg-surface-muted"}`} data-testid={`event-type-${e.slug}`}>
@@ -876,6 +977,15 @@ function EventTypesPanel({ data, onDone }: { data: Data; onDone: (msg: string) =
                   </div>
                 </div>
                 <div className="flex flex-wrap gap-2 sm:shrink-0">
+                  {e.active && activeIds.length > 1 && (
+                    <MoveButtons
+                      label={e.name}
+                      first={activeIds[0] === e.id}
+                      last={activeIds[activeIds.length - 1] === e.id}
+                      busy={order.busy}
+                      onMove={(dir) => order.move("event-types", data.eventTypes, e, dir, e.name)}
+                    />
+                  )}
                   <button type="button" className="btn btn-secondary btn-sm" onClick={() => setEditing(e.id)}>
                     Edit<span className="sr-only"> {e.name}</span>
                   </button>

@@ -105,6 +105,16 @@ export default async function UserDetailPage({ params }: { params: Promise<{ id:
               status={user.status}
               isSelf={session.userId === user.id}
               hasListing={Boolean(user.listing_id)}
+              listing={
+                user.listing_id
+                  ? {
+                      id: user.listing_id,
+                      name: user.listing_name ?? `Listing #${user.listing_id}`,
+                      suspended: user.listing_status === "suspended",
+                      blocksReinstate: user.reinstate_blocked_by_listing,
+                    }
+                  : null
+              }
             />
             {user.role !== "admin" && user.status !== "deleted" && session.userId !== user.id && (
               <ResetLink userId={user.id} name={user.name} />
@@ -128,6 +138,7 @@ export default async function UserDetailPage({ params }: { params: Promise<{ id:
                   <li key={a.id} className="py-2.5 text-body">
                     <p>
                       <span className="font-medium">{a.action}</span>{" "}
+                      {a.entity_type === "vendor" && <span className="chip">on the listing</span>}{" "}
                       <span className="text-ink-soft">by {a.actor_name ?? (a.actor_id ? `#${a.actor_id}` : "system")}</span>
                     </p>
                     {a.reason && <p className="text-ink-soft break-words">“{a.reason}”</p>}

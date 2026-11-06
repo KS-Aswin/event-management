@@ -96,6 +96,17 @@ const COPY: Record<
   },
 };
 
+// QA-039: on a live listing, "Request changes" unpublishes it until the
+// vendor resubmits and it is approved again, so the dialog says so plainly.
+const LIVE_REQUEST_CHANGES = {
+  title: "Take the listing offline and ask for changes?",
+  description: (n: string) =>
+    `${n} is live now. Asking for changes takes it out of search and its public page goes offline at once. ` +
+    "It stays hidden until the vendor resubmits and an admin approves it again. For a small fix, contact the vendor instead and keep it live.",
+  confirm: "Take offline and send",
+  done: "Taken offline and sent back to the vendor with your note.",
+};
+
 const ORDER: DecisionAction[] = ["approve", "clear_rereview", "request_changes", "reject", "unsuspend", "suspend"];
 
 export default function DecisionPanel({
@@ -135,19 +146,23 @@ export default function DecisionPanel({
       }
       return r.error;
     }
-    setMessage({ kind: "ok", text: COPY[action].done });
+    setMessage({
+      kind: "ok",
+      text: action === "request_changes" && status === "approved" ? LIVE_REQUEST_CHANGES.done : COPY[action].done,
+    });
     router.refresh();
     return null;
   }
 
   function ask(action: DecisionAction) {
     const c = COPY[action];
+    const live = action === "request_changes" && status === "approved";
     setMessage(null);
     setDialog({
-      title: c.title,
-      description: c.description(name, pendingMedia),
-      confirmLabel: c.confirm,
-      danger: c.danger,
+      title: live ? LIVE_REQUEST_CHANGES.title : c.title,
+      description: live ? LIVE_REQUEST_CHANGES.description(name) : c.description(name, pendingMedia),
+      confirmLabel: live ? LIVE_REQUEST_CHANGES.confirm : c.confirm,
+      danger: live || c.danger,
       required: c.required,
       label: c.label,
       presets: c.presets,

@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import ReasonDialog, { sendAdmin } from "./reason-dialog";
@@ -36,12 +37,15 @@ export default function UserActions({
   status,
   isSelf,
   hasListing,
+  listing = null,
 }: {
   userId: number;
   name: string;
   status: string;
   isSelf: boolean;
   hasListing: boolean;
+  /** The owner's listing; blocksReinstate: suspended on its own page (QA-050). */
+  listing?: { id: number; name: string; suspended: boolean; blocksReinstate: boolean } | null;
 }) {
   const router = useRouter();
   const [action, setAction] = useState<Action | null>(null);
@@ -64,7 +68,11 @@ export default function UserActions({
     unsuspend: (
       <>
         {name} can sign in again.
-        {hasListing ? " Their listing goes back to the status it had, unless it was changed since." : ""}
+        {listing?.suspended
+          ? ` Their listing "${listing.name}" was suspended with this account and goes back to the status it had.`
+          : hasListing
+            ? " Their listing goes back to the status it had, unless it was changed since."
+            : ""}
       </>
     ),
     force_logout: <>{name} is signed out on every device and has to sign in again. Nothing else changes.</>,
@@ -83,11 +91,25 @@ export default function UserActions({
   const c = action ? COPY[action] : null;
   return (
     <div>
+      {status === "suspended" && listing?.blocksReinstate && (
+        <div className="alert-error mb-3" role="note" data-testid="reinstate-blocked">
+          <p className="font-medium">The listing is suspended</p>
+          <p className="mt-0.5 break-words">
+            &ldquo;{listing.name}&rdquo; was suspended on its own page. Unsuspend the listing to restore it; that also lets{" "}
+            {name} sign in again. Reinstating only the account would leave them signed in to a hidden listing.
+          </p>
+          <Link href={`/admin/vendors/${listing.id}`} className="btn btn-secondary mt-2.5">
+            Open listing
+          </Link>
+        </div>
+      )}
       <div className="flex flex-wrap gap-2">
         {status === "suspended" ? (
-          <button type="button" className="btn btn-primary" onClick={() => setAction("unsuspend")}>
-            Reinstate account
-          </button>
+          listing?.blocksReinstate ? null : (
+            <button type="button" className="btn btn-primary" onClick={() => setAction("unsuspend")}>
+              Reinstate account
+            </button>
+          )
         ) : (
           <button
             type="button"

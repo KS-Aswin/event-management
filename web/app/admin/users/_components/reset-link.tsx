@@ -84,7 +84,7 @@ export default function ResetLink({ userId, name }: { userId: number; name: stri
         }
         confirmLabel="Create link"
         reasonRequired={false}
-        reasonLabel="Note (optional)"
+        reasonLabel="Note"
         reasonHint="Saved in the audit log, e.g. how you checked who asked."
         onConfirm={create}
         onClose={() => setOpen(false)}

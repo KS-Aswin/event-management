@@ -298,7 +298,44 @@ export interface UserDetail extends UserListRow {
   enquiries_sent: number;
   enquiries_received: number;
   reviews_written: number;
+  /**
+   * QA-050: the account is suspended and its listing is suspended in a way
+   * that reinstating the account would not undo (the listing was suspended
+   * on its own page). Reinstating is refused; the admin unsuspends the
+   * listing instead, which also reactivates an account it suspended.
+   */
+  reinstate_blocked_by_listing: boolean;
   audit: AuditRow[];
+}
+
+const AUDIT_ROW_COLS = `a.id::int AS id, a.created_at, a.actor_id, u.name AS actor_name, u.email AS actor_email,
+            a.action, a.entity_type, a.entity_id, a.before, a.after, a.reason, a.ip`;
+
+/**
+ * The listing owned by userId when it is suspended and reinstating the account
+ * would NOT restore it (only a suspension made through the account, with no
+ * status change since, is undone by "Reinstate account"). Null otherwise.
+ */
+async function suspendedListingKeptByReinstate(
+  q: TxClient,
+  userId: number,
+  lock = false
+): Promise<{ id: number; name: string } | null> {
+  const v = await q.query<{ id: number; name: string; status: string; last_event: number | null }>(
+    `SELECT v.id, v.name, v.status, (SELECT max(id) FROM vendor_status_events e WHERE e.vendor_id = v.id) AS last_event
+     FROM vendors v WHERE v.owner_id = $1 ORDER BY v.id LIMIT 1 ${lock ? "FOR UPDATE OF v" : ""}`,
+    [userId]
+  );
+  const row = v.rows[0];
+  if (!row || row.status !== "suspended") return null;
+  const last = await q.query<{ after: { listing?: ListingChange | null } | null }>(
+    `SELECT after FROM admin_audit_log WHERE action = 'user.suspend' AND entity_type = 'user' AND entity_id = $1
+     ORDER BY id DESC LIMIT 1`,
+    [String(userId)]
+  );
+  const prev = last.rows[0]?.after?.listing;
+  if (prev && prev.id === row.id && Number(row.last_event) === prev.eventId) return null;
+  return { id: row.id, name: row.name };
 }
 
 export async function getUserDetail(id: number): Promise<UserDetail | null> {
@@ -314,9 +351,25 @@ export async function getUserDetail(id: number): Promise<UserDetail | null> {
      WHERE u.id = $1`,
     [id]
   );
-  if (!rows[0]) return null;
-  const a = await listAudit({ entityType: "user", entityId: String(id), page: 1 });
-  return { ...rows[0], audit: a.rows.slice(0, 10) };
+  const user = rows[0];
+  if (!user) return null;
+  // QA-050: the account's history includes suspensions made on its listing
+  // (they suspend and restore the owner's sign-in too).
+  const [a, blocked] = await Promise.all([
+    pool.query<AuditRow>(
+      `SELECT * FROM (
+         (SELECT ${AUDIT_ROW_COLS} FROM admin_audit_log a LEFT JOIN users u ON u.id = a.actor_id
+          WHERE a.entity_type = 'user' AND a.entity_id = $1 ORDER BY a.id DESC LIMIT 10)
+         UNION ALL
+         (SELECT ${AUDIT_ROW_COLS} FROM admin_audit_log a LEFT JOIN users u ON u.id = a.actor_id
+          WHERE $2::text IS NOT NULL AND a.entity_type = 'vendor' AND a.entity_id = $2
+            AND a.action IN ('vendor.suspend', 'vendor.unsuspend') ORDER BY a.id DESC LIMIT 10)
+       ) x ORDER BY id DESC LIMIT 10`,
+      [String(id), user.listing_id ? String(user.listing_id) : null]
+    ),
+    user.status === "suspended" ? suspendedListingKeptByReinstate(pool, id) : Promise.resolve(null),
+  ]);
+  return { ...user, reinstate_blocked_by_listing: blocked !== null, audit: a.rows };
 }
 
 export type UserAction = "suspend" | "unsuspend" | "force_logout";
@@ -440,6 +493,16 @@ export async function applyUserAction(params: {
 
       // unsuspend
       if (user.status !== "suspended") throw new HttpError(409, "This account is not suspended.", "ALREADY");
+      // QA-050: never leave a signed-in owner behind a listing that stays
+      // suspended. The listing's own Unsuspend restores both.
+      const kept = await suspendedListingKeptByReinstate(client, targetId, true);
+      if (kept) {
+        throw new HttpError(
+          409,
+          `The listing "${kept.name}" is suspended. Unsuspend the listing instead: that also lets the owner sign in again.`,
+          "LISTING_SUSPENDED"
+        );
+      }
       await client.query(
         "UPDATE users SET status = 'active', suspended_at = NULL, suspended_reason = NULL WHERE id = $1",
         [targetId]

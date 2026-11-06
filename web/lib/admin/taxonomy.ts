@@ -255,6 +255,9 @@ export async function listEventTypes(): Promise<AdminEventType[]> {
 // Categories
 // ---------------------------------------------------------------------------
 
+const CATEGORY_DUPLICATE = "A category with that name or slug already exists.";
+const EVENT_TYPE_DUPLICATE = "An event type with that name already exists.";
+
 const CAT_AUDIT_COLS = `id, name, slug, display_name, icon, description, active, sort_order,
   default_price_unit, allowed_price_units, allow_on_request`;
 
@@ -269,8 +272,11 @@ export async function createCategory(body: Record<string, unknown>, actor: Actor
   const allowOnRequest = optBool(body.allowOnRequest, "Price on request") ?? false;
 
   return withTransaction(async (client) => {
-    const dup = await client.query("SELECT 1 FROM categories WHERE slug = $1 OR lower(name) = lower($2)", [slug, name]);
-    if (dup.rowCount) throw new HttpError(409, "A category with that name or slug already exists.", "DUPLICATE");
+    const dup = await client.query(
+      "SELECT 1 FROM categories WHERE slug = $1 OR lower(name) = lower($2) OR lower(display_name) = lower($3)",
+      [slug, name, displayName]
+    );
+    if (dup.rowCount) throw new HttpError(409, CATEGORY_DUPLICATE, "DUPLICATE");
     const r = await client.query(
       `INSERT INTO categories (name, slug, display_name, icon, description, default_price_unit, allowed_price_units,
                                allow_on_request, sort_order)
@@ -296,7 +302,17 @@ export async function updateCategory(id: number, body: Record<string, unknown>, 
       vals.push(v);
       sets.push(`${col} = $${vals.length + 1}`);
     };
-    if (body.displayName !== undefined) set("display_name", str(body.displayName, "Name", { max: 60 }));
+    if (body.displayName !== undefined) {
+      // QA-048: same rule as create, so search never shows two filters with one name.
+      const displayName = str(body.displayName, "Name", { max: 60 });
+      const dup = await client.query(
+        `SELECT 1 FROM categories
+         WHERE id <> $1 AND (lower(display_name) = lower($2) OR lower(name) = lower($2) OR slug = $3)`,
+        [id, displayName, slugify(displayName)]
+      );
+      if (dup.rowCount) throw new HttpError(409, CATEGORY_DUPLICATE, "DUPLICATE");
+      set("display_name", displayName);
+    }
     const icon = iconField(body.icon);
     if (icon !== undefined) set("icon", icon);
     const desc = optStr(body.description, "Description", 300);
@@ -559,8 +575,8 @@ export async function createEventType(body: Record<string, unknown>, actor: Acto
   const community = optStr(body.community, "Community", 40) ?? null;
   const bundle = parseBundle(body.categories) ?? [];
   return withTransaction(async (client) => {
-    const dup = await client.query("SELECT 1 FROM event_types WHERE slug = $1", [slug]);
-    if (dup.rowCount) throw new HttpError(409, "An event type with that name already exists.", "DUPLICATE");
+    const dup = await client.query("SELECT 1 FROM event_types WHERE slug = $1 OR lower(name) = lower($2)", [slug, name]);
+    if (dup.rowCount) throw new HttpError(409, EVENT_TYPE_DUPLICATE, "DUPLICATE");
     const id = (
       await client.query<{ id: number }>(
         `INSERT INTO event_types (slug, name, community, sort_order)
@@ -586,7 +602,15 @@ export async function updateEventType(id: number, body: Record<string, unknown>,
       vals.push(v);
       sets.push(`${col} = $${vals.length + 1}`);
     };
-    if (body.name !== undefined) set("name", str(body.name, "Name", { max: 60 }));
+    if (body.name !== undefined) {
+      const name = str(body.name, "Name", { max: 60 });
+      const dup = await client.query(
+        "SELECT 1 FROM event_types WHERE id <> $1 AND (lower(name) = lower($2) OR slug = $3)",
+        [id, name, slugify(name)]
+      );
+      if (dup.rowCount) throw new HttpError(409, EVENT_TYPE_DUPLICATE, "DUPLICATE");
+      set("name", name);
+    }
     const community = optStr(body.community, "Community", 40);
     if (community !== undefined) set("community", community);
     const sort = optInt(body.sortOrder, "Sort order", 0, 10000);
@@ -602,6 +626,62 @@ export async function updateEventType(id: number, body: Record<string, unknown>,
       active === false && before?.active ? "event_type.retire" : active === true && !before?.active ? "event_type.activate" : "event_type.update";
     await audit(client, { ...actor, action, entityType: "event_type", entityId: id, before, after });
     return after!;
+  });
+}
+
+// ---------------------------------------------------------------------------
+// Ordering (QA-049): the admin moves an item up or down and the client sends
+// the whole list in its new order; it is renumbered 1..n in one transaction.
+// The ids must be exactly the current set (all categories, all event types,
+// or one category's templates), else 409 so a stale page can't scramble it.
+// ---------------------------------------------------------------------------
+
+export const REORDER_KINDS = ["categories", "templates", "event-types"] as const;
+export type ReorderKind = (typeof REORDER_KINDS)[number];
+
+const REORDER_TABLE: Record<ReorderKind, { table: string; entity: string }> = {
+  categories: { table: "categories", entity: "category" },
+  templates: { table: "offering_templates", entity: "template" },
+  "event-types": { table: "event_types", entity: "event_type" },
+};
+
+export async function reorderTaxonomy(body: Record<string, unknown>, actor: Actor) {
+  const kind = body.kind as ReorderKind;
+  if (!REORDER_KINDS.includes(kind)) bad("Unknown list to reorder.");
+  const raw = body.ids;
+  if (!Array.isArray(raw) || raw.length === 0 || raw.length > 500) bad("Send the ids in their new order.");
+  const ids = raw.map((v) => (typeof v === "number" && Number.isInteger(v) && v > 0 && v <= 2 ** 31 - 1 ? v : NaN));
+  if (ids.some((v) => Number.isNaN(v)) || new Set(ids).size !== ids.length) bad("Send each id once.");
+  let categoryId: number | null = null;
+  if (kind === "templates") {
+    categoryId = typeof body.categoryId === "number" && Number.isInteger(body.categoryId) ? body.categoryId : null;
+    if (!categoryId) bad("Pick the category whose templates to reorder.");
+  }
+  const { table, entity } = REORDER_TABLE[kind];
+  return withTransaction(async (client) => {
+    const cur = await client.query<{ id: number; sort_order: number }>(
+      `SELECT id, sort_order FROM ${table} ${categoryId ? "WHERE category_id = $1" : ""} ORDER BY id FOR UPDATE`,
+      categoryId ? [categoryId] : []
+    );
+    const known = new Set(cur.rows.map((r) => r.id));
+    if (known.size !== ids.length || ids.some((i) => !known.has(i))) {
+      throw new HttpError(409, "This list changed since you opened it. Refresh the page and try again.", "STALE");
+    }
+    const before = Object.fromEntries(cur.rows.map((r) => [r.id, r.sort_order]));
+    await client.query(
+      `UPDATE ${table} t SET sort_order = o.pos FROM unnest($1::int[]) WITH ORDINALITY AS o(id, pos) WHERE t.id = o.id`,
+      [ids]
+    );
+    await audit(client, {
+      ...actor,
+      action: `${entity}.reorder`,
+      // Templates are ordered within one category: log it on that category.
+      entityType: categoryId ? "category" : entity,
+      entityId: categoryId ?? "all",
+      before: { order: [...cur.rows].sort((a, b) => a.sort_order - b.sort_order || a.id - b.id).map((r) => r.id), sort_order: before },
+      after: { order: ids },
+    });
+    return { ids };
   });
 }
 

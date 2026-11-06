@@ -602,7 +602,12 @@ export async function decideVendor(input: DecisionInput) {
     }
     if (action !== "clear_rereview") {
       const n = NOTE[action];
-      await notify(client, v.owner_id, n.kind, n.title, n.body(reason), "/vendor", { vendorId });
+      // QA-039: a live listing sent back for changes is unpublished: say so.
+      const body =
+        action === "request_changes" && from === "approved"
+          ? `Your listing is hidden from customers until you make these changes and resubmit: ${reason}`
+          : n.body(reason);
+      await notify(client, v.owner_id, n.kind, n.title, body, "/vendor", { vendorId });
     }
     await audit(client, {
       actorId,
