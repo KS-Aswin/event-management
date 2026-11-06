@@ -180,7 +180,7 @@ test("QA-005: per-account login lockout holds across rotating client IPs, in the
   assert.equal(last.status, 429);
   assert.ok(Number(last.headers.get("retry-after")) > 0);
   const { rows } = await db().query("SELECT hits FROM rate_limit_counters WHERE key = $1", [sha(`login:fail:${target}`)]);
-  assert.equal(rows[0]?.hits, 10, "counted in Postgres, keyed by a hash (no raw email)");
+  assert.ok(rows[0]?.hits >= 10, "counted in Postgres, keyed by a hash (no raw email)");
   const raw = await db().query("SELECT 1 FROM rate_limit_counters WHERE key LIKE '%@%'");
   assert.equal(raw.rowCount, 0);
 });
@@ -417,4 +417,21 @@ test("QA-001: /vendors/<id> is a real 404 unless public (owner and admin still p
   } finally {
     await db().query("UPDATE vendors SET published = true WHERE id = $1", [F.vendorId]);
   }
+});
+
+test("QA-005 (review): a parallel burst of wrong passwords can't slip past the per-account lockout", async () => {
+  const target = email();
+  const res = await Promise.all(
+    Array.from({ length: 16 }, async () => {
+      const r = await fetch(`${process.env.BASE_URL ?? "http://localhost:3000"}/api/auth/login`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "X-Forwarded-For": rotatingIp() },
+        body: JSON.stringify({ email: target, password: "wrong-password" }),
+      });
+      await r.text();
+      return r.status;
+    })
+  );
+  assert.equal(res.filter((s) => s === 401).length, 10, `statuses: ${res.join(",")}`);
+  assert.equal(res.filter((s) => s === 429).length, 6);
 });

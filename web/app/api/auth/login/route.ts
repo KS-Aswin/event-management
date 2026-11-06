@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { findUserByEmail } from "@/lib/db";
 import { verifyPassword } from "@/lib/password";
 import { createSessionCookie } from "@/lib/session";
-import { clientIp, rateLimitHit, rateLimitPeek, rateLimitReset } from "@/lib/rate-limit";
+import { clientIp, rateLimitHit, rateLimitReset } from "@/lib/rate-limit";
 import { MAX_LOGIN_PASSWORD_LENGTH, recordSignIn, rejectCrossSite, tooManyRequests } from "../_guard";
 import { landingFor, sessionVersionOf } from "../../_lib/auth";
 import { safeNext } from "@/app/login/safe-next";
@@ -43,7 +43,10 @@ export async function POST(request: Request) {
   const emailKey = `login:fail:${email.trim().toLowerCase()}`;
   const ipHit = await rateLimitHit(`login:ip:${clientIp(request.headers)}`, PER_IP_MAX, WINDOW_MS);
   if (!ipHit.ok) return tooManyRequests(ipHit.retryAfter);
-  const lock = await rateLimitPeek(emailKey, PER_EMAIL_MAX, WINDOW_MS);
+  // Charge the attempt BEFORE checking the password (an atomic increment), so
+  // a burst of parallel guesses can't all pass a read-only check first. A
+  // successful sign-in clears the count again below.
+  const lock = await rateLimitHit(emailKey, PER_EMAIL_MAX, WINDOW_MS);
   if (!lock.ok) return tooManyRequests(lock.retryAfter);
 
   const user = await findUserByEmail(email);
@@ -52,10 +55,7 @@ export async function POST(request: Request) {
   const genericError = () => NextResponse.json({ error: "Incorrect email or password." }, { status: 401 });
 
   const valid = user ? await verifyPassword(password, user.password_hash) : await verifyPassword(password, DUMMY_HASH);
-  if (!user || !valid) {
-    await rateLimitHit(emailKey, PER_EMAIL_MAX, WINDOW_MS);
-    return genericError();
-  }
+  if (!user || !valid) return genericError();
 
   // users.status arrives with migration 004; absent before it.
   const live = user as { status?: string | null; suspended_reason?: string | null };
