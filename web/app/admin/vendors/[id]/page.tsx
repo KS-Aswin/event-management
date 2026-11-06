@@ -228,7 +228,7 @@ export default async function VendorDetailPage({ params }: { params: Promise<{ i
                     <span className="min-w-0">
                       <span className="block font-medium break-words">{o.title}</span>
                       <span className="block text-caption text-ink-soft">
-                        {o.kind === "package" ? "Package" : o.kind === "addon" ? "Add-on" : "Service"} ·{o.template_name ?? o.custom_name ?? o.category}
+                        {o.kind === "package" ? "Package" : o.kind === "addon" ? "Add-on" : "Service"} · {o.template_name ?? o.custom_name ?? o.category}
                         {o.custom_name && !o.template_name ? ` (custom${o.custom_status ? `, ${o.custom_status.replace(/_/g, " ")}` : ""})` : ""}
                       </span>
                       {!o.active && (
