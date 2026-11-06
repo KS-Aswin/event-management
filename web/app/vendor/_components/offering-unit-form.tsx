@@ -27,6 +27,8 @@ export interface NewOfferingSpec {
 export interface UnitFormHandle {
   save: () => Promise<boolean>;
   dirty: () => boolean;
+  /** The price typed in the form (saved or not) is complete: a price above 0, or On request. */
+  priced: () => boolean;
 }
 
 type ErrState = { field?: string; message: string } | null;
@@ -45,6 +47,7 @@ export default function OfferingUnitForm({
   onSaved,
   onCancel,
   register,
+  onPricedChange,
   submitLabel = "Save",
   hideSubmit = false,
 }: {
@@ -58,6 +61,8 @@ export default function OfferingUnitForm({
   onSaved: (o: Offering) => void;
   onCancel?: () => void;
   register?: (h: UnitFormHandle | null) => void;
+  /** Called when the typed price becomes complete or incomplete (wizard badges). */
+  onPricedChange?: (priced: boolean) => void;
   submitLabel?: string;
   hideSubmit?: boolean;
 }) {
@@ -159,10 +164,28 @@ export default function OfferingUnitForm({
     saleMode, templateId, title, unitLabel, variant,
   ]);
 
+  const priced = useCallback(
+    () =>
+      priceMode === "on_request" ||
+      (Number(priceFrom) > 0 && (priceMode !== "range" || priceTo === "" || Number(priceTo) >= Number(priceFrom))),
+    [priceFrom, priceMode, priceTo]
+  );
+
+  const isPriced = priced();
   useEffect(() => {
-    register?.({ save, dirty: () => dirtyRef.current });
+    onPricedChange?.(isPriced);
+  }, [isPriced, onPricedChange]);
+
+  useEffect(() => {
+    register?.({ save, dirty: () => dirtyRef.current, priced });
     return () => register?.(null);
-  }, [register, save]);
+  }, [register, save, priced]);
+
+  /** A price edit clears a stale price error once the value is valid (QA-058). */
+  const editPrice = (field: "priceFrom" | "priceTo", set: (v: string) => void) => (v: string) => {
+    touch(set)(v);
+    if (err?.field === field && Number(v) > 0) setErr(null);
+  };
 
   const fieldErr = (f: string) => (err?.field === f ? err.message : undefined);
   const errProps = (f: string) =>
@@ -319,7 +342,10 @@ export default function OfferingUnitForm({
             id={`${uid}-pmode`}
             className="field"
             value={priceMode}
-            onChange={(e) => touch(setPriceMode)(e.target.value as Offering["price_mode"])}
+            onChange={(e) => {
+              touch(setPriceMode)(e.target.value as Offering["price_mode"]);
+              if (err?.field === "priceFrom" && e.target.value === "on_request") setErr(null);
+            }}
           >
             {(Object.keys(PRICE_MODE_LABELS) as Offering["price_mode"][])
               .filter((m) => m !== "on_request" || rules.allowOnRequest)
@@ -363,7 +389,7 @@ export default function OfferingUnitForm({
               step={1}
               value={priceFrom}
               placeholder="e.g. 45000"
-              onChange={(e) => touch(setPriceFrom)(e.target.value)}
+              onChange={(e) => editPrice("priceFrom", setPriceFrom)(e.target.value)}
               {...errProps("priceFrom")}
             />
             {errText("priceFrom")}
@@ -382,7 +408,7 @@ export default function OfferingUnitForm({
               min={1}
               step={1}
               value={priceTo}
-              onChange={(e) => touch(setPriceTo)(e.target.value)}
+              onChange={(e) => editPrice("priceTo", setPriceTo)(e.target.value)}
               {...errProps("priceTo")}
             />
             {errText("priceTo")}

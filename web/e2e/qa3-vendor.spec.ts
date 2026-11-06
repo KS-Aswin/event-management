@@ -1,6 +1,6 @@
 import { test, expect, runTag, signUp, type Creds } from "./helpers";
 
-// QA round 3, vendor group: reproductions of new issues (not fixes yet).
+// QA round 3, vendor group: reproductions of new issues (QA3-V1 = QA-058, fixed).
 //
 //   QA3-V1 "Create a package from these" ignores prices typed on step 3
 //   On onboarding step 3 the vendor types a starting price for each offering
@@ -17,7 +17,7 @@ test.describe("qa3 vendor findings", () => {
     vendor = { name: `Vani Qathree ${tag}`, email: `e2e-vendor-qa3-${tag}@example.com`, password: "e2e-pass-12345" };
   });
 
-  test.fail("QA3-V1: package sheet uses the prices typed on step 3", async ({ page }) => {
+  test("QA3-V1: package sheet uses the prices typed on step 3", async ({ page }) => {
     await signUp(page, "vendor", vendor);
     await expect(page).toHaveURL(/\/vendor\/onboarding/);
     await page.getByLabel("A company or team").check();
@@ -42,5 +42,11 @@ test.describe("qa3 vendor findings", () => {
     // Expected: the units now have prices, so they are offered as included (not "off").
     await expect(page.getByText(/the package will be marked incomplete/)).toHaveCount(0);
     await expect(page.getByRole("checkbox", { name: /Candid photography/ })).toBeChecked();
+    await expect(page.getByRole("checkbox", { name: /Wedding photography \(traditional\)/ })).toBeChecked();
+    await page.getByLabel("Package name").fill("Wedding photo basic");
+    await page.getByLabel("Price (₹)", { exact: true }).fill("60000");
+    await page.getByRole("button", { name: "Create package" }).click();
+    await expect(page.getByText("Wedding photo basic")).toBeVisible();
+    await expect(page.getByText(/incomplete: an included unit is off/)).toHaveCount(0);
   });
 });

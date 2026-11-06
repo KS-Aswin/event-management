@@ -13,10 +13,13 @@ export default function StepPrices({ tax, data, setData, next, back }: StepProps
   const packages = data.offerings.filter((o) => o.kind === "package");
   const handles = useRef(new Map<number, UnitFormHandle>());
   const [open, setOpen] = useState<Set<number>>(() => new Set(units.filter((u) => u.needs_price).map((u) => u.id)));
-  const [composer, setComposer] = useState<null | { pkg: Offering | null }>(null);
+  const [composer, setComposer] = useState<null | { pkg: Offering | null; preselect?: number[] }>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [removing, setRemoving] = useState<number | null>(null);
+  const [opening, setOpening] = useState(false);
+  // Units whose form currently holds a complete price (saved or only typed).
+  const [typedPrice, setTypedPrice] = useState<Set<number>>(() => new Set());
   const [confirm, confirmDialog] = useConfirm();
 
   const registerFor = useCallback(
@@ -24,6 +27,17 @@ export default function StepPrices({ tax, data, setData, next, back }: StepProps
       if (h) handles.current.set(id, h);
       else handles.current.delete(id);
     },
+    []
+  );
+  const pricedFor = useCallback(
+    (id: number) => (priced: boolean) =>
+      setTypedPrice((s) => {
+        if (s.has(id) === priced) return s;
+        const n = new Set(s);
+        if (priced) n.add(id);
+        else n.delete(id);
+        return n;
+      }),
     []
   );
   const replace = useCallback(
@@ -43,6 +57,32 @@ export default function StepPrices({ tax, data, setData, next, back }: StepProps
         ? { ...d, offerings: fresh.data.offerings, packageItems: fresh.data.packageItems }
         : { ...d, offerings: d.offerings.filter((x) => x.id !== o.id) }
     );
+  }
+
+  /**
+   * "Create a package from these" (QA-058): save the prices the vendor has
+   * typed but not saved yet, so the units are on and priced, then open the
+   * composer with every priced unit (and every Package only unit) ticked.
+   */
+  async function openNewPackage() {
+    setError(null);
+    setOpening(true);
+    const saved = new Set<number>();
+    for (const u of units) {
+      const h = handles.current.get(u.id);
+      if (!h || !h.priced() || !(h.dirty() || u.needs_price)) continue;
+      if (await h.save()) saved.add(u.id);
+    }
+    setOpening(false);
+    const preselect = units
+      .filter(
+        (u) =>
+          u.sale_mode === "package_only" ||
+          saved.has(u.id) ||
+          (u.active && !u.needs_price && !u.hidden_reason && !handles.current.get(u.id)?.dirty())
+      )
+      .map((u) => u.id);
+    setComposer({ pkg: null, preselect });
   }
 
   async function onContinue() {
@@ -109,11 +149,12 @@ export default function StepPrices({ tax, data, setData, next, back }: StepProps
                   >
                     <span className="block font-medium truncate">{u.title}</span>
                     <span className="block text-caption text-ink-soft">
-                      {u.category} · {u.needs_price ? "No price yet" : u.price_label}
+                      {u.category} ·{" "}
+                      {u.needs_price ? (typedPrice.has(u.id) ? "Price entered, saved when you continue" : "No price yet") : u.price_label}
                     </span>
                     <span className="mt-1.5 flex flex-wrap gap-1.5">
                       {offeringChips(u)
-                        .filter((c) => c.label !== "Off")
+                        .filter((c) => c.label !== "Off" && !(c.label === "Needs a price" && typedPrice.has(u.id)))
                         .map((c) => (
                           <Chip key={c.label} {...c} />
                         ))}
@@ -138,6 +179,7 @@ export default function StepPrices({ tax, data, setData, next, back }: StepProps
                     activateOnSave
                     onSaved={replace}
                     register={registerFor(u.id)}
+                    onPricedChange={pricedFor(u.id)}
                     submitLabel="Save this offering"
                   />
                 </div>
@@ -187,7 +229,7 @@ export default function StepPrices({ tax, data, setData, next, back }: StepProps
               pkg={composer.pkg}
               items={composer.pkg ? data.packageItems.filter((i) => i.package_id === composer.pkg!.id) : []}
               units={units}
-              preselect={packageOnly.map((u) => u.id)}
+              preselect={composer.preselect ?? packageOnly.map((u) => u.id)}
               onCancel={() => setComposer(null)}
               onSaved={(pkg, items) => {
                 setData((d) => ({
@@ -203,8 +245,8 @@ export default function StepPrices({ tax, data, setData, next, back }: StepProps
           </div>
         ) : (
           units.length > 0 && (
-            <button type="button" className="btn btn-secondary mt-4" onClick={() => setComposer({ pkg: null })}>
-              Create a package from these
+            <button type="button" className="btn btn-secondary mt-4" disabled={opening} onClick={() => void openNewPackage()}>
+              {opening ? "Saving prices…" : "Create a package from these"}
             </button>
           )
         )}
