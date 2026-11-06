@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
+import { SUPPORT_EMAIL, supportMailto } from "@/lib/support";
 
 export const metadata: Metadata = {
   title: "Terms and content policy",
@@ -169,8 +170,8 @@ export default function TermsPage() {
         <H2 id="contact">10. Contact</H2>
         <p>
           Questions, reports or takedown requests: email{" "}
-          <a href="mailto:help@vela.example" className="text-accent underline underline-offset-2">
-            help@vela.example
+          <a href={supportMailto()} className="text-accent underline underline-offset-2">
+            {SUPPORT_EMAIL}
           </a>
           , see the{" "}
           <Link href="/help" className="text-accent underline underline-offset-2">

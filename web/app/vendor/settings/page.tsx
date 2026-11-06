@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { requirePageRole } from "@/app/api/_lib/auth";
 import SettingsForm from "@/app/settings/settings-form";
+import { SUPPORT_EMAIL } from "@/lib/support";
 
 export const metadata: Metadata = {
   title: "Settings",
@@ -30,6 +31,7 @@ export default async function VendorSettingsPage() {
         initialEmail={user.email}
         initialEmailNotifications={user.email_notifications}
         initialSmsNotifications={user.sms_notifications}
+        supportEmail={SUPPORT_EMAIL}
       />
     </main>
   );

@@ -2,6 +2,7 @@
 
 import { useId, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
+import { PasswordField } from "@/app/login/auth-fields";
 
 const inputClass = "field";
 
@@ -11,10 +12,13 @@ export default function SettingsForm({
   initialName,
   initialEmail,
   initialEmailNotifications,
+  supportEmail,
 }: {
   initialName: string;
   initialEmail: string;
   initialEmailNotifications: boolean;
+  /** lib/support.ts SUPPORT_EMAIL (QA-057), passed from the server page. */
+  supportEmail: string;
   // Accepted for compatibility; SMS is disabled until accounts have a phone number.
   initialSmsNotifications?: boolean;
 }) {
@@ -23,6 +27,8 @@ export default function SettingsForm({
   const emailId = useId();
   const [name, setName] = useState(initialName);
   const [email, setEmail] = useState(initialEmail);
+  // Needed only when the sign-in email changes (QA-080).
+  const [emailPassword, setEmailPassword] = useState("");
   // Last values the server confirmed, used to disable Save when nothing changed.
   const [saved, setSaved] = useState({
     name: initialName,
@@ -48,8 +54,8 @@ export default function SettingsForm({
 
   const trimmedName = name.trim();
   const normalisedEmail = email.trim().toLowerCase();
-  const unchanged =
-    trimmedName === saved.name && normalisedEmail === saved.email.toLowerCase();
+  const emailChanged = normalisedEmail !== saved.email.toLowerCase();
+  const unchanged = trimmedName === saved.name && !emailChanged;
 
   async function saveProfile(e: React.FormEvent) {
     e.preventDefault();
@@ -62,12 +68,20 @@ export default function SettingsForm({
       setError("Please enter your email.");
       return;
     }
+    if (emailChanged && !emailPassword) {
+      setError("Enter your current password to change your email.");
+      return;
+    }
     setSaving(true);
     try {
       const res = await fetch("/api/account", {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name: trimmedName, email: normalisedEmail }),
+        body: JSON.stringify({
+          name: trimmedName,
+          email: normalisedEmail,
+          ...(emailChanged ? { currentPassword: emailPassword } : {}),
+        }),
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) {
@@ -87,6 +101,7 @@ export default function SettingsForm({
       setName(stored.name);
       setEmail(stored.email);
       setSaved(stored);
+      setEmailPassword("");
       showToast("Settings saved");
       router.refresh();
     } catch {
@@ -122,6 +137,20 @@ export default function SettingsForm({
     await fetch("/api/auth/logout", { method: "POST" });
     router.push("/");
     router.refresh();
+  }
+
+  const [signingOutOthers, setSigningOutOthers] = useState(false);
+  async function signOutOthers() {
+    if (signingOutOthers) return;
+    setSigningOutOthers(true);
+    try {
+      const res = await fetch("/api/account/sign-out-others", { method: "POST" });
+      showToast(res.ok ? "Signed out of all other devices" : "Couldn't sign out other devices. Please try again.");
+    } catch {
+      showToast("Could not reach the server. Please try again.");
+    } finally {
+      setSigningOutOthers(false);
+    }
   }
 
   return (
@@ -165,6 +194,18 @@ export default function SettingsForm({
                 className={inputClass}
               />
             </div>
+            {emailChanged && (
+              <div className="sm:col-span-2 sm:max-w-[calc(50%-0.5rem)]">
+                <PasswordField
+                  label="Current password"
+                  name="current-password"
+                  value={emailPassword}
+                  onChange={setEmailPassword}
+                  autoComplete="current-password"
+                  hint="Needed to change the email you sign in with."
+                />
+              </div>
+            )}
           </div>
           <div className="mt-5 pt-5 border-t border-line flex sm:justify-end">
             <button
@@ -177,6 +218,8 @@ export default function SettingsForm({
           </div>
         </form>
       </section>
+
+      <PasswordSection onDone={showToast} />
 
       <section className="card sm:p-7">
         <SectionHeading
@@ -215,6 +258,20 @@ export default function SettingsForm({
             Log out
           </button>
         </div>
+        <div className="mt-4 pt-4 border-t border-line flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+          <p className="text-sm text-ink-soft">
+            Lost a phone or used a shared computer? Sign out everywhere except
+            this device.
+          </p>
+          <button
+            type="button"
+            onClick={signOutOthers}
+            disabled={signingOutOthers}
+            className="btn btn-secondary w-full sm:w-auto shrink-0"
+          >
+            {signingOutOthers ? "Signing out…" : "Sign out of other devices"}
+          </button>
+        </div>
         <div className="mt-5 rounded-control border border-danger/25 bg-danger-tint/60 px-4 py-3.5">
           <h3 className="text-sm font-semibold text-danger mb-1">
             Danger zone
@@ -222,10 +279,10 @@ export default function SettingsForm({
           <p className="text-sm text-ink-soft">
             To delete your account, email{" "}
             <a
-              href="mailto:help@vela.example?subject=Delete%20my%20account"
-              className="font-medium text-accent underline underline-offset-2 hover:text-accent-hover whitespace-nowrap"
+              href={`mailto:${supportEmail}?subject=Delete%20my%20account`}
+              className="font-medium text-accent underline underline-offset-2 hover:text-accent-hover break-words"
             >
-              help@vela.example
+              {supportEmail}
             </a>{" "}
             from the address you signed up with.
           </p>
@@ -240,6 +297,104 @@ export default function SettingsForm({
         )}
       </div>
     </div>
+  );
+}
+
+/**
+ * Change password (QA-059). Needs the current password; every other device
+ * is signed out and this one stays signed in.
+ */
+function PasswordSection({ onDone }: { onDone: (msg: string) => void }) {
+  const [current, setCurrent] = useState("");
+  const [next, setNext] = useState("");
+  const [confirm, setConfirm] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<{ field?: string; message: string } | null>(null);
+
+  async function submit(e: React.FormEvent) {
+    e.preventDefault();
+    setError(null);
+    if (!current) return setError({ field: "currentPassword", message: "Enter your current password." });
+    if (next.trim().length < 8) {
+      return setError({ field: "newPassword", message: "New password must be at least 8 characters." });
+    }
+    if (next !== confirm) return setError({ field: "confirm", message: "The new passwords don't match." });
+    setBusy(true);
+    try {
+      const res = await fetch("/api/account/password", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ currentPassword: current, newPassword: next }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        setError({ field: data.field, message: data.error ?? "Something went wrong." });
+        return;
+      }
+      setCurrent("");
+      setNext("");
+      setConfirm("");
+      onDone("Password changed. Other devices were signed out.");
+    } catch {
+      setError({ message: "Could not reach the server. Please try again." });
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <section className="card sm:p-7">
+      <SectionHeading
+        title="Password"
+        description="Changing it signs you out on every other device."
+      />
+      {error && (
+        <div role="alert" className="alert-error mb-4">
+          {error.message}
+        </div>
+      )}
+      <form onSubmit={submit} noValidate>
+        <div className="grid gap-4 sm:grid-cols-2">
+          <div className="sm:col-span-2 sm:max-w-[calc(50%-0.5rem)]">
+            <PasswordField
+              label="Current password"
+              name="current-password"
+              value={current}
+              onChange={setCurrent}
+              autoComplete="current-password"
+              invalid={error?.field === "currentPassword"}
+            />
+          </div>
+          <PasswordField
+            label="New password"
+            name="new-password"
+            value={next}
+            onChange={setNext}
+            autoComplete="new-password"
+            minLength={8}
+            hint="At least 8 characters."
+            invalid={error?.field === "newPassword"}
+          />
+          <PasswordField
+            label="Confirm new password"
+            name="confirm-password"
+            value={confirm}
+            onChange={setConfirm}
+            autoComplete="new-password"
+            invalid={error?.field === "confirm"}
+          />
+        </div>
+        <div className="mt-5 pt-5 border-t border-line flex sm:justify-end">
+          <button
+            type="submit"
+            disabled={busy || !current || !next || !confirm}
+            className="btn btn-primary w-full sm:w-auto"
+          >
+            {busy ? "Changing…" : "Change password"}
+          </button>
+        </div>
+      </form>
+    </section>
   );
 }
 

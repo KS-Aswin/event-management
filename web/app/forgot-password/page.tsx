@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
+import { SUPPORT_EMAIL } from "@/lib/support";
 
 export const metadata: Metadata = {
   title: "Forgot password",
@@ -10,7 +11,7 @@ export const metadata: Metadata = {
 // now). Support checks who is asking and sends a one-time reset link that an
 // admin creates on /admin/users/<id>. When email is set up, this page gets a
 // "send me a link" form instead.
-const SUPPORT_EMAIL = "help@vela.example";
+// The address comes from lib/support.ts (SUPPORT_EMAIL env, QA-057).
 
 export default function ForgotPasswordPage() {
   const subject = encodeURIComponent("Reset my Vela password");

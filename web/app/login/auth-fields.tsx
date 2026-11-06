@@ -70,12 +70,19 @@ export function PasswordField({
   autoComplete,
   minLength,
   hint,
+  label = "Password",
+  name = "password",
+  invalid,
 }: {
   value: string;
   onChange: (v: string) => void;
   autoComplete: "current-password" | "new-password";
   minLength?: number;
   hint?: string;
+  /** Visible label (Settings has three password fields). */
+  label?: string;
+  name?: string;
+  invalid?: boolean;
 }) {
   const id = useId();
   const hintId = `${id}-hint`;
@@ -83,12 +90,13 @@ export function PasswordField({
   return (
     <div>
       <label htmlFor={id} className="label">
-        Password
+        {label}
       </label>
       <div className="relative">
         <input
           id={id}
-          name="password"
+          name={name}
+          aria-invalid={invalid || undefined}
           type={show ? "text" : "password"}
           value={value}
           onChange={(e) => onChange(e.target.value)}
@@ -102,7 +110,7 @@ export function PasswordField({
           type="button"
           onClick={() => setShow((s) => !s)}
           aria-pressed={show}
-          aria-label="Show password"
+          aria-label={`Show ${label.toLowerCase()}`}
           aria-controls={id}
           className="absolute right-1 top-1/2 -translate-y-1/2 min-h-11 sm:min-h-9 min-w-14 px-3 text-[13px] font-medium text-accent hover:bg-accent-tint rounded-control transition-colors"
         >

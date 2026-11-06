@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { SUPPORT_EMAIL, supportMailto } from "@/lib/support";
 
 export const metadata: Metadata = {
   title: "Help centre",
@@ -70,10 +71,10 @@ export default function HelpPage() {
       <p className="text-ink-soft text-[16px] leading-relaxed mb-10 max-w-[60ch]">
         Answers to the most common questions. Can&apos;t find yours? Email{" "}
         <a
-          href="mailto:help@vela.example"
+          href={supportMailto()}
           className="text-accent font-medium underline-offset-2 hover:underline"
         >
-          help@vela.example
+          {SUPPORT_EMAIL}
         </a>
         .
       </p>

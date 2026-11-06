@@ -1,8 +1,8 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { redirect } from "next/navigation";
-import { getSession } from "@/lib/session";
-import { findUserById } from "@/lib/db";
+import { resolveLiveSession } from "@/app/api/_lib/auth";
+import { SUPPORT_EMAIL } from "@/lib/support";
 import SettingsForm from "./settings-form";
 
 export const metadata: Metadata = {
@@ -10,11 +10,12 @@ export const metadata: Metadata = {
 };
 
 export default async function SettingsPage() {
-  const session = await getSession();
-  if (!session) redirect("/login?next=/settings");
-
-  const user = await findUserById(session.userId);
-  if (!user) redirect("/login?next=/settings");
+  // Live check (status, session_version, signed-out tokens), not just the
+  // cookie's signature: a revoked session must not see account settings.
+  const live = await resolveLiveSession();
+  if (live.state === "suspended") redirect("/login?suspended=1");
+  if (live.state !== "ok") redirect("/login?next=/settings");
+  const { user } = live;
 
   const quickLinks =
     user.role === "vendor"
@@ -65,6 +66,7 @@ export default async function SettingsPage() {
         initialEmail={user.email}
         initialEmailNotifications={user.email_notifications}
         initialSmsNotifications={user.sms_notifications}
+        supportEmail={SUPPORT_EMAIL}
       />
     </main>
   );

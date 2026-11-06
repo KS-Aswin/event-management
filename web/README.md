@@ -29,6 +29,7 @@ Prisma needs to download a native query-engine binary from `binaries.prisma.sh` 
    - `DATABASE_URL` — your Postgres connection string, e.g. `postgresql://postgres:<password>@localhost:5432/vela_dev` (URL-encode special characters in the password)
    - `SESSION_SECRET` — a long random string (at least 32 characters; placeholder values such as `CHANGE_ME` are rejected), e.g. `openssl rand -base64 48` or `node -e "console.log(require('crypto').randomBytes(48).toString('base64'))"` (works on Windows without OpenSSL)
    - `NEXT_PUBLIC_SITE_URL` — optional locally (defaults to `http://localhost:3000`); set it to the public `https://` origin in production, it is used for canonical/Open Graph links, `robots.txt` and `sitemap.xml`
+   - `SUPPORT_EMAIL` (or `NEXT_PUBLIC_SUPPORT_EMAIL`) — the support mailbox shown on /help, /forgot-password, the Settings "Danger zone" and the Terms (`lib/support.ts`). Optional locally (falls back to the placeholder `help@vela.example`, which can never receive mail); **required in production** and must be a real inbox someone reads, because password resets and account deletion go through it. Pages read it at build/render time, so redeploy after changing it.
 
    `npm run dev`/`build`/`start` (Next.js) and `npm run db:migrate`, `npm run db:seed`, `npm run test:api`, `npm run test:e2e` all read `.env.local` automatically.
 
@@ -192,6 +193,7 @@ The code runs locally end to end, but these need a person (accounts, money, lega
 
 **Credentials and config**
 - Create the real `.env.local` / hosting env vars: `DATABASE_URL` for the production database, a fresh `SESSION_SECRET` (never reuse the local one), and `NEXT_PUBLIC_SITE_URL` set to the public `https://` origin.
+- Create the support mailbox and set `SUPPORT_EMAIL` to it (see above); until then every support link points at the unusable `help@vela.example` placeholder.
 - No secrets are in the repo; `.env.example` holds placeholders only.
 
 **Production database and migrations**
