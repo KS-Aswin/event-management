@@ -1,8 +1,8 @@
 import type { Metadata } from "next";
 import { requirePageRole } from "@/app/api/_lib/auth";
-import { getTaxonomy } from "@/lib/taxonomy";
+import { categoryLabeller, getTaxonomy } from "@/lib/taxonomy";
 import type { Taxonomy, VendorRecord } from "@/lib/db";
-import { listShortlist } from "@/lib/shortlist";
+import { findEnquiryDefaults, listShortlist } from "@/lib/shortlist";
 import { listCustomerEnquiries } from "@/lib/enquiry-thread";
 import { findCardMedia } from "@/app/search/card-media";
 import ShortlistBoard, { type BoardItem } from "./shortlist-board";
@@ -23,10 +23,13 @@ async function loadTaxonomy(): Promise<Taxonomy | null> {
 
 export default async function ShortlistPage() {
   const { session, user } = await requirePageRole("customer");
-  const [items, taxonomy, enquiries] = await Promise.all([
+  const phone = (user as { phone_e164?: string | null }).phone_e164 ?? "";
+  const [items, taxonomy, enquiries, defaults] = await Promise.all([
     listShortlist(session.userId),
     loadTaxonomy(),
     listCustomerEnquiries(session.userId),
+    // The send sheet starts from what the customer already told vendors (QA-029).
+    findEnquiryDefaults(session.userId, { name: session.name, phone }),
   ]);
   const media = await findCardMedia(
     items
@@ -48,7 +51,8 @@ export default async function ShortlistPage() {
     enquiryId: enquired.get(i.vendorId) ?? null,
   }));
   const categoryOrder = taxonomy?.categories.map((c) => c.name) ?? [];
-  const phone = (user as { phone_e164?: string | null }).phone_e164 ?? "";
+  const label = categoryLabeller(taxonomy);
+  const categoryLabels = Object.fromEntries(items.map((i) => [i.category, label(i.category)]));
 
   return (
     <main className="page py-6 sm:py-8">
@@ -63,9 +67,10 @@ export default async function ShortlistPage() {
       <ShortlistBoard
         items={board}
         categoryOrder={categoryOrder}
+        categoryLabels={categoryLabels}
         eventTypes={taxonomy?.eventTypes.map((e) => ({ id: e.id, name: e.name })) ?? []}
         districts={taxonomy?.districts.map((d) => ({ id: d.id, name: d.name })) ?? []}
-        defaults={{ name: session.name, phone }}
+        defaults={defaults}
       />
     </main>
   );

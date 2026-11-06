@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { requirePageRole } from "@/app/api/_lib/auth";
-import { getTaxonomy } from "@/lib/taxonomy";
+import { categoryLabeller, getTaxonomy } from "@/lib/taxonomy";
 import type { Taxonomy, VendorRecord } from "@/lib/db";
 import { listCustomerEnquiries, type CustomerEnquirySummary } from "@/lib/enquiry-thread";
 import { findNextEvent, recommendedVendors, type NextEvent } from "@/lib/customer-home";
@@ -58,6 +58,7 @@ export default async function MyHomePage() {
     listShortlist(userId),
     findNextEvent(userId),
   ]);
+  const categoryLabel = categoryLabeller(taxonomy);
   const recommended = await recommendedVendors(userId, { districtId: next?.districtId ?? null, limit: 6 });
 
   const eventTypes = taxonomy?.eventTypes.filter((e) => e.slug !== "other") ?? [];
@@ -135,7 +136,7 @@ export default async function MyHomePage() {
               ) : (
                 <ul className="card p-0 divide-y divide-line">
                   {actionable.map((e) => (
-                    <ActionRow key={e.id} e={e} />
+                    <ActionRow key={e.id} e={e} category={categoryLabel(e.vendor.category)} />
                   ))}
                 </ul>
               )}
@@ -293,7 +294,7 @@ function NextEventCard({ next, stillNeeded }: { next: NextEvent; stillNeeded: { 
   );
 }
 
-function ActionRow({ e }: { e: CustomerEnquirySummary }) {
+function ActionRow({ e, category }: { e: CustomerEnquirySummary; category: string }) {
   const offerWaiting = e.latestOffer?.status === "sent" && e.status === "responded";
   return (
     <li className="relative px-4 py-3.5 sm:px-5 hover:bg-surface-muted/60 transition-colors">
@@ -308,7 +309,7 @@ function ActionRow({ e }: { e: CustomerEnquirySummary }) {
             </Link>
           </h3>
           <p className="text-caption text-ink-soft mt-0.5">
-            {e.vendor.category}
+            {category}
             {e.eventDate ? ` · ${formatEventDate(e.eventDate)}` : ""} · {formatReceived(e.lastActivityAt)}
           </p>
         </div>

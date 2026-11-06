@@ -13,6 +13,7 @@ import {
   type CompareVendor,
 } from "@/lib/compare";
 import { listShortlist } from "@/lib/shortlist";
+import { getCategoryLabeller } from "@/lib/taxonomy";
 import { findCardMedia } from "@/app/search/card-media";
 import CardImage from "@/app/search/card-image";
 
@@ -47,7 +48,11 @@ export default async function ComparePage({ searchParams }: { searchParams: Prom
 
   if (!parsed.ok) return <CompareMessage title="Pick vendors to compare" body={`${parsed.error} Select 2 to ${COMPARE_MAX} vendors on your shortlist, then tap Compare.`} />;
 
-  const [vendors, shortlist] = await Promise.all([findCompareVendors(parsed.ids), listShortlist(session.userId)]);
+  const [vendors, shortlist, categoryLabel] = await Promise.all([
+    findCompareVendors(parsed.ids),
+    listShortlist(session.userId),
+    getCategoryLabeller(),
+  ]);
   if (vendors.length < 2) {
     return (
       <CompareMessage
@@ -89,7 +94,7 @@ export default async function ComparePage({ searchParams }: { searchParams: Prom
       values: vendors.map((v) => responseLabel(v.responseMinutes)),
       highlight: bestIndex(vendors.map((v) => v.responseMinutes), true),
     },
-    { label: "Category", values: vendors.map((v) => v.category) },
+    { label: "Category", values: vendors.map((v) => categoryLabel(v.category) || null) },
     { label: "Based in", values: vendors.map((v) => v.location || null) },
     { label: "Services offered", values: vendors.map((v) => (v.offeringCount ? String(v.offeringCount) : null)) },
     { label: "Team size", values: vendors.map((v) => (v.teamSize ? `${v.teamSize} people` : null)) },
@@ -109,7 +114,7 @@ export default async function ComparePage({ searchParams }: { searchParams: Prom
         <div>
           <h1 className="font-display text-heading sm:text-display font-semibold tracking-tight">Compare vendors</h1>
           <p className="text-ink-soft text-lead mt-1">
-            {vendors.length} vendors side by side{sharedCategory ? ` · ${vendors[0].category}` : ""}.
+            {vendors.length} vendors side by side{sharedCategory ? ` · ${categoryLabel(vendors[0].category)}` : ""}.
           </p>
         </div>
         <Link href="/my/shortlist" className="btn btn-secondary btn-sm">
@@ -123,7 +128,10 @@ export default async function ComparePage({ searchParams }: { searchParams: Prom
       )}
 
       <div className="card p-0 overflow-hidden">
-        <div className="overflow-x-auto overscroll-x-contain" role="region" aria-label="Comparison table" tabIndex={0}>
+        {/* relative: the sr-only spans in the cells are position:absolute, so the
+            scroller must be their containing block or they escape it and widen
+            the whole page on phones (QA-012). */}
+        <div className="relative overflow-x-auto overscroll-x-contain" role="region" aria-label="Comparison table" tabIndex={0}>
           <table className="w-full min-w-[560px] border-collapse text-body table-fixed">
             <caption className="sr-only">Comparison of {vendors.map((v) => v.name).join(", ")}</caption>
             <colgroup>

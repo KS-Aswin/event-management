@@ -3,6 +3,7 @@ import Link from "next/link";
 import { requirePageRole } from "@/app/api/_lib/auth";
 import { listMyReviews, listReviewPrompts } from "@/lib/customer-home";
 import { formatDate } from "@/app/vendor/leads/format";
+import { getCategoryLabeller } from "@/lib/taxonomy";
 
 export const metadata: Metadata = { title: "My reviews" };
 
@@ -12,7 +13,11 @@ export const metadata: Metadata = { title: "My reviews" };
 
 export default async function MyReviewsPage() {
   const { session } = await requirePageRole("customer");
-  const [reviews, prompts] = await Promise.all([listMyReviews(session.userId), listReviewPrompts(session.userId)]);
+  const [reviews, prompts, categoryLabel] = await Promise.all([
+    listMyReviews(session.userId),
+    listReviewPrompts(session.userId),
+    getCategoryLabeller(),
+  ]);
 
   return (
     <main className="page py-6 sm:py-8">
@@ -38,7 +43,7 @@ export default async function MyReviewsPage() {
                 <div className="min-w-0">
                   <h3 className="text-[15px] font-semibold">{p.vendorName}</h3>
                   <p className="text-caption text-ink-soft mt-0.5">
-                    {p.category}
+                    {categoryLabel(p.category)}
                     {p.eventTypeName ? ` · ${p.eventTypeName}` : ""} · {formatDate(p.eventDate)} ·{" "}
                     {p.status === "booked" ? "Booked" : "Offer accepted"}
                   </p>

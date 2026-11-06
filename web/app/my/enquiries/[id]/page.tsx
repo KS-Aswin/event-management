@@ -6,6 +6,7 @@ import { parseId } from "@/app/api/_lib/validation";
 import { getCustomerEnquiry, markThreadRead } from "@/lib/enquiry-thread";
 import { canTransition } from "@/lib/enquiry-status";
 import { formatPaise } from "@/lib/offer-math";
+import { getCategoryLabeller } from "@/lib/taxonomy";
 import { StatusPill } from "@/app/vendor/leads/lead-row";
 import { OfferCard } from "@/app/_components/enquiry-thread/offer-card";
 import { MessageList, StatusTimeline } from "@/app/_components/enquiry-thread/message-list";
@@ -37,6 +38,7 @@ export default async function MyEnquiryPage({ params }: { params: Promise<{ id: 
   await markThreadRead(e.id, "customer", session.userId);
 
   const { offers, messages, events } = e.thread;
+  const categoryLabel = await getCategoryLabeller();
   const live = offers.find((o) => o.status === "sent" || o.status === "accepted") ?? null;
   const older = offers.filter((o) => o !== live);
   const canAccept = canTransition(e.status, "accepted", "customer");
@@ -75,7 +77,7 @@ export default async function MyEnquiryPage({ params }: { params: Promise<{ id: 
           <StatusPill status={e.status} audience="customer" />
         </div>
         <p className="text-ink-soft text-body mt-1">
-          {e.vendor.category}
+          {categoryLabel(e.vendor.category)}
           {e.eventDate ? ` · ${formatEventDate(e.eventDate)}` : ""} · sent {formatDate(e.createdAt)}
         </p>
         {e.vendor.available ? (

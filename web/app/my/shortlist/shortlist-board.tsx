@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useId, useMemo, useRef, useState } from "react";
 import CardImage from "@/app/search/card-image";
-import type { ShortlistItem } from "@/lib/shortlist";
+import type { EnquiryDefaults, ShortlistItem } from "@/lib/shortlist";
 import { SHORTLIST_CHANGED } from "@/lib/guest-shortlist";
 
 export type BoardItem = ShortlistItem & { image: string | null; color: string | null; enquiryId: number | null };
@@ -23,6 +23,13 @@ const BUDGETS: { value: string; label: string }[] = [
   { value: "1000000-", label: "Above ₹10 lakh" },
 ];
 
+/** The budget preset matching a saved min/max, else "" (Not sure yet). */
+function budgetPreset(min: number | null, max: number | null): string {
+  if (min === null && max === null) return "";
+  const v = `${min ?? 0}-${max ?? ""}`;
+  return BUDGETS.some((b) => b.value === v) ? v : "";
+}
+
 function todayInIndia() {
   return new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Kolkata" }).format(new Date());
 }
@@ -30,15 +37,18 @@ function todayInIndia() {
 export default function ShortlistBoard({
   items: initial,
   categoryOrder,
+  categoryLabels,
   eventTypes,
   districts,
   defaults,
 }: {
   items: BoardItem[];
   categoryOrder: string[];
+  /** Internal category name -> display name (admin renames, QA-008). */
+  categoryLabels: Record<string, string>;
   eventTypes: { id: number; name: string }[];
   districts: { id: number; name: string }[];
-  defaults: { name: string; phone: string };
+  defaults: EnquiryDefaults;
 }) {
   const router = useRouter();
   const [items, setItems] = useState(initial);
@@ -122,7 +132,7 @@ export default function ShortlistBoard({
         {groups.map(([category, list]) => (
           <section key={category} aria-labelledby={`cat-${slug(category)}`}>
             <h2 id={`cat-${slug(category)}`} className="eyebrow mb-2">
-              {category} · {list.length}
+              {categoryLabels[category] ?? category} · {list.length}
             </h2>
             <ul className="card p-0 divide-y divide-line">
               {list.map((i) => (
@@ -427,7 +437,7 @@ function SendDialog({
   vendors: BoardItem[];
   eventTypes: { id: number; name: string }[];
   districts: { id: number; name: string }[];
-  defaults: { name: string; phone: string };
+  defaults: EnquiryDefaults;
   onClose: (sent: boolean) => void;
 }) {
   const ref = useRef<HTMLDialogElement>(null);
@@ -438,6 +448,16 @@ function SendDialog({
   const [results, setResults] = useState<Result[] | null>(null);
   const [today] = useState(todayInIndia);
   const names = new Map(vendors.map((v) => [v.vendorId, v.name]));
+  // Prefill (QA-029): only values the controls can show; a date already past
+  // (the sheet stayed open over midnight) or a retired option starts blank.
+  const pre = {
+    eventDate: defaults.eventDate && defaults.eventDate >= today ? defaults.eventDate : "",
+    eventTypeId: eventTypes.some((t) => t.id === defaults.eventTypeId) ? String(defaults.eventTypeId) : "",
+    districtId: districts.some((d) => d.id === defaults.districtId) ? String(defaults.districtId) : "",
+    guestCount: defaults.guestCount ? String(defaults.guestCount) : "",
+    budget: budgetPreset(defaults.budgetMin, defaults.budgetMax),
+  };
+  const prefilled = !!(pre.eventDate || pre.eventTypeId || pre.districtId || pre.guestCount);
 
   useEffect(() => {
     const d = ref.current;
@@ -561,6 +581,13 @@ function SendDialog({
               ))}
             </ul>
 
+            {prefilled && (
+              <p className="hint -mt-1">
+                Filled in from {defaults.source ? `your ${defaults.source} enquiry` : "your earlier enquiry"}. Change anything
+                that&apos;s different for these vendors.
+              </p>
+            )}
+
             <div className="grid gap-4 sm:grid-cols-2">
               <Field id={`${f}-name`} label="Your name" error={fieldError("name")}>
                 <input id={`${f}-name`} name="name" className="field" defaultValue={defaults.name} required autoComplete="name" aria-invalid={inv("name")} />
@@ -569,10 +596,10 @@ function SendDialog({
                 <input id={`${f}-phone`} name="phone" type="tel" inputMode="tel" className="field" defaultValue={defaults.phone} required autoComplete="tel" aria-invalid={inv("phone")} />
               </Field>
               <Field id={`${f}-eventDate`} label="Event date" error={fieldError("eventDate")}>
-                <input id={`${f}-eventDate`} name="eventDate" type="date" min={today} className="field" aria-invalid={inv("eventDate")} />
+                <input id={`${f}-eventDate`} name="eventDate" type="date" min={today} className="field" defaultValue={pre.eventDate} aria-invalid={inv("eventDate")} />
               </Field>
               <Field id={`${f}-eventTypeId`} label="Occasion" error={fieldError("eventTypeId")}>
-                <select id={`${f}-eventTypeId`} name="eventTypeId" className="field" defaultValue="" aria-invalid={inv("eventTypeId")}>
+                <select id={`${f}-eventTypeId`} name="eventTypeId" className="field" defaultValue={pre.eventTypeId} aria-invalid={inv("eventTypeId")}>
                   <option value="">Choose…</option>
                   {eventTypes.map((t) => (
                     <option key={t.id} value={t.id}>
@@ -582,7 +609,7 @@ function SendDialog({
                 </select>
               </Field>
               <Field id={`${f}-districtId`} label="District" error={fieldError("districtId")}>
-                <select id={`${f}-districtId`} name="districtId" className="field" defaultValue="" aria-invalid={inv("districtId")}>
+                <select id={`${f}-districtId`} name="districtId" className="field" defaultValue={pre.districtId} aria-invalid={inv("districtId")}>
                   <option value="">Choose…</option>
                   {districts.map((d) => (
                     <option key={d.id} value={d.id}>
@@ -592,10 +619,10 @@ function SendDialog({
                 </select>
               </Field>
               <Field id={`${f}-guestCount`} label="Guests" error={fieldError("guestCount")}>
-                <input id={`${f}-guestCount`} name="guestCount" type="number" inputMode="numeric" min={1} className="field" aria-invalid={inv("guestCount")} />
+                <input id={`${f}-guestCount`} name="guestCount" type="number" inputMode="numeric" min={1} className="field" defaultValue={pre.guestCount} aria-invalid={inv("guestCount")} />
               </Field>
               <Field id={`${f}-budget`} label="Budget" error={fieldError("budget")}>
-                <select id={`${f}-budget`} name="budget" className="field" defaultValue="" aria-invalid={inv("budget")}>
+                <select id={`${f}-budget`} name="budget" className="field" defaultValue={pre.budget} aria-invalid={inv("budget")}>
                   {BUDGETS.map((b) => (
                     <option key={b.value} value={b.value}>
                       {b.label}
@@ -604,7 +631,7 @@ function SendDialog({
                 </select>
               </Field>
               <Field id={`${f}-preferredContact`} label="Reach me by" error={fieldError("preferredContact")}>
-                <select id={`${f}-preferredContact`} name="preferredContact" className="field" defaultValue="whatsapp" aria-invalid={inv("preferredContact")}>
+                <select id={`${f}-preferredContact`} name="preferredContact" className="field" defaultValue={defaults.preferredContact} aria-invalid={inv("preferredContact")}>
                   <option value="whatsapp">WhatsApp</option>
                   <option value="call">Phone call</option>
                   <option value="email">Email</option>

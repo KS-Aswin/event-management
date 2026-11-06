@@ -3,6 +3,7 @@ import Link from "next/link";
 import { requirePageRole } from "@/app/api/_lib/auth";
 import { listCustomerEnquiries, type CustomerEnquirySummary } from "@/lib/enquiry-thread";
 import { formatPaise } from "@/lib/offer-math";
+import { getCategoryLabeller } from "@/lib/taxonomy";
 import { StatusPill } from "@/app/vendor/leads/lead-row";
 import { formatEventDate, formatReceived } from "@/app/vendor/leads/format";
 
@@ -36,7 +37,7 @@ function offerLine(e: CustomerEnquirySummary): string | null {
 
 export default async function MyEnquiriesPage() {
   const { session } = await requirePageRole(["customer", "vendor"]);
-  const enquiries = await listCustomerEnquiries(session.userId);
+  const [enquiries, categoryLabel] = await Promise.all([listCustomerEnquiries(session.userId), getCategoryLabeller()]);
 
   const groups: { key: string; items: CustomerEnquirySummary[] }[] = [];
   for (const e of enquiries) {
@@ -85,7 +86,7 @@ export default async function MyEnquiriesPage() {
               </h2>
               <ul className="card p-0 divide-y divide-line">
                 {g.items.map((e) => (
-                  <EnquiryItem key={e.id} e={e} />
+                  <EnquiryItem key={e.id} e={e} category={categoryLabel(e.vendor.category)} />
                 ))}
               </ul>
             </section>
@@ -96,7 +97,7 @@ export default async function MyEnquiriesPage() {
   );
 }
 
-function EnquiryItem({ e }: { e: CustomerEnquirySummary }) {
+function EnquiryItem({ e, category }: { e: CustomerEnquirySummary; category: string }) {
   const offer = offerLine(e);
   const needsYou = e.latestOffer?.status === "sent" && e.status === "responded";
   return (
@@ -113,7 +114,7 @@ function EnquiryItem({ e }: { e: CustomerEnquirySummary }) {
             </Link>
           </h3>
           <p className="text-caption text-ink-soft mt-0.5">
-            {e.vendor.category}
+            {category}
             {e.districtName ? ` · ${e.districtName}` : ""}
             {e.guestCount ? ` · ${e.guestCount.toLocaleString("en-IN")} guests` : ""} · updated {formatReceived(e.lastActivityAt)}
           </p>

@@ -223,3 +223,83 @@ export function parseVendorId(raw: unknown): number | null {
   const n = typeof raw === "string" && /^\d{1,10}$/.test(raw) ? Number(raw) : raw;
   return Number.isInteger(n) && (n as number) > 0 && (n as number) <= 2147483647 ? (n as number) : null;
 }
+
+// ---------------------------------------------------------------------------
+// Enquiry defaults for the multi-vendor send (QA-029)
+// ---------------------------------------------------------------------------
+
+export interface EnquiryDefaults {
+  name: string;
+  phone: string;
+  preferredContact: "whatsapp" | "call" | "email";
+  /** Details of the customer's next upcoming event (same rule as /my "Next event"), or nulls. */
+  eventDate: string | null;
+  eventTypeId: number | null;
+  districtId: number | null;
+  guestCount: number | null;
+  budgetMin: number | null;
+  budgetMax: number | null;
+  /** Occasion name the event details came from (for the "Filled in from…" hint), or null. */
+  source: string | null;
+}
+
+const LIVE_ENQUIRY = "q.status IN ('pending','responded','accepted','booked')";
+const CONTACTS = new Set(["whatsapp", "call", "email"]);
+
+/**
+ * What the "Send enquiry to N" sheet starts with, so a customer who has
+ * already told vendors about their event doesn't type it all again:
+ * contact details from the account (else their latest enquiry), and event
+ * details from their next upcoming live enquiry. A past event is never
+ * reused (it is a different occasion).
+ */
+export async function findEnquiryDefaults(
+  customerId: number,
+  account: { name: string; phone?: string | null }
+): Promise<EnquiryDefaults> {
+  const [latest, next] = await Promise.all([
+    pool.query<{ name: string | null; phone: string | null; preferred_contact: string | null }>(
+      `SELECT q.name, q.phone, q.preferred_contact
+         FROM quote_requests q
+        WHERE q.customer_id = $1
+        ORDER BY q.created_at DESC, q.id DESC
+        LIMIT 1`,
+      [customerId]
+    ),
+    pool.query<{
+      event_date: string;
+      event_type_id: number | null;
+      district_id: number | null;
+      guest_count: number | null;
+      budget_min: number | null;
+      budget_max: number | null;
+      type_name: string | null;
+    }>(
+      `SELECT q.event_date::text AS event_date, q.event_type_id, q.district_id, q.guest_count,
+              q.budget_min, q.budget_max, et.name AS type_name
+         FROM quote_requests q
+         LEFT JOIN event_types et ON et.id = q.event_type_id AND et.active
+        WHERE q.customer_id = $1 AND ${LIVE_ENQUIRY}
+          AND q.event_date >= (now() AT TIME ZONE 'Asia/Kolkata')::date
+        ORDER BY q.event_date, (q.event_type_id IS NULL), q.created_at DESC
+        LIMIT 1`,
+      [customerId]
+    ),
+  ]);
+  const l = latest.rows[0];
+  const n = next.rows[0];
+  const contact = l?.preferred_contact && CONTACTS.has(l.preferred_contact) ? l.preferred_contact : "whatsapp";
+  return {
+    name: account.name || l?.name?.trim() || "",
+    phone: account.phone?.trim() || l?.phone?.trim() || "",
+    preferredContact: contact as EnquiryDefaults["preferredContact"],
+    eventDate: n?.event_date ?? null,
+    // Only an occasion the customer can still pick (a retired type is dropped).
+    eventTypeId: n && n.type_name ? n.event_type_id : null,
+    districtId: n?.district_id ?? null,
+    guestCount: n?.guest_count ?? null,
+    budgetMin: n?.budget_min ?? null,
+    budgetMax: n?.budget_max ?? null,
+    source: n?.type_name ?? null,
+  };
+}
