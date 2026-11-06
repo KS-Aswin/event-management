@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { checkRateLimit, clientIp } from "@/lib/rate-limit";
+import { clientIp, rateLimitHit } from "@/lib/rate-limit";
 import { isEnquiryBlocked } from "@/lib/admin/ops";
 import { findUserById } from "@/lib/db";
 import {
@@ -22,9 +22,11 @@ import { getLiveSession } from "../../_lib/auth";
 //
 // 201 { batchId, sent, failed, results: [
 //        {vendorId, ok: true, enquiryId, trackingPath, guestToken, warnings[]} |
-//        {vendorId, ok: false, code: VENDOR_UNAVAILABLE|OWN_LISTING|INVALID_SERVICE|PACKAGE_ONLY, error} ] }
-//   (partial success: some results ok:false, still 201)
-// 409 NO_VENDORS_AVAILABLE {results}: nothing could be sent.
+//        {vendorId, ok: false, code: VENDOR_UNAVAILABLE|OWN_LISTING|INVALID_SERVICE|PACKAGE_ONLY, error} |
+//        {vendorId, ok: false, code: ALREADY_ENQUIRED, error, enquiryId} ] }
+//   (partial success: some results ok:false, still 201; ALREADY_ENQUIRED is
+//   a signed-in customer's open enquiry to that vendor for the same date, QA-040)
+// 409 NO_VENDORS_AVAILABLE | ALREADY_ENQUIRED {results}: nothing could be sent.
 // 429 DAILY_LIMIT {remaining}: more than 15 enquiries from this phone in 24 h
 //     (counts every enquiry, single or multi); RATE_LIMIT: too many sends.
 // 400 VALIDATION {field?}, 403 blocked contact.
@@ -80,12 +82,14 @@ export async function POST(request: Request) {
   if (!parsed.ok) return errorResponse(parsed);
   const fields = parsed.fields;
 
-  // Burst guard per user / IP (the per-phone daily cap is checked in the transaction).
+  // Burst guard per user / IP, shared by every server instance (QA-037); the
+  // per-phone daily cap is checked in the transaction.
   const who = session ? `u:${session.userId}` : `ip:${clientIp(request.headers)}`;
-  if (!checkRateLimit(`quote-multi:${who}`, 6, 10 * 60_000)) {
+  const limit = await rateLimitHit(`quote-multi:${who}`, 6, 10 * 60_000);
+  if (!limit.ok) {
     return NextResponse.json(
       { error: "Too many requests. Please wait a few minutes and try again.", code: "RATE_LIMIT" },
-      { status: 429, headers: NO_STORE }
+      { status: 429, headers: { ...NO_STORE, "Retry-After": String(limit.retryAfter) } }
     );
   }
 

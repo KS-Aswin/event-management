@@ -546,6 +546,8 @@ async function main() {
   });
   check("review: rejected when reviewing your own listing (403)", reviewOwnListing.status, 403);
 
+  // QA-038: only a customer whose booked event has passed may review.
+  await dbQuery("UPDATE quote_requests SET status='booked', event_date = current_date - 3 WHERE id = $1", [customerQuote.data.quote.id]);
   const reviewOk = await request(`/api/vendors/${createdVendorId}/reviews`, {
     method: "POST",
     body: { rating: 5, body: "Excellent to work with, highly recommend for weddings." },

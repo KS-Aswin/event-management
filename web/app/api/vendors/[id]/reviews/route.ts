@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { findVendorById } from "@/lib/db";
 import { createReviewV2 } from "@/lib/vendor-reviews";
-import { checkRateLimit } from "@/lib/rate-limit";
+import { rateLimitHit } from "@/lib/rate-limit";
 import { getLiveSession } from "../../../_lib/auth";
 import { LIMITS, parseId } from "../../../_lib/validation";
 
@@ -28,10 +28,11 @@ export async function POST(
     );
   }
 
-  if (!checkRateLimit(`review:u:${session.userId}`, 5, 10 * 60_000)) {
+  const limit = await rateLimitHit(`review:u:${session.userId}`, 5, 10 * 60_000);
+  if (!limit.ok) {
     return NextResponse.json(
-      { error: "Too many requests. Please wait a few minutes and try again." },
-      { status: 429 }
+      { error: "Too many requests. Please wait a few minutes and try again.", code: "RATE_LIMIT" },
+      { status: 429, headers: { "Retry-After": String(limit.retryAfter) } }
     );
   }
 
@@ -77,8 +78,9 @@ export async function POST(
     return NextResponse.json({ error: "Vendor not found." }, { status: 404 });
   }
 
-  // Reviews v2 (P2-11): needs an enquiry to this vendor; verified only when
-  // that enquiry is accepted/booked and the event date has passed.
+  // Reviews v2 (P2-11, QA-038): needs a finished dealing with this vendor
+  // through Vela: an enquiry whose event date has passed and that the vendor
+  // replied to or that was booked. Verified when it was accepted/booked.
   const result = await createReviewV2({
     vendorId,
     customerId: session.userId,
@@ -100,7 +102,17 @@ export async function POST(
     }
     if (result.reason === "no_enquiry") {
       return NextResponse.json(
-        { error: "You can review vendors you have sent an enquiry to through Vela.", code: "NO_ENQUIRY" },
+        { error: "You can review a vendor after an event you booked with them through Vela.", code: "NO_ENQUIRY" },
+        { status: 403 }
+      );
+    }
+    if (result.reason === "not_eligible") {
+      return NextResponse.json(
+        {
+          error:
+            "You can review this vendor after your event date, once they have replied to your enquiry or you have booked them through Vela.",
+          code: "NOT_ELIGIBLE",
+        },
         { status: 403 }
       );
     }

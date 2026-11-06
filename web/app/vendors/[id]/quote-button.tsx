@@ -3,12 +3,16 @@
 import { useEffect, useId, useRef, useState } from "react";
 import Link from "next/link";
 import { trapTabKey } from "@/app/_components/focus-trap";
+import type { EnquiryDefaults } from "@/lib/shortlist";
 
 // Quote dialog v2 (P2-2): event type, date, time of day, guests, district,
 // venue type, food preference (caterers), budget band, the offerings asked
 // for with a quantity for per-unit prices (min-qty warning, still allowed),
 // phone with country code, email and preferred contact. After sending it
 // shows the tracking link and a WhatsApp share text that includes it.
+// A signed-in customer's sheet starts from their saved event details, like
+// the multi-vendor sheet (QA-041), and says when they already have an open
+// enquiry with this vendor; the same date again is refused (QA-040).
 
 export interface QuoteService {
   id: number;
@@ -67,6 +71,20 @@ const VENUES: [string, string][] = [
   ["other", "Other"],
 ];
 
+/** The budget band matching a saved min/max, or "" (mirrors the shortlist sheet). */
+function budgetPreset(min: number | null, max: number | null): string {
+  if (min === null && max === null) return "";
+  const v = `${min ?? 0}-${max ?? ""}`;
+  return BUDGETS.some((b) => b.value === v) ? v : "";
+}
+
+function formatDay(iso: string) {
+  const d = new Date(`${iso}T00:00:00Z`);
+  return Number.isNaN(d.getTime())
+    ? iso
+    : new Intl.DateTimeFormat("en-IN", { day: "numeric", month: "short", year: "numeric", timeZone: "UTC" }).format(d);
+}
+
 function todayInIST() {
   // en-CA formats as YYYY-MM-DD, which is what <input type="date"> expects.
   return new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Kolkata" }).format(new Date());
@@ -80,6 +98,7 @@ function noun(s: QuoteService, n: number) {
 
 type Warning = { code: string; message: string };
 type Sent = { trackingPath: string; guest: boolean; warnings: Warning[]; email: string | null };
+type OpenEnquiry = { id: number; eventDate: string | null; status: string };
 
 export default function QuoteButton({
   vendorId,
@@ -96,6 +115,8 @@ export default function QuoteButton({
   label = "Request quote",
   variant = "primary",
   triggerClassName,
+  prefill = null,
+  openEnquiry = null,
 }: {
   vendorId: number;
   vendorName: string;
@@ -113,11 +134,16 @@ export default function QuoteButton({
   variant?: "primary" | "link";
   /** Overrides the trigger's classes (e.g. to stretch it in a sticky bar). */
   triggerClassName?: string;
+  /** A signed-in customer's saved event details (QA-041). */
+  prefill?: EnquiryDefaults | null;
+  /** The customer's latest open enquiry with this vendor (QA-040). */
+  openEnquiry?: OpenEnquiry | null;
 }) {
   const [open, setOpen] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [errorField, setErrorField] = useState<string | null>(null);
+  const [errorLink, setErrorLink] = useState<string | null>(null);
   const [sent, setSent] = useState<Sent | null>(null);
   const [minDate, setMinDate] = useState("");
   const [selected, setSelected] = useState<Set<number>>(new Set());
@@ -141,11 +167,12 @@ export default function QuoteButton({
     setOrigin(window.location.origin);
     setError(null);
     setErrorField(null);
+    setErrorLink(null);
     setSent(null);
     setCopied(false);
     setSelected(new Set(preselectServiceId && services.some((s) => s.id === preselectServiceId) ? [preselectServiceId] : []));
     setQty({});
-    setGuests("");
+    setGuests(prefill?.guestCount ? String(prefill.guestCount) : "");
     setOpen(true);
   }
 
@@ -163,9 +190,10 @@ export default function QuoteButton({
     });
   }
 
-  function showError(message: string, field: string | null) {
+  function showError(message: string, field: string | null, link: string | null = null) {
     setError(message);
     setErrorField(field);
+    setErrorLink(link);
     requestAnimationFrame(() => {
       const el = field ? formRef.current?.querySelector<HTMLElement>(`[name="${field}"]`) : null;
       if (el) el.focus();
@@ -177,6 +205,7 @@ export default function QuoteButton({
     e.preventDefault();
     setError(null);
     setErrorField(null);
+    setErrorLink(null);
     const form = e.currentTarget;
     const fd = new FormData(form);
     const str = (k: string) => String(fd.get(k) ?? "").trim();
@@ -218,7 +247,8 @@ export default function QuoteButton({
       const data = await res.json().catch(() => ({}));
       if (!res.ok) {
         const field = typeof data.field === "string" ? (data.field === "budget" ? "budgetBand" : data.field) : null;
-        showError(data.error ?? "Something went wrong. Please try again.", field);
+        const link = data.code === "ALREADY_ENQUIRED" && typeof data.trackingPath === "string" ? data.trackingPath : null;
+        showError(data.error ?? "Something went wrong. Please try again.", link ? "eventDate" : field, link);
         return;
       }
       setSent({
@@ -245,6 +275,18 @@ export default function QuoteButton({
   const trackingUrl = sent ? `${origin}${sent.trackingPath}` : "";
   const shareText = sent ? `I've sent an enquiry to ${vendorName} on Vela. Track it here: ${trackingUrl}` : "";
   const invalid = (f: string) => (errorField === f ? true : undefined);
+
+  // Prefill (QA-041), as on the shortlist sheet: only values the controls can
+  // show; a date already past or a retired option starts blank.
+  const today = minDate || todayInIST();
+  const pre = {
+    eventDate: prefill?.eventDate && prefill.eventDate >= today ? prefill.eventDate : "",
+    eventTypeId: prefill && eventTypes.some((t) => t.id === prefill.eventTypeId) ? String(prefill.eventTypeId) : "",
+    districtId: prefill && districts.some((d) => d.id === prefill.districtId) ? String(prefill.districtId) : "",
+    budget: prefill ? budgetPreset(prefill.budgetMin, prefill.budgetMax) : "",
+    contact: prefill?.preferredContact ?? "whatsapp",
+  };
+  const prefilled = !!(pre.eventDate || pre.eventTypeId || pre.districtId || prefill?.guestCount);
 
   async function copyLink() {
     try {
@@ -396,8 +438,27 @@ export default function QuoteButton({
                   {error && (
                     <div role="alert" className="alert-error">
                       {error}
+                      {errorLink ? (
+                        <>
+                          {" "}
+                          <Link href={errorLink} className="font-medium underline underline-offset-2">
+                            View your enquiry
+                          </Link>
+                        </>
+                      ) : null}
                     </div>
                   )}
+
+                  {openEnquiry && !errorLink ? (
+                    <p className="rounded-control border border-line bg-surface-muted px-3.5 py-2.5 text-sm">
+                      You already have an open enquiry with {vendorName}
+                      {openEnquiry.eventDate ? ` for ${formatDay(openEnquiry.eventDate)}` : ""}.{" "}
+                      <Link href={`/my/enquiries/${openEnquiry.id}`} className="font-medium text-accent underline-offset-2 hover:underline">
+                        View it
+                      </Link>{" "}
+                      to message them, or send a new request for a different date.
+                    </p>
+                  ) : null}
 
                   {services.length > 0 && (
                     <fieldset>
@@ -462,8 +523,14 @@ export default function QuoteButton({
 
                   <fieldset className="space-y-4">
                     <legend className="eyebrow mb-3">Your event</legend>
+                    {prefilled ? (
+                      <p className="hint -mt-1">
+                        Filled in from {prefill?.source ? `your ${prefill.source} enquiry` : "your earlier enquiry"}. Change anything
+                        that&apos;s different.
+                      </p>
+                    ) : null}
                     <div className="grid gap-4 sm:grid-cols-2">
-                      <Select label="Event type" name="eventTypeId" invalid={invalid("eventTypeId")}>
+                      <Select label="Event type" name="eventTypeId" defaultValue={pre.eventTypeId} invalid={invalid("eventTypeId")}>
                         <option value="">Choose…</option>
                         {eventTypes.map((t) => (
                           <option key={t.id} value={t.id}>
@@ -471,7 +538,15 @@ export default function QuoteButton({
                           </option>
                         ))}
                       </Select>
-                      <FormField label="Event date" name="eventDate" type="date" required min={minDate} invalid={invalid("eventDate")} />
+                      <FormField
+                        label="Event date"
+                        name="eventDate"
+                        type="date"
+                        required
+                        min={minDate}
+                        defaultValue={pre.eventDate}
+                        invalid={invalid("eventDate")}
+                      />
                       <Select label="Time of day" name="slot" invalid={invalid("slot")}>
                         <option value="">Not sure</option>
                         <option value="full">Full day</option>
@@ -497,7 +572,7 @@ export default function QuoteButton({
                           className="field"
                         />
                       </div>
-                      <Select label="District" name="districtId" invalid={invalid("districtId")}>
+                      <Select label="District" name="districtId" defaultValue={pre.districtId} invalid={invalid("districtId")}>
                         <option value="">Choose…</option>
                         {districts.map((d) => (
                           <option key={d.id} value={d.id}>
@@ -521,7 +596,7 @@ export default function QuoteButton({
                           <option value="both">Veg and non-veg</option>
                         </Select>
                       ) : null}
-                      <Select label="Budget" name="budgetBand" invalid={invalid("budgetBand")}>
+                      <Select label="Budget" name="budgetBand" defaultValue={pre.budget} invalid={invalid("budgetBand")}>
                         {BUDGETS.map((b) => (
                           <option key={b.value} value={b.value}>
                             {b.label}
@@ -573,7 +648,7 @@ export default function QuoteButton({
                               type="radio"
                               name="preferredContact"
                               value={v}
-                              defaultChecked={v === "whatsapp"}
+                              defaultChecked={v === pre.contact}
                               className="w-[18px] h-[18px] accent-[var(--color-accent)]"
                             />
                             {l}
@@ -619,11 +694,13 @@ function Select({
   label,
   name,
   invalid,
+  defaultValue = "",
   children,
 }: {
   label: string;
   name: string;
   invalid?: boolean;
+  defaultValue?: string;
   children: React.ReactNode;
 }) {
   const id = useId();
@@ -632,7 +709,7 @@ function Select({
       <label htmlFor={id} className="label">
         {label}
       </label>
-      <select id={id} name={name} aria-invalid={invalid} className="field" defaultValue="">
+      <select id={id} name={name} aria-invalid={invalid} className="field" defaultValue={defaultValue}>
         {children}
       </select>
     </div>

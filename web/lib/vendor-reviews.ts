@@ -1,8 +1,13 @@
 // Reviews v2 (PRODUCT_PLAN P2-11, section 6, section 9 #20).
 //
-// Writing: only a customer who sent the vendor an enquiry may review. The
-// review is "verified" when that enquiry is accepted or booked AND its event
-// date has passed (Indian date); otherwise it is posted unverified.
+// Writing (QA-038): a customer may review a vendor only after a real
+// dealing with them through Vela: an enquiry to that vendor whose event date
+// has passed (Indian date) AND that the vendor engaged with: accepted or
+// booked, or the vendor replied (a message or an offer, or the status moved
+// to "responded"). Sending an enquiry alone is not enough, so a fresh
+// account can't post a rating about a competitor before any service. The
+// review is "verified" when the linked enquiry is accepted or booked;
+// otherwise (the vendor replied but nothing was booked) it is unverified.
 // Replying: the vendor posts one public reply per review (a second POST is a
 // 409); the reply can be edited for 7 days after it was first posted.
 
@@ -33,7 +38,42 @@ export function pickReviewEnquiry(list: ReviewEnquiry[], today: string = todayIs
 
 export type CreateReviewV2Result =
   | { ok: true; review: ReviewRecord }
-  | { ok: false; reason: "vendor_not_found" | "own_listing" | "already_reviewed" | "no_enquiry" | "enquiry_not_found" };
+  | {
+      ok: false;
+      reason: "vendor_not_found" | "own_listing" | "already_reviewed" | "no_enquiry" | "enquiry_not_found" | "not_eligible";
+    };
+
+/**
+ * SQL for "this enquiry (alias q) can back a review": the event date has
+ * passed and the vendor engaged with it. Parameter $today is the IST date.
+ */
+function eligibleSql(today: string): string {
+  return `(q.event_date IS NOT NULL AND q.event_date < ${today}::date AND (
+      q.status IN ('accepted','booked','responded')
+      OR (q.status = 'expired' AND (
+            EXISTS (SELECT 1 FROM quote_messages m WHERE m.quote_request_id = q.id AND m.sender_role = 'vendor')
+         OR EXISTS (SELECT 1 FROM quote_offers o WHERE o.quote_request_id = q.id)))))`;
+}
+
+export type ReviewEligibility =
+  /** May write a review now. */
+  | { state: "eligible" }
+  /** Has enquired, but no event with a vendor reply or booking has passed yet. */
+  | { state: "not_yet" }
+  /** Never enquired this vendor through Vela. */
+  | { state: "no_enquiry" };
+
+/** Whether this customer may review the vendor now (QA-038), for the profile page. */
+export async function reviewEligibility(vendorId: number, customerId: number): Promise<ReviewEligibility> {
+  const r = await pool.query<{ any_enquiry: boolean; eligible: boolean }>(
+    `SELECT count(*) > 0 AS any_enquiry, coalesce(bool_or(${eligibleSql("$3")}), false) AS eligible
+       FROM quote_requests q WHERE q.vendor_id = $1 AND q.customer_id = $2`,
+    [vendorId, customerId, todayIst()]
+  );
+  const row = r.rows[0];
+  if (row?.eligible) return { state: "eligible" };
+  return { state: row?.any_enquiry ? "not_yet" : "no_enquiry" };
+}
 
 export async function createReviewV2(p: {
   vendorId: number;
@@ -65,18 +105,32 @@ export async function createReviewV2(p: {
       return { ok: false, reason: "already_reviewed" };
     }
 
-    const e = await client.query<{ id: number; status: string; event_date: string | null; event_type_id: number | null }>(
-      `SELECT id, status, event_date::text AS event_date, event_type_id FROM quote_requests
-        WHERE vendor_id = $1 AND customer_id = $2 AND ($3::int IS NULL OR id = $3)
-        ORDER BY created_at DESC, id DESC`,
-      [p.vendorId, p.customerId, p.enquiryId ?? null]
+    const today = todayIst();
+    const e = await client.query<{
+      id: number;
+      status: string;
+      event_date: string | null;
+      event_type_id: number | null;
+      eligible: boolean;
+    }>(
+      `SELECT q.id, q.status, q.event_date::text AS event_date, q.event_type_id, ${eligibleSql("$4")} AS eligible
+         FROM quote_requests q
+        WHERE q.vendor_id = $1 AND q.customer_id = $2 AND ($3::int IS NULL OR q.id = $3)
+        ORDER BY q.created_at DESC, q.id DESC`,
+      [p.vendorId, p.customerId, p.enquiryId ?? null, today]
     );
-    const enquiries = e.rows.map((r) => ({ id: r.id, status: r.status, eventDate: r.event_date, eventTypeId: r.event_type_id }));
-    if (!enquiries.length) {
+    if (!e.rows.length) {
       await client.query("ROLLBACK");
       return { ok: false, reason: p.enquiryId ? "enquiry_not_found" : "no_enquiry" };
     }
-    const today = todayIst();
+    // Only enquiries with a finished, real dealing can back a review (QA-038).
+    const enquiries = e.rows
+      .filter((r) => r.eligible)
+      .map((r) => ({ id: r.id, status: r.status, eventDate: r.event_date, eventTypeId: r.event_type_id }));
+    if (!enquiries.length) {
+      await client.query("ROLLBACK");
+      return { ok: false, reason: "not_eligible" };
+    }
     const linked = pickReviewEnquiry(enquiries, today)!;
     const verified = isVerifiedEnquiry(linked, today);
 
@@ -262,10 +316,9 @@ export async function saveReviewReply(vendorId: number, reviewId: number, text: 
   }
 }
 
-/** Whether this customer may review the vendor (has sent it an enquiry). */
+/** Whether this customer may review the vendor now (see reviewEligibility). */
 export async function customerHasEnquiry(vendorId: number, customerId: number): Promise<boolean> {
-  const r = await pool.query("SELECT 1 FROM quote_requests WHERE vendor_id = $1 AND customer_id = $2 LIMIT 1", [vendorId, customerId]);
-  return (r.rowCount ?? 0) > 0;
+  return (await reviewEligibility(vendorId, customerId)).state === "eligible";
 }
 
 export interface ReviewBreakdown {

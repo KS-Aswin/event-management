@@ -1,8 +1,9 @@
 import { NextResponse } from "next/server";
-import { checkRateLimit, clientIp } from "@/lib/rate-limit";
+import { clientIp, rateLimitHit } from "@/lib/rate-limit";
 import { isEnquiryBlocked } from "@/lib/admin/ops";
 import { findUserById } from "@/lib/db";
 import {
+  DUPLICATE_MESSAGE,
   createEnquiry,
   findEnquiryVendors,
   parseEnquiryFields,
@@ -27,7 +28,10 @@ import { parseId } from "../../../_lib/validation";
 // A guest (signed out) gets a guestToken: /enquiry/<token> tracks the enquiry.
 // Errors: {error, code, field?} with 400 (validation, PAST_DATE,
 // INVALID_SERVICE, PACKAGE_ONLY), 403 (blocked contact, own listing),
-// 404 (vendor not taking enquiries), 429 (rate limit).
+// 404 (vendor not taking enquiries), 409 ALREADY_ENQUIRED {enquiryId,
+// trackingPath} (QA-040: the signed-in customer already has an open enquiry
+// with this vendor for the same date; nothing is created), 429 (rate limit,
+// counted in Postgres so it holds across serverless instances, QA-037).
 
 const NO_STORE = { "Cache-Control": "private, no-store" };
 
@@ -58,12 +62,14 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     );
   }
 
-  // 10 enquiries per 10 minutes per signed-in user or IP.
+  // 10 enquiries per 10 minutes per signed-in user or IP, shared by every
+  // server instance (QA-037).
   const who = session ? `u:${session.userId}` : `ip:${clientIp(request.headers)}`;
-  if (!checkRateLimit(`quote:${who}`, 10, 10 * 60_000)) {
+  const limit = await rateLimitHit(`quote:${who}`, 10, 10 * 60_000);
+  if (!limit.ok) {
     return NextResponse.json(
       { error: "Too many requests. Please wait a few minutes and try again.", code: "RATE_LIMIT" },
-      { status: 429 }
+      { status: 429, headers: { ...NO_STORE, "Retry-After": String(limit.retryAfter) } }
     );
   }
 
@@ -98,12 +104,24 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
   const units = await resolveUnits(vendorId, unitReq, fields.guestCount);
   if (!units.ok) return errorResponse(units);
 
-  const { enquiry, warnings } = await createEnquiry({
+  const created = await createEnquiry({
     vendor,
     fields,
     customerId: session?.userId ?? null,
     units: units.units,
   });
+  if (!created.ok) {
+    return NextResponse.json(
+      {
+        error: DUPLICATE_MESSAGE,
+        code: "ALREADY_ENQUIRED",
+        enquiryId: created.duplicate.id,
+        trackingPath: `/my/enquiries/${created.duplicate.id}`,
+      },
+      { status: 409, headers: NO_STORE }
+    );
+  }
+  const { enquiry, warnings } = created;
 
   return NextResponse.json(
     { quote: { id: enquiry.id }, enquiry, warnings: [...units.warnings, ...warnings] },

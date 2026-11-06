@@ -258,7 +258,7 @@ const review = (cookie, vendorId, body = {}) =>
     cookie,
   });
 
-test("reviews: need an enquiry; verified only after a booked/accepted event date has passed", async () => {
+test("reviews: need a past event the vendor replied to or was booked for; verified only when booked/accepted", async () => {
   // No enquiry -> 403.
   const none = await review(S.c1.cookie, S.l2.id);
   assert.equal(none.status, 403);
@@ -266,11 +266,16 @@ test("reviews: need an enquiry; verified only after a booked/accepted event date
   // Vendors can't review.
   assert.equal((await review(S.v2.cookie, S.l1.id)).status, 403);
 
-  // Booked, but the event is still ahead -> unverified.
+  // Booked, but the event is still ahead -> refused until the event (QA-038).
   await enquiry(S.l2.id, { customerId: S.c1.userId, status: "booked", eventDate: istDate(20) });
   const early = await review(S.c1.cookie, S.l2.id);
-  assert.equal(early.status, 201, JSON.stringify(early.data));
-  assert.equal(early.data.review.verified, false, "a review before the event date is unverified");
+  assert.equal(early.status, 403, JSON.stringify(early.data));
+  assert.equal(early.data.code, "NOT_ELIGIBLE", "no review before the event date");
+  // The vendor replied and that event has passed -> allowed, unverified.
+  await enquiry(S.l2.id, { customerId: S.c1.userId, status: "responded", eventDate: istDate(-1) });
+  const replied = await review(S.c1.cookie, S.l2.id);
+  assert.equal(replied.status, 201, JSON.stringify(replied.data));
+  assert.equal(replied.data.review.verified, false, "a review without a booking is unverified");
   assert.equal((await review(S.c1.cookie, S.l2.id)).status, 409, "one review per customer");
 
   // Booked and the event has passed -> verified, linked to that enquiry.
@@ -281,18 +286,18 @@ test("reviews: need an enquiry; verified only after a booked/accepted event date
   assert.equal(late.data.review.verified, true, "a review after a booked event is verified");
   assert.equal(late.data.review.quote_request_id, pastBooked);
 
-  // Past date but only pending -> unverified; a bad enquiryId is a 400.
+  // Past date but the vendor never replied -> refused; a bad enquiryId is a 400.
   await enquiry(S.l2.id, { customerId: S.c3.userId, status: "pending", eventDate: istDate(-5) });
   const badId = await review(S.c3.cookie, S.l2.id, { enquiryId: 999999999 });
   assert.equal(badId.status, 400);
   assert.equal(badId.data.field, "enquiryId");
   const pend = await review(S.c3.cookie, S.l2.id, { rating: 3 });
-  assert.equal(pend.status, 201);
-  assert.equal(pend.data.review.verified, false);
+  assert.equal(pend.status, 403);
+  assert.equal(pend.data.code, "NOT_ELIGIBLE");
 
   // The vendor got a notification for each new review.
   const n = await db().query("SELECT count(*)::int AS n FROM notifications WHERE user_id = $1 AND kind = 'review.new'", [S.v2.userId]);
-  assert.equal(n.rows[0].n, 3);
+  assert.equal(n.rows[0].n, 2);
   S.reviewId = late.data.review.id;
 });
 

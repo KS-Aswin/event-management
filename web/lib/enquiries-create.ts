@@ -436,23 +436,97 @@ async function insertEnquiry(
   };
 }
 
-/** Single enquiry to one vendor (the vendor is already checked as public). */
+// ---------------------------------------------------------------------------
+// Duplicates (QA-040)
+// ---------------------------------------------------------------------------
+
+/** Enquiry statuses that are still open (the vendor may still act on them). */
+export const OPEN_ENQUIRY_STATUSES = ["pending", "responded", "accepted", "booked"] as const;
+
+export interface OpenEnquiry {
+  id: number;
+  vendorId: number;
+  eventDate: string | null;
+  status: string;
+}
+
+export const DUPLICATE_MESSAGE =
+  "You've already sent this vendor an enquiry for this date. Open it to add details or message them instead.";
+
+/**
+ * A signed-in customer's open enquiries to these vendors for the same event
+ * date (a missing date matches a missing date), newest first per vendor.
+ * Guests are not matched: their enquiries are not tied to an account, and
+ * answering "this phone already enquired" would leak another person's lead.
+ */
+export async function findOpenEnquiries(
+  db: Pick<PoolClient, "query">,
+  customerId: number,
+  vendorIds: number[],
+  eventDate: string | null
+): Promise<Map<number, OpenEnquiry>> {
+  const { rows } = await db.query<{ id: number; vendor_id: number; event_date: string | null; status: string }>(
+    `SELECT DISTINCT ON (vendor_id) id, vendor_id, event_date::text AS event_date, status
+       FROM quote_requests
+      WHERE customer_id = $1 AND vendor_id = ANY($2::int[])
+        AND event_date IS NOT DISTINCT FROM $3::date
+        AND status = ANY($4::text[])
+      ORDER BY vendor_id, created_at DESC, id DESC`,
+    [customerId, vendorIds, eventDate, OPEN_ENQUIRY_STATUSES]
+  );
+  return new Map(rows.map((r) => [r.vendor_id, { id: r.id, vendorId: r.vendor_id, eventDate: r.event_date, status: r.status }]));
+}
+
+/**
+ * The customer's latest open enquiry to one vendor (any date), for the
+ * profile's "Enquiry sent · view" link and the quote sheet's notice.
+ */
+export async function findLatestOpenEnquiry(customerId: number, vendorId: number): Promise<OpenEnquiry | null> {
+  const { rows } = await pool.query<{ id: number; event_date: string | null; status: string }>(
+    `SELECT id, event_date::text AS event_date, status FROM quote_requests
+      WHERE customer_id = $1 AND vendor_id = $2 AND status = ANY($3::text[])
+      ORDER BY created_at DESC, id DESC LIMIT 1`,
+    [customerId, vendorId, OPEN_ENQUIRY_STATUSES]
+  );
+  const r = rows[0];
+  return r ? { id: r.id, vendorId, eventDate: r.event_date, status: r.status } : null;
+}
+
+/** Serialises one customer's sends so two parallel taps can't both pass the duplicate check. */
+async function lockCustomer(client: PoolClient, customerId: number) {
+  await client.query("SELECT pg_advisory_xact_lock(hashtext('enquiry-customer:' || $1::text))", [customerId]);
+}
+
+/**
+ * Single enquiry to one vendor (the vendor is already checked as public).
+ * A signed-in customer's second open enquiry to the same vendor for the same
+ * date is not created: { ok: false, duplicate } names the existing one.
+ */
 export async function createEnquiry(p: {
   vendor: EnquiryVendor;
   fields: EnquiryFields;
   customerId: number | null;
   units: { serviceId: number; qty: number | null }[];
-}): Promise<{ enquiry: CreatedEnquiry; warnings: EnquiryWarning[] }> {
-  const enquiry = await withTransaction((client) =>
-    insertEnquiry(client, { ...p, batchId: null, source: "web" })
-  );
+}): Promise<
+  | { ok: true; enquiry: CreatedEnquiry; warnings: EnquiryWarning[] }
+  | { ok: false; duplicate: OpenEnquiry }
+> {
+  const out = await withTransaction(async (client): Promise<{ duplicate: OpenEnquiry } | { enquiry: CreatedEnquiry }> => {
+    if (p.customerId != null) {
+      await lockCustomer(client, p.customerId);
+      const dup = (await findOpenEnquiries(client, p.customerId, [p.vendor.id], p.fields.eventDate)).get(p.vendor.id);
+      if (dup) return { duplicate: dup };
+    }
+    return { enquiry: await insertEnquiry(client, { ...p, batchId: null, source: "web" }) };
+  });
+  if ("duplicate" in out) return { ok: false, duplicate: out.duplicate };
   const w = await dateWarning(p.vendor.id, p.fields.eventDate, p.fields.slot);
-  return { enquiry, warnings: w ? [w] : [] };
+  return { ok: true, enquiry: out.enquiry, warnings: w ? [w] : [] };
 }
 
 export type MultiResult =
   | { vendorId: number; ok: true; enquiryId: number; trackingPath: string; guestToken: string | null; warnings: EnquiryWarning[] }
-  | { vendorId: number; ok: false; code: string; error: string };
+  | { vendorId: number; ok: false; code: string; error: string; enquiryId?: number };
 
 /**
  * Fan-out to several vendors with one batch_id (P2-9). Vendors that don't
@@ -505,6 +579,20 @@ export async function createMultiEnquiry(p: {
 
   const batchId = randomUUID();
   const created = await withTransaction(async (client) => {
+    // QA-040: skip vendors this customer already has an open enquiry with
+    // for the same date (reported per vendor with the existing enquiry id).
+    const duplicates: MultiResult[] = [];
+    if (p.customerId != null) {
+      await lockCustomer(client, p.customerId);
+      const open = await findOpenEnquiries(client, p.customerId, toCreate.map((c) => c.vendor.id), p.fields.eventDate);
+      for (let i = toCreate.length - 1; i >= 0; i--) {
+        const dup = open.get(toCreate[i].vendor.id);
+        if (!dup) continue;
+        duplicates.push({ vendorId: dup.vendorId, ok: false, code: "ALREADY_ENQUIRED", error: DUPLICATE_MESSAGE, enquiryId: dup.id });
+        toCreate.splice(i, 1);
+      }
+    }
+    if (!toCreate.length) return { capped: false as const, out: [] as CreatedEnquiry[], duplicates };
     await client.query("SELECT pg_advisory_xact_lock(hashtext('enquiry-phone:' || $1))", [p.fields.phone]);
     const { rows } = await client.query<{ n: number }>(
       "SELECT count(*)::int AS n FROM quote_requests WHERE phone = $1 AND created_at > now() - interval '24 hours'",
@@ -525,7 +613,7 @@ export async function createMultiEnquiry(p: {
         })
       );
     }
-    return { capped: false as const, out };
+    return { capped: false as const, out, duplicates };
   });
 
   if (created.capped) {
@@ -541,6 +629,20 @@ export async function createMultiEnquiry(p: {
     };
   }
 
+  results.push(...created.duplicates);
+  if (!toCreate.length) {
+    const allDuplicates = results.every((r) => !r.ok && r.code === "ALREADY_ENQUIRED");
+    return {
+      ok: false,
+      status: 409,
+      code: allDuplicates ? "ALREADY_ENQUIRED" : "NO_VENDORS_AVAILABLE",
+      error: allDuplicates
+        ? "You've already sent these vendors an enquiry for this date. Follow up from My enquiries."
+        : "None of the selected vendors can take an enquiry right now.",
+      results: sortResults(results, p.vendorIds),
+    };
+  }
+
   for (const [i, c] of toCreate.entries()) {
     const e = created.out[i];
     const w = await dateWarning(c.vendor.id, p.fields.eventDate, p.fields.slot);
@@ -553,8 +655,11 @@ export async function createMultiEnquiry(p: {
       warnings: w ? [...c.warnings, w] : c.warnings,
     });
   }
-  // Report in the order the vendors were sent.
-  const order = new Map(p.vendorIds.map((id, i) => [id, i]));
-  results.sort((a, b) => (order.get(a.vendorId) ?? 0) - (order.get(b.vendorId) ?? 0));
-  return { ok: true, batchId, results };
+  return { ok: true, batchId, results: sortResults(results, p.vendorIds) };
+}
+
+/** Report in the order the vendors were sent. */
+function sortResults(results: MultiResult[], vendorIds: number[]): MultiResult[] {
+  const order = new Map(vendorIds.map((id, i) => [id, i]));
+  return results.sort((a, b) => (order.get(a.vendorId) ?? 0) - (order.get(b.vendorId) ?? 0));
 }

@@ -19,7 +19,10 @@ import FavoriteButton from "@/lib/favorite-button";
 import QuoteButton from "./quote-button";
 import ReviewForm from "./review-form";
 import ReportReview from "./report-review";
-import { customerHasEnquiry, reviewBreakdown } from "@/lib/vendor-reviews";
+import { reviewBreakdown, reviewEligibility } from "@/lib/vendor-reviews";
+import { findLatestOpenEnquiry } from "@/lib/enquiries-create";
+import { findEnquiryDefaults } from "@/lib/shortlist";
+import EnquirySentLink from "./enquiry-sent-link";
 import { reviewCountLabel, vendorFromPrice } from "@/lib/vendor-display";
 import Gallery from "./gallery";
 import OfferingsSection from "./offerings";
@@ -137,9 +140,19 @@ export default async function VendorProfilePage({
   const publicListing = isPublic(vendor);
   const myReview = session ? reviews.find((r) => r.customer_id === session.userId) : undefined;
   const favorited = session && !isOwnListing ? await isFavorited(session.userId, vendorId) : false;
-  // Reviews v2 (P2-11): only customers who enquired through Vela can review.
-  const canReview =
-    !!session && session.role === "customer" && !isOwnListing && !myReview && (await customerHasEnquiry(vendorId, session.userId));
+  // Reviews v2 (P2-11, QA-038): only after an event the vendor replied to or was booked for.
+  const customerId = session && session.role === "customer" && !isOwnListing ? session.userId : null;
+  const reviewState = customerId !== null && !myReview ? (await reviewEligibility(vendorId, customerId)).state : "no_enquiry";
+  const canReview = reviewState === "eligible";
+  // QA-040/041: the customer's open enquiry here, and their saved event details for the sheet.
+  const viewerPhoneE164 = (viewer as { phone_e164?: string | null } | null)?.phone_e164 ?? "";
+  const [openEnquiry, enquiryDefaults] =
+    customerId !== null
+      ? await Promise.all([
+          findLatestOpenEnquiry(customerId, vendorId),
+          findEnquiryDefaults(customerId, { name: session?.name ?? "", phone: viewerPhoneE164 }),
+        ])
+      : [null, null];
   const quoteServices = offerings.quoteable;
   const hasMedia = media.photos.length > 0 || media.videos.length > 0;
   const languages = (vendor.languages ?? []).filter(Boolean);
@@ -160,12 +173,14 @@ export default async function VendorProfilePage({
     vendorName: vendor.name,
     services: quoteServices,
     defaultName: session?.name ?? "",
-    defaultPhone: viewerPhone,
+    defaultPhone: enquiryDefaults?.phone || viewerPhone,
     defaultEmail: viewer?.email ?? "",
     loggedIn: !!session,
     eventTypes: eventTypes.map((t) => ({ id: t.id, name: t.name })),
     districts: districts.map((d) => ({ id: d.id, name: d.name })),
     showFood: offerings.hasCatering || vendor.category === "Catering",
+    prefill: enquiryDefaults,
+    openEnquiry,
   };
 
   // P2-12 contact: WhatsApp click-to-chat (E.164 digits, URL-encoded text;
@@ -389,6 +404,7 @@ export default async function VendorProfilePage({
               </>
             )}
           </div>
+          {openEnquiry ? <EnquirySentLink enquiry={openEnquiry} className="lg:hidden mt-2" /> : null}
           {contactBlock ? <div className="lg:hidden mt-3 sm:max-w-[360px]">{contactBlock}</div> : null}
 
           {hasMedia ? (
@@ -562,9 +578,11 @@ export default async function VendorProfilePage({
               </div>
             ) : session ? (
               <p id="write-review" className="text-sm text-ink-soft mt-5 rounded-card border border-dashed border-line-strong px-4 py-3.5">
-                {session.role === "customer"
-                  ? "You can review this vendor after you send them an enquiry through Vela."
-                  : "Reviews come from customers who enquired through Vela."}
+                {session.role !== "customer"
+                  ? "Reviews come from customers who booked or enquired through Vela."
+                  : reviewState === "not_yet"
+                    ? "You can review this vendor after your event date, once they have replied to your enquiry or you have booked them."
+                    : "You can review this vendor after an event you booked with them through Vela."}
               </p>
             ) : (
               <p id="write-review" className="text-sm text-ink-soft mt-5 rounded-card border border-dashed border-line-strong px-4 py-3.5">
@@ -595,6 +613,7 @@ export default async function VendorProfilePage({
                 {favorite}
               </div>
             )}
+            {openEnquiry ? <EnquirySentLink enquiry={openEnquiry} className="mt-2" /> : null}
             {contactBlock ? <div className="mt-3">{contactBlock}</div> : null}
           </div>
         </aside>

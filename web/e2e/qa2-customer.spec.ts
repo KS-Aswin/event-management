@@ -3,7 +3,7 @@ import bcrypt from "bcryptjs";
 import { test, expect, signIn, type Creds } from "./helpers";
 
 // QA round qa2 (customer persona). Each test reproduces an open issue and is
-// marked test.fail() until it is fixed. Users are created in the LOCAL DB with
+// fixed in round fix2 (now regular tests). Users are created in the LOCAL DB with
 // e2e-* emails (removed by the global cleanup).
 
 function client() {
@@ -64,7 +64,6 @@ async function setup(tag: string): Promise<Fixture> {
 
 test.describe("qa2 customer", () => {
   test("QA2-C01 a second identical enquiry to the same vendor is accepted with no warning", async ({ page }, testInfo) => {
-    test.fail();
     const f = await setup(testInfo.workerIndex.toString());
     await signIn(page, f.customer);
     const res = await page.request.post(`/api/vendors/${f.listingId}/quotes`, {
@@ -76,7 +75,6 @@ test.describe("qa2 customer", () => {
   });
 
   test("QA2-C02 single-vendor quote sheet is not prefilled from the customer's earlier enquiry", async ({ page }, testInfo) => {
-    test.fail();
     const f = await setup(testInfo.workerIndex.toString());
     await signIn(page, f.customer);
     await page.goto(`/vendors/${f.listingId}`);
@@ -87,7 +85,6 @@ test.describe("qa2 customer", () => {
   });
 
   test("QA2-C03 a review can be posted immediately after enquiring, months before the event", async ({ page }, testInfo) => {
-    test.fail();
     const f = await setup(testInfo.workerIndex.toString());
     await signIn(page, f.customer);
     const res = await page.request.post(`/api/vendors/${f.listingId}/reviews`, { data: { rating: 1, body: "QA2 review before the event" } });
@@ -96,7 +93,6 @@ test.describe("qa2 customer", () => {
   });
 
   test("QA2-C04 'Price: low to high' lists 'Price on request' vendors first", async ({ page }, testInfo) => {
-    test.fail();
     await setup(testInfo.workerIndex.toString());
     await page.goto("/search?sort=priceLow");
     await expect(page.getByText(/\d+ vendors found/)).toBeVisible();

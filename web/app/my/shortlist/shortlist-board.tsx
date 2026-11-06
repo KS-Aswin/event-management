@@ -422,7 +422,7 @@ function NoteEditor({
 
 type Result =
   | { vendorId: number; ok: true; enquiryId: number; warnings?: { code: string; message?: string }[] }
-  | { vendorId: number; ok: false; code: string; error: string };
+  | { vendorId: number; ok: false; code: string; error: string; enquiryId?: number };
 
 function SendDialog({
   vendors,
@@ -545,7 +545,9 @@ function SendDialog({
             <p role="status" className={sentCount ? "alert-success" : "alert-error"}>
               {sentCount
                 ? `Sent to ${sentCount} of ${results.length}. Replies and offers will show in your enquiries.`
-                : "None of these vendors can take enquiries right now."}
+                : results.every((r) => !r.ok && r.code === "ALREADY_ENQUIRED")
+                  ? "You've already sent these vendors an enquiry for this date. Follow up from each enquiry below."
+                  : "None of these vendors can take enquiries right now."}
             </p>
             <ul className="mt-3 divide-y divide-line border border-line rounded-card" aria-label="Results per vendor">
               {results.map((r) => (
@@ -556,7 +558,7 @@ function SendDialog({
                       {r.ok ? (r.warnings?.length ? `Sent · ${r.warnings[0].message ?? "check the date"}` : "Sent") : r.error}
                     </p>
                   </div>
-                  {r.ok && (
+                  {(r.ok || r.enquiryId) && (
                     <Link href={`/my/enquiries/${r.enquiryId}`} className="btn btn-secondary btn-sm shrink-0">
                       View
                     </Link>
