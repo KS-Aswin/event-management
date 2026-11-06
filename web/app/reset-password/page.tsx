@@ -20,7 +20,7 @@ export default async function ResetPasswordPage({
   const check = token ? await checkResetToken(token) : ({ ok: false } as const);
 
   return (
-    <div className="flex-1 flex items-start sm:items-center justify-center bg-surface-muted px-4 sm:px-5 py-8 sm:py-14">
+    <main className="flex-1 flex items-start sm:items-center justify-center bg-surface-muted px-4 sm:px-5 py-8 sm:py-14">
       <div className="w-full max-w-[440px] bg-surface border border-line rounded-card shadow-card p-6 sm:p-10">
         <span aria-hidden="true" className="block h-1 w-10 rounded-full bg-gold mb-5" />
         {check.ok ? (
@@ -42,6 +42,6 @@ export default async function ResetPasswordPage({
           </>
         )}
       </div>
-    </div>
+    </main>
   );
 }

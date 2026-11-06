@@ -2,11 +2,12 @@
 
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 import type { UserRole } from "@/lib/db";
 import {
   ADMIN_LINKS,
   ADMIN_MENU,
+  ADMIN_NAV,
   CUSTOMER_LINKS,
   CUSTOMER_MENU,
   VENDOR_HEADER_LINKS,
@@ -36,6 +37,34 @@ function under(pathname: string, prefix: string) {
   return pathname === prefix || pathname.startsWith(prefix + "/");
 }
 
+/** Sections linked from the header on an unknown /admin/* page (QA-087). */
+const ADMIN_404_LINKS = [ADMIN_HOME, "/admin/vendors", "/admin/users", "/admin/enquiries"];
+
+const noopSubscribe = () => () => {};
+
+function subscribeToBody(onChange: () => void) {
+  const observer = new MutationObserver(onChange);
+  observer.observe(document.body, { childList: true, subtree: true });
+  return () => observer.disconnect();
+}
+
+/**
+ * True in the admin area when the page is the root 404 and the admin shell
+ * (app/_nav/admin-shell.tsx, marked data-admin-shell) is not on it: an
+ * unknown /admin/* URL renders the root not-found outside the admin layout. False on the server
+ * and outside the admin area, so normal admin pages never flash this header.
+ */
+function useAdminShellMissing(adminArea: boolean): boolean {
+  return useSyncExternalStore(
+    adminArea ? subscribeToBody : noopSubscribe,
+    // The root not-found's <main> sits right in #content; the loading
+    // fallback (a div) doesn't count, so a normal admin page that is still
+    // streaming in doesn't flash this header.
+    () => adminArea && !document.querySelector("[data-admin-shell]") && !!document.querySelector("#content > main"),
+    () => false
+  );
+}
+
 // One header, four nav configs (PRODUCT_PLAN 2.7). The role comes from the
 // server session passed in by the root layout, never from a client-only check.
 export default function Header({
@@ -58,8 +87,12 @@ export default function Header({
   }, [pathname]);
 
   // The admin area draws its own chrome (app/_nav/admin-shell.tsx): no
-  // customer or vendor links there.
-  const hidden = role === "admin" && under(pathname, ADMIN_HOME);
+  // customer or vendor links there. An unknown /admin/* URL renders the root
+  // 404 outside the admin layout, so there is no shell (QA-087): keep this
+  // header then, with the admin links, so the admin isn't stranded.
+  const adminArea = role === "admin" && under(pathname, ADMIN_HOME);
+  const adminShellMissing = useAdminShellMissing(adminArea);
+  const hidden = adminArea && !adminShellMissing;
 
   // --header-h is what sticky sidebars, scroll-padding-top and pop-overs
   // offset by. The header can be taller than its 64px minimum (sm padding,
@@ -186,6 +219,20 @@ export default function Header({
           <NotificationBell />
           <AccountMenu name={session.name} links={VENDOR_MENU} />
         </div>
+      ) : session && role === "admin" && adminArea ? (
+        // Unknown /admin/* page (QA-087): the console's main sections, on
+        // their own scrollable row on phones.
+        <>
+          <nav
+            aria-label="Admin"
+            className="order-last basis-full md:order-none md:basis-auto flex items-center gap-0.5 text-sm overflow-x-auto -mx-1 px-1"
+          >
+            {ADMIN_NAV.filter((i) => ADMIN_404_LINKS.includes(i.href)).map((i) => (
+              <HeaderLink key={i.href} href={i.href} label={i.href === ADMIN_HOME ? "Admin home" : i.label} active={false} />
+            ))}
+          </nav>
+          <AccountMenu name={session.name} links={ADMIN_MENU} />
+        </>
       ) : session && role === "admin" ? (
         <div className="flex items-center gap-1 min-w-0">
           <nav aria-label="Admin" className="hidden md:flex items-center gap-0.5 text-sm">
