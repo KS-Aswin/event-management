@@ -4,6 +4,12 @@ Everything below uses free plans: **Vercel Hobby** runs the Next.js app, and one
 
 Total time: about 20 minutes the first time, then one command per deploy.
 
+## Live deployment
+
+- **Production URL:** <https://vela-drab-psi.vercel.app> (Vercel project `aks-projects4/vela`, first deployed 2026-11-06).
+- Database and storage: Vela's own Supabase project `sfxtotgrrhamubczrdys` (ap-northeast-2), migrations 001–013 applied, 12 demo vendors seeded.
+- Admin sign-in is at `/login` (the `/admin` area returns 404 to everyone else by design).
+
 ## 1. Create the Supabase project
 
 1. Sign up at <https://supabase.com> (GitHub login is fine) and choose **New project**.

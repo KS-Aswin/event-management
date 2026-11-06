@@ -130,5 +130,6 @@ if (!flag("--skip-env")) {
 
 // 6. Deploy
 const out = vercel(["deploy", "--prod", "--yes"], { capture: true });
-const url = (out.stdout || "").trim().split(/\s+/).filter((s) => /^https:\/\//.test(s)).pop();
+// Newer CLIs print JSON-ish output ("url": "https://…",), so match the URL itself.
+const url = (out.stdout || "").match(/https:\/\/[^\s"',]+/g)?.pop();
 say(dryRun ? "✓ dry run finished; nothing was changed." : `✓ deployed: ${url ?? "(see the Vercel dashboard)"}`);
