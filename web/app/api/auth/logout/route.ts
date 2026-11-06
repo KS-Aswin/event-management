@@ -6,7 +6,7 @@ import { rejectCrossSite } from "../_guard";
 // POST /api/auth/logout: signs THIS device out. The token is also revoked on
 // the server (QA-081), so a copied cookie stops working at once; other
 // devices stay signed in ("Sign out of other devices" in Settings ends
-// those: POST /api/account/sessions).
+// those: POST /api/account/sign-out-others).
 export async function POST(request: Request) {
   // Logout sends no body, so only the Origin check applies.
   const blocked = rejectCrossSite(request, { requireJson: false });

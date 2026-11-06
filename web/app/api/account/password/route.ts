@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { hashPassword, verifyPassword } from "@/lib/password";
+import { pool } from "@/lib/db";
 import { getLiveSession } from "../../_lib/auth";
 import { byteLength, MAX_PASSWORD_BYTES } from "../../auth/_guard";
 import { endOtherSessions, requireCurrentPassword } from "../_security";
@@ -50,5 +51,13 @@ export async function POST(request: Request) {
   const hash = await hashPassword(newPassword);
   const ok = await endOtherSessions(session, { sql: "password_hash = $2", params: [hash] });
   if (!ok) return NextResponse.json({ error: "Not signed in." }, { status: 401, headers: NO_STORE });
+  // A reset link sent before the change must not undo it (same rule as
+  // using a reset link, lib/password-reset.ts).
+  await pool
+    .query(
+      "UPDATE password_reset_tokens SET expires_at = now() WHERE user_id = $1 AND used_at IS NULL AND expires_at > now()",
+      [session.userId]
+    )
+    .catch((err) => console.error("password change: could not expire reset links", err));
   return NextResponse.json({ ok: true }, { headers: NO_STORE });
 }
