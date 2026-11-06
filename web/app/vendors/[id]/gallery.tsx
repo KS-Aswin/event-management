@@ -391,6 +391,16 @@ export default function Gallery({
   const [tab, setTab] = useState<Tab>({ kind: "all" });
   const [open, setOpen] = useState<number | null>(null);
   const [showAll, setShowAll] = useState(false);
+  // QA-101: the photo button that opened the lightbox gets focus back when it
+  // closes. Closing unmounts the <dialog>, so the browser can't restore focus
+  // itself; this runs after the unmount.
+  const opener = useRef<HTMLElement | null>(null);
+  useEffect(() => {
+    if (open !== null) return;
+    const el = opener.current;
+    opener.current = null;
+    if (el?.isConnected) el.focus();
+  }, [open]);
 
   const shown =
     tab.kind === "album" ? photos.filter((p) => p.albumId === tab.id) : tab.kind === "all" ? photos : [];
@@ -446,7 +456,10 @@ export default function Gallery({
               {p.pending ? <PendingBadge /> : null}
               <button
                 type="button"
-                onClick={() => setOpen(i)}
+                onClick={(e) => {
+                  opener.current = e.currentTarget;
+                  setOpen(i);
+                }}
                 className="group absolute inset-0 h-full w-full"
                 aria-label={`Open photo ${i + 1}${p.caption ? `: ${p.caption}` : ""}`}
               >
