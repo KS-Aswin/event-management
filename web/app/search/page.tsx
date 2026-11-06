@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { findVendors, findAllLocations, findFavoriteVendorIds, type VendorRecord } from "@/lib/db";
 import { getSession } from "@/lib/session";
+import { getTaxonomy } from "@/lib/taxonomy";
 import CardImage from "./card-image";
 import { findCardMedia } from "./card-media";
 import FavoriteButton from "@/lib/favorite-button";
@@ -27,9 +28,14 @@ export default async function SearchPage({ searchParams }: { searchParams: Promi
   const sp = await searchParams;
   const session = await getSession();
 
-  const [locations, favoriteIds] = await Promise.all([
+  const [locations, favoriteIds, categoryNames] = await Promise.all([
     findAllLocations(),
     session ? findFavoriteVendorIds(session.userId) : Promise.resolve(new Set<number>()),
+    // Category filter comes from the DB taxonomy, so a category an admin adds
+    // shows up without a deploy (P1-7). Falls back to the built-in list.
+    getTaxonomy()
+      .then((t) => t.categories.filter((c) => c.active).map((c) => c.name))
+      .catch(() => undefined),
   ]);
 
   const query = normalise(first(sp.q));
@@ -145,6 +151,7 @@ export default async function SearchPage({ searchParams }: { searchParams: Promi
   return (
     <main className="page w-full pt-4 pb-10 md:pt-8 md:pb-16 flex flex-col md:flex-row md:items-start gap-x-10">
       <SearchFilters
+        categories={categoryNames}
         locations={locations}
         activeLocation={location ?? ""}
         activeMinRating={minRating ? String(minRating) : "0"}

@@ -889,7 +889,7 @@ export default function MediaManager({ vendorId, vendorStatus }: { vendorId: num
                   </div>
                   <div className="flex items-center gap-1 px-2 py-1.5">
                     <p className={`min-w-0 flex-1 truncate text-caption ${a.caption ? "text-foreground" : "text-ink-soft"}`}>
-                      {a.caption || (a.status === "rejected" ? statusText(a) : "No caption")}
+                      {a.caption || "No caption"}
                     </p>
                     <button
                       id={`${uid}-mv-${a.id}-up`}
@@ -916,6 +916,11 @@ export default function MediaManager({ vendorId, vendorStatus }: { vendorId: num
                       </svg>
                     </button>
                   </div>
+                  {a.status === "rejected" || (a.status === "hidden" && a.statusReason?.startsWith("admin:")) ? (
+                    <p className="line-clamp-3 px-2 pb-2 text-caption text-danger" data-testid="media-reason">
+                      {statusText(a)}
+                    </p>
+                  ) : null}
                 </li>
               );
             })}

@@ -77,9 +77,9 @@ function Tile({ tile: t }: { tile: TodayTile }) {
           {t.note && <span className="text-caption text-ink-soft">{t.note}</span>}
         </span>
       </Link>
-      <div className="border-t border-line px-4 py-2.5 text-caption text-ink-soft min-h-11 flex items-center">
+      <div className="border-t border-line px-4 text-caption text-ink-soft min-h-11 flex items-center">
         {t.item ? (
-          <Link href={t.item.href} className="min-w-0 hover:text-foreground focus-visible:text-foreground">
+          <Link href={t.item.href} className="block w-full min-w-0 min-h-11 py-3 hover:text-foreground focus-visible:text-foreground">
             <span className="font-medium">{t.itemLabel}:</span>{" "}
             <span className="text-foreground">{t.item.label}</span>
             {t.item.sub ? <span className="break-words"> · {t.item.sub.replace(/_/g, " ").slice(0, 60)}</span> : null}

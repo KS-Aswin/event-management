@@ -120,7 +120,7 @@ test("Today: counts match the DB and every tile links to its queue", async () =>
         if (t.count > 0 && t.itemLabel === "Oldest") assert.ok(t.item, `${t.key} has an oldest item`);
       }
       const pending = r.data.tiles.find((t) => t.key === "vendors_pending");
-      assert.equal(pending.href, "/admin/vendors?status=pending");
+      assert.equal(pending.href, "/admin/vendors?tab=pending");
     }
   }
   assert.ok(ok, `Today counts never matched the DB: ${JSON.stringify(last)}`);

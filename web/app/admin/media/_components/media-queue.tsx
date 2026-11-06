@@ -148,7 +148,7 @@ export default function MediaQueueGrid({ tab, items: initial }: { tab: MediaTab;
 
                 <div className="flex flex-1 flex-col p-4">
                   <div className="flex items-start justify-between gap-2">
-                    <Link href={`/admin/vendors/${item.vendor.id}`} className="min-w-0 truncate font-medium hover:underline">
+                    <Link href={`/admin/vendors/${item.vendor.id}`} className="block min-w-0 truncate py-2.5 -my-2.5 font-medium hover:underline sm:py-0 sm:my-0">
                       {item.vendor.name}
                     </Link>
                     {st ? <span className={`shrink-0 rounded-full px-2 text-xs leading-5 ${st.cls}`}>{st.text}</span> : null}

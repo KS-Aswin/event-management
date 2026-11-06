@@ -4,7 +4,10 @@ import { redirect } from "next/navigation";
 import { requirePageRole } from "@/app/api/_lib/auth";
 import { findListingMissing, findVendorHomeStats, getOwnVendor, type VendorHomeStats } from "@/lib/db";
 import StatusChip from "@/app/_nav/status-chip";
+import DocumentsPrompt from "./documents/documents-prompt";
+import { listNotifications } from "@/lib/notifications";
 import { profileStrength, type StrengthItem } from "./profile-strength";
+import NotificationsList from "./notifications-list";
 import { StatusPill } from "./leads/lead-row";
 import { daysFromToday, formatReceived, formatShortDate, relativeDays } from "./leads/format";
 
@@ -33,7 +36,11 @@ export default async function VendorHomePage() {
   const { session } = await requirePageRole("vendor");
   const vendor = await getOwnVendor(session.userId);
   if (!vendor) redirect("/vendor/onboarding");
-  const [stats, missing] = await Promise.all([findVendorHomeStats(vendor.id), findListingMissing(vendor.id)]);
+  const [stats, missing, notes] = await Promise.all([
+    findVendorHomeStats(vendor.id),
+    findListingMissing(vendor.id),
+    listNotifications(session.userId, 6),
+  ]);
   if (!stats) redirect("/vendor/onboarding");
 
   const strength = profileStrength(stats, vendor.about ?? "");
@@ -61,6 +68,7 @@ export default async function VendorHomePage() {
       </header>
 
       <StatusBanner stats={stats} missing={missing} vendorId={vendor.id} />
+      <DocumentsPrompt vendorId={vendor.id} />
 
       <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_360px] lg:items-start mt-4">
         <div className="flex flex-col gap-4 min-w-0">
@@ -69,6 +77,7 @@ export default async function VendorHomePage() {
           <Upcoming stats={stats} />
         </div>
         <div className="flex flex-col gap-4 min-w-0">
+          <NotificationsList initialItems={notes.items} initialUnread={notes.unread} />
           <Strength percent={strength.percent} done={strength.done} total={strength.total} items={strength.items} />
           <WeekStats stats={stats} />
           <QuickActions previewHref={previewHref} />

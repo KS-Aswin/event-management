@@ -157,7 +157,7 @@ export default async function EnquiriesPage({
                     </p>
                   </div>
                   <div className="min-w-0 text-body">
-                    <Link href={`/admin/vendors/${q.vendor_id}`} className="font-medium hover:underline underline-offset-2 truncate block">
+                    <Link href={`/admin/vendors/${q.vendor_id}`} className="font-medium hover:underline underline-offset-2 truncate block py-2.5 sm:py-0 -my-2.5 sm:my-0">
                       {q.vendor_name}
                     </Link>
                     <p className="text-caption text-ink-soft truncate">

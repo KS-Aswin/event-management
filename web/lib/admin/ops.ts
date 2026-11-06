@@ -127,15 +127,15 @@ export async function getTodaySummary(): Promise<TodaySummary> {
   const tiles: TodayTile[] = [
     {
       key: "vendors_pending", label: "Vendors to review", count: n("pending_n"), queue: true,
-      href: "/admin/vendors?status=pending", itemLabel: "Oldest", item: item("pending_item", vendorHref),
+      href: "/admin/vendors?tab=pending", itemLabel: "Oldest", item: item("pending_item", vendorHref),
     },
     {
       key: "rereview", label: "Re-review after edits", count: n("rereview_n"), queue: true,
-      href: "/admin/vendors?rereview=1", itemLabel: "Oldest", item: item("rereview_item", vendorHref),
+      href: "/admin/vendors?tab=rereview", itemLabel: "Oldest", item: item("rereview_item", vendorHref),
     },
     {
       key: "changes_requested", label: "Waiting on vendor changes", count: n("changes_n"), queue: false,
-      href: "/admin/vendors?status=changes_requested", itemLabel: "Oldest", item: item("changes_item", vendorHref),
+      href: "/admin/vendors?tab=changes_requested", itemLabel: "Oldest", item: item("changes_item", vendorHref),
     },
     {
       key: "review_reports", label: "Reported reviews", count: n("reports_n"), queue: true,
@@ -153,7 +153,8 @@ export async function getTodaySummary(): Promise<TodaySummary> {
     },
     {
       key: "documents", label: "Documents to verify", count: n("docs_n"), queue: true,
-      href: "/admin/vendors?documents=pending", itemLabel: "Oldest", item: item("docs_item", vendorHref),
+      href: "/admin/documents", itemLabel: "Oldest",
+      item: item("docs_item", (j) => `/admin/vendors/${j.vendor_id ?? j.id}`),
     },
     {
       key: "enquiries_7d", label: "Enquiries, last 7 days", count: n("enq_n"), queue: false,
@@ -165,7 +166,7 @@ export async function getTodaySummary(): Promise<TodaySummary> {
     },
     {
       key: "vendors_approved", label: "Live vendors", count: n("approved_n"), queue: false,
-      href: "/admin/vendors?status=approved", itemLabel: "Latest", item: item("approved_item", vendorHref),
+      href: "/admin/vendors?tab=approved", itemLabel: "Latest", item: item("approved_item", vendorHref),
     },
   ];
   return { tiles, generatedAt: new Date(r.generated_at as string).toISOString() };

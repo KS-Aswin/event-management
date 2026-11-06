@@ -9,8 +9,10 @@ import { VendorTile } from "@/lib/vendorVisuals";
 import FavoriteButton from "@/lib/favorite-button";
 import QuoteButton from "./quote-button";
 import ReviewForm from "./review-form";
+import ReportReview from "./report-review";
 import Gallery from "./gallery";
 import OfferingsSection from "./offerings";
+import VendorBeacon from "./vendor-beacon";
 import { loadProfileMedia, loadProfileOfferings } from "./profile-data";
 
 const MAX_INT4 = 2147483647;
@@ -176,6 +178,8 @@ export default async function VendorProfilePage({
 
   return (
     <main className="w-full pb-24 lg:pb-0">
+      {/* Analytics (P1-12): not for the owner's or an admin's preview; the server re-checks. */}
+      {publicListing && !preview ? <VendorBeacon vendorId={vendor.id} /> : null}
       {jsonLd ? (
         <script
           type="application/ld+json"
@@ -412,6 +416,7 @@ export default async function VendorProfilePage({
                           {formatDate(r.created_at)}
                         </time>
                         <p className="text-sm text-foreground/85 mt-1.5 leading-relaxed max-w-[68ch]">{r.body}</p>
+                        {mine ? null : <ReportReview reviewId={r.id} loginHref={loginHref} />}
                       </div>
                     </li>
                   );

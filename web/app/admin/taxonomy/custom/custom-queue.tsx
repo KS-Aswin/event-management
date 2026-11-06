@@ -85,7 +85,7 @@ export function CustomQueue({
                     {g.sample_vendors.map((v, i) => (
                       <span key={v.id}>
                         {i > 0 && ", "}
-                        <Link href={`/admin/vendors/${v.id}`} className="underline underline-offset-2 hover:text-accent">
+                        <Link href={`/admin/vendors/${v.id}`} className="inline-block py-3 -my-3 underline underline-offset-2 hover:text-accent">
                           {v.name}
                         </Link>
                       </span>

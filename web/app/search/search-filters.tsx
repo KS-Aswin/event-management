@@ -5,11 +5,14 @@ import { useState, useTransition, type ReactNode } from "react";
 import { CATEGORIES } from "@/lib/vendorVisuals";
 
 export default function SearchFilters({
+  categories,
   locations,
   activeLocation,
   activeMinRating,
   mobileToolbar,
 }: {
+  /** Active category names from the DB taxonomy; the built-in list when missing. */
+  categories?: string[];
   locations: string[];
   /** Normalised by the server (canonical district or ""), so the select matches the results. */
   activeLocation: string;
@@ -74,7 +77,7 @@ export default function SearchFilters({
       <fieldset>
         <legend className="eyebrow mb-2.5">Category</legend>
         <div className="grid grid-cols-2 md:grid-cols-1 gap-2 md:gap-1.5">
-        {CATEGORIES.map((c) => {
+        {(categories?.length ? categories : CATEGORIES).map((c) => {
           const checked = activeCategories.includes(c);
           return (
             <label

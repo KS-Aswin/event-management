@@ -193,7 +193,7 @@ function CategoriesPanel({
                   </div>
                   <p className="text-caption text-ink-soft mt-2">
                     {c.active_offerings} active offering{c.active_offerings === 1 ? "" : "s"} ·{" "}
-                    <button type="button" className="underline underline-offset-2 hover:text-foreground" onClick={() => onOpenTemplates(c.id)}>
+                    <button type="button" className="inline-block py-3 -my-3 underline underline-offset-2 hover:text-foreground" onClick={() => onOpenTemplates(c.id)}>
                       {c.template_count} template{c.template_count === 1 ? "" : "s"}
                     </button>
                   </p>
