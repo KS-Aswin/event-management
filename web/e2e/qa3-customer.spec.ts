@@ -27,7 +27,16 @@ test("QA-062: at tablet widths the sticky filter sidebar sits below the real hea
     await page.goto("/search?verified=1");
     const clear = page.getByRole("button", { name: "Clear all" }).or(page.getByRole("link", { name: "Clear all" })).first();
     await expect(clear).toBeVisible();
-    await page.mouse.wheel(0, 300);
+    // Scroll 300px, but not so far that the end of the results column carries
+    // the sidebar up with it (normal sticky behaviour when results are short).
+    const room = await page.evaluate(() => {
+      const aside = document.getElementById("search-filters-panel")!;
+      const parent = aside.parentElement!;
+      const contentBottom = parent.getBoundingClientRect().bottom - parseFloat(getComputedStyle(parent).paddingBottom);
+      const stickyTop = parseFloat(getComputedStyle(aside).top);
+      return Math.floor(contentBottom - aside.getBoundingClientRect().height - stickyTop);
+    });
+    await page.mouse.wheel(0, Math.max(0, Math.min(300, room - 2)));
     await page.waitForTimeout(300);
     const r = await page.evaluate(() => {
       const header = document.querySelector("header")!.getBoundingClientRect();
