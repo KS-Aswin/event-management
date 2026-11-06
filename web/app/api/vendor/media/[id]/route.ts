@@ -94,7 +94,11 @@ export async function PATCH(request: Request, { params }: Ctx) {
   }
   if (body.hidden !== undefined) {
     if (typeof body.hidden !== "boolean") return apiError(400, "hidden must be true or false.", "VALIDATION");
-    if (body.hidden && row.status === "approved") fields.status = "hidden";
+    if (body.hidden && row.status === "approved") {
+      const blocked = await guardListingMinimum(ctx.vendor, { kind: "remove_asset", assetId: id });
+      if (blocked) return blocked;
+      fields.status = "hidden";
+    }
     if (!body.hidden && row.status === "hidden") {
       // Hidden by an admin (lib/admin/moderation.ts ADMIN_HIDE_PREFIX): only an admin can restore it.
       if (row.status_reason?.startsWith("admin:")) {
@@ -116,6 +120,8 @@ export async function DELETE(_request: Request, { params }: Ctx) {
   if (ctx instanceof NextResponse) return ctx;
   const id = parsePositiveInt((await params).id);
   if (id === null) return notFound();
+  const blocked = await guardListingMinimum(ctx.vendor, { kind: "remove_asset", assetId: id });
+  if (blocked) return blocked;
   const r = await removeAsset(ctx.vendor, id);
   return NextResponse.json(r.body, { status: r.status });
 }

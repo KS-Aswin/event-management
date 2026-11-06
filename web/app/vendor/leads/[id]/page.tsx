@@ -115,7 +115,7 @@ export default async function VendorLeadPage({ params }: { params: Promise<{ id:
         </div>
         <div className="flex items-center gap-2">
           <span className="text-caption text-ink-soft hidden sm:inline">Status</span>
-          <LeadStatusControl leadId={l.id} status={l.status} leadName={l.name} hasEventDate={!!l.event_date} />
+          <LeadStatusControl leadId={l.id} status={l.status} leadName={l.name} hasEventDate={!!l.event_date} quoted={isQuoted(l.status, latestOffer?.status)} />
         </div>
       </header>
 

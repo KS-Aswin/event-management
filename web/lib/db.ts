@@ -386,8 +386,8 @@ export async function findVendors(filters: VendorFilters): Promise<VendorRecord[
   const sortMap: Record<string, string> = {
     rating: `${BAYESIAN_RATING} DESC, reviews_count DESC, id`,
     reviews: "reviews_count DESC, rating DESC, id",
-    priceLow: "price ASC, id",
-    priceHigh: "price DESC, id",
+    priceLow: "(COALESCE(price, 0) <= 0), price ASC, id",
+    priceHigh: "(COALESCE(price, 0) <= 0), price DESC, id",
   };
   const orderBy = sortMap[filters.sort ?? "rating"] ?? sortMap.rating;
 
@@ -457,6 +457,9 @@ export const PUBLIC_VENDOR_FIELDS = [
 export function toPublicVendor(v: VendorRecord): Partial<VendorRecord> {
   const out: Record<string, unknown> = {};
   for (const k of PUBLIC_VENDOR_FIELDS) out[k] = (v as unknown as Record<string, unknown>)[k];
+  // Vendor-typed free text: phones, emails and links masked, as on the profile (QA-043).
+  if (typeof out.about === "string") out.about = maskContactDetails(out.about).text;
+  if (Array.isArray(out.tags)) out.tags = out.tags.map((t) => (typeof t === "string" ? maskContactDetails(t).text : t));
   return out as Partial<VendorRecord>;
 }
 
@@ -2934,8 +2937,10 @@ export async function findVendorHomeStats(vendorId: number): Promise<VendorHomeS
        FROM quote_requests q WHERE q.vendor_id = $1 ORDER BY q.created_at DESC LIMIT 5`,
       [vendorId]
     ),
-    pool.query<{ active: number; priced: number; packages: number; incomplete: number }>(
+    pool.query<{ active: number; priced: number; priced_units: number; packages: number; incomplete: number }>(
       `SELECT COUNT(*) FILTER (WHERE active)::int AS active,
+              COUNT(*) FILTER (WHERE active AND kind = 'unit' AND NOT incomplete AND hidden_reason IS NULL
+                               AND price_mode <> 'on_request' AND price_from > 0)::int AS priced_units,
               COUNT(*) FILTER (WHERE active AND sale_mode = 'separate' AND kind IN ('unit','package') AND NOT incomplete
                                AND hidden_reason IS NULL AND (price_mode = 'on_request' OR price_from > 0))::int AS priced,
               COUNT(*) FILTER (WHERE active AND kind = 'package')::int AS packages,
@@ -2944,7 +2949,7 @@ export async function findVendorHomeStats(vendorId: number): Promise<VendorHomeS
       [vendorId]
     ),
     pool.query<{ images: number; videos: number; pending: number }>(
-      `SELECT COUNT(*) FILTER (WHERE kind = 'image' AND status IN ('approved','pending_review'))::int AS images,
+      `SELECT COUNT(*) FILTER (WHERE kind = 'image' AND purpose = 'gallery' AND status IN ('approved','pending_review'))::int AS images,
               COUNT(*) FILTER (WHERE kind <> 'image' AND status IN ('approved','pending_review'))::int AS videos,
               COUNT(*) FILTER (WHERE status = 'pending_review')::int AS pending
        FROM media_assets WHERE vendor_id = $1`,
@@ -2973,7 +2978,7 @@ export async function findVendorHomeStats(vendorId: number): Promise<VendorHomeS
     leads: { new: l.new, total: l.total, last7Days: l.last7, booked: l.booked, followUpsDue: l.follow },
     upcoming: upcoming.rows,
     recentLeads: recent.rows,
-    offerings: { active: o.active, pricedSeparate: o.priced, packages: o.packages, incompletePackages: o.incomplete },
+    offerings: { active: o.active, pricedSeparate: o.priced, pricedUnits: o.priced_units, packages: o.packages, incompletePackages: o.incomplete },
     media: { images: m.images, videos: m.videos, pendingReview: m.pending, hasLogo, hasCover },
     serviceAreas: areas.rows[0].n,
     last7Days: { profileViews: events.rows[0].views, whatsappClicks: events.rows[0].wa, phoneReveals: events.rows[0].phone },

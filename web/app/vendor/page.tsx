@@ -22,8 +22,15 @@ const MISSING_LABEL: Record<string, string> = {
   basics: "business basics (name, category, district, phone, a short about)",
   offering: "one offering or package with a price",
   logo_or_cover: "a logo or cover photo",
-  images: "at least 3 photos",
+  images: "at least 3 portfolio photos",
 };
+
+/** Where to fix the first missing item on a live / pending listing. */
+function missingHref(missing: string[]): { href: string; label: string } {
+  if (missing.includes("images") || missing.includes("logo_or_cover")) return { href: "/vendor/media", label: "Add photos" };
+  if (missing.includes("offering")) return { href: "/vendor/offerings", label: "Add an offering" };
+  return { href: "/vendor/profile", label: "Edit profile" };
+}
 
 function greeting(): string {
   const h = Number(new Intl.DateTimeFormat("en-IN", { hour: "numeric", hour12: false, timeZone: "Asia/Kolkata" }).format(new Date()));
@@ -128,6 +135,17 @@ function StatusBanner({ stats, missing, vendorId }: { stats: VendorHomeStats; mi
       title = "Under review";
       body = "We usually review new listings within 24 hours. You can keep editing while you wait; we'll let you know when you're live.";
       cta = { href: `/vendors/${vendorId}?preview=1`, label: "Preview your profile" };
+      if (missing.length > 0) {
+        tone = "warn";
+        body = (
+          <>
+            Your listing is waiting for review, but it is now missing: {missing.map((m) => MISSING_LABEL[m] ?? m).join("; ")}. Add{" "}
+            {missing.length === 1 ? "it" : "them"} so our team can approve it.
+          </>
+        );
+        cta = missingHref(missing);
+        secondary = { href: `/vendors/${vendorId}?preview=1`, label: "Preview your profile" };
+      }
       break;
     case "changes_requested":
       tone = "warn";
@@ -154,6 +172,19 @@ function StatusBanner({ stats, missing, vendorId }: { stats: VendorHomeStats; mi
         ? "Customers can find you in search. Your recent change to your name, category or phone is being checked by our team; you stay live meanwhile."
         : "Customers can find you in search and send you enquiries. Keep your photos and prices fresh to get more leads.";
       cta = { href: `/vendors/${vendorId}`, label: "View public profile" };
+      if (missing.length > 0) {
+        // QA-044: e.g. photos rejected in moderation left the live listing short.
+        tone = "warn";
+        title = "Your live listing is missing the basics";
+        body = (
+          <>
+            Customers can still find you, but a listing without these looks empty and gets few enquiries. Still needed:{" "}
+            {missing.map((m) => MISSING_LABEL[m] ?? m).join("; ")}.
+          </>
+        );
+        cta = missingHref(missing);
+        secondary = { href: `/vendors/${vendorId}`, label: "View public profile" };
+      }
       break;
     case "rejected":
       tone = "bad";

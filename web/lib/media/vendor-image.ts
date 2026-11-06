@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { requireVendor, readJson, apiError, optionalId } from "./http";
+import { guardListingMinimum } from "./listing-minimum";
 import { assetUrls, findAsset, setVendorImage } from "./repo";
 
 /** Shared handler for PUT /api/vendor/media/logo and /api/vendor/media/cover. */
@@ -13,6 +14,8 @@ export async function setVendorImageRoute(request: Request, which: "logo" | "cov
     return apiError(400, "mediaId is required (null clears it).", "VALIDATION");
   }
   if (mediaId === null) {
+    const blocked = await guardListingMinimum(ctx.vendor, { kind: "clear_role", role: which });
+    if (blocked) return blocked;
     await setVendorImage(ctx.vendor.id, which, null, null);
     return NextResponse.json({ ok: true, mediaId: null, url: null });
   }

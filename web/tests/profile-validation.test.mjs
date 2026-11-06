@@ -137,13 +137,13 @@ test("profileStrength: percentage matches the rule set", () => {
   const none = {
     checklist: { basics: false, logo: false, cover: false, areas: false, languages: false },
     media: { images: 0 },
-    offerings: { active: 0, packages: 0 },
+    offerings: { pricedUnits: 0, packages: 0 },
   };
   assert.equal(profileStrength(none, "").percent, 0);
   const all = {
     checklist: { basics: true, logo: true, cover: true, areas: true, languages: true },
     media: { images: 6 },
-    offerings: { active: 3, packages: 1 },
+    offerings: { pricedUnits: 3, packages: 1 },
   };
   const full = profileStrength(all, "x".repeat(150));
   assert.equal(full.percent, 100);

@@ -14,7 +14,7 @@
 //   2. POST /api/vendor/media/uploads reserves the row;
 //   3. PUT the bytes to the returned uploadUrl (XHR, so we get progress);
 //   4. POST .../complete validates on the server and returns the asset.
-// Failures show the server's message and a Retry button.
+// Failures show the server's message, with a Retry button only when a retry can help.
 
 import { useCallback, useEffect, useId, useRef, useState } from "react";
 import type { ClientAsset } from "@/lib/media/repo";
@@ -387,9 +387,12 @@ export function UploadList({
             </div>
             {i.state === "error" ? (
               <div className="flex shrink-0 gap-1.5">
-                <button type="button" className="btn btn-secondary btn-sm" onClick={() => onRetry(i.key)}>
-                  Retry
-                </button>
+                {/* QA-047: a wrong type or a too-small photo fails the same way again, so no Retry. */}
+                {i.retryable !== false ? (
+                  <button type="button" className="btn btn-secondary btn-sm" onClick={() => onRetry(i.key)}>
+                    Retry
+                  </button>
+                ) : null}
                 <button
                   type="button"
                   className="btn btn-ghost btn-sm px-2.5"

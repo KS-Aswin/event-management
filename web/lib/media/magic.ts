@@ -52,5 +52,5 @@ export const ACCEPTED_IMAGE_TYPES = ["image/jpeg", "image/png", "image/webp"] as
 export function imageRejectMessage(t: SniffedType): string {
   if (t === "image/heic") return "Please upload JPEG. On iPhone choose Most Compatible.";
   if (t === "image/raw") return "RAW camera files are not supported. Export a JPEG first.";
-  return "Only JPEG, PNG or WebP images are accepted.";
+  return "This file isn't a JPEG, PNG or WebP photo, so it can't be used. Choose another file.";
 }

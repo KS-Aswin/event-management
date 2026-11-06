@@ -41,11 +41,14 @@ export default function LeadStatusControl({
   status,
   leadName,
   hasEventDate = false,
+  quoted = false,
 }: {
   leadId: number;
   status: string;
   leadName?: string;
   hasEventDate?: boolean;
+  /** An offer is out and waiting for the customer (format.ts isQuoted): "Replied" shows as "Quoted", like the pill (QA-045). */
+  quoted?: boolean;
 }) {
   const router = useRouter();
   const [current, setCurrent] = useState<QuoteStatusKey>(asStatus(status));
@@ -54,6 +57,9 @@ export default function LeadStatusControl({
   const [undoFrom, setUndoFrom] = useState<QuoteStatusKey | null>(null);
   const undoTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [confirm, confirmDialog] = useConfirm();
+  // "Quoted" is "Replied" with an open offer, not a status of its own, so the
+  // same option carries the label the header pill and inbox use.
+  const labelFor = (st: QuoteStatusKey) => (st === "responded" && quoted ? "Quoted" : LEAD_STATUS_LABEL[st]);
 
   useEffect(() => () => {
     if (undoTimer.current) clearTimeout(undoTimer.current);
@@ -65,11 +71,11 @@ export default function LeadStatusControl({
       !isUndo &&
       (current === "booked" || current === "declined") &&
       !(await confirm({
-        title: `Change to "${LEAD_STATUS_LABEL[newStatus]}"?`,
-        description: `This lead is marked "${LEAD_STATUS_LABEL[current]}".${
+        title: `Change to "${labelFor(newStatus)}"?`,
+        description: `This lead is marked "${labelFor(current)}".${
           current === "booked" ? " Its event date will be freed on your calendar." : ""
         }`,
-        confirmLabel: `Change to ${LEAD_STATUS_LABEL[newStatus]}`,
+        confirmLabel: `Change to ${labelFor(newStatus)}`,
       }))
     ) {
       return;
@@ -112,7 +118,7 @@ export default function LeadStatusControl({
       >
         {options.map((s) => (
           <option key={s} value={s}>
-            {LEAD_STATUS_LABEL[s]}
+            {labelFor(s)}
           </option>
         ))}
       </select>
@@ -121,7 +127,7 @@ export default function LeadStatusControl({
           <span className="text-danger">{error}</span>
         ) : undoFrom ? (
           <span className="text-ink-soft">
-            {current === "booked" && hasEventDate ? "Booked, date blocked" : `Changed to ${LEAD_STATUS_LABEL[current]}`} ·{" "}
+            {current === "booked" && hasEventDate ? "Booked, date blocked" : `Changed to ${labelFor(current)}`} ·{" "}
             <button
               type="button"
               onClick={() => change(undoFrom, true)}

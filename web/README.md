@@ -65,7 +65,7 @@ Vendor photos and videos are stored through a `StorageAdapter` (`lib/storage/`).
 - `MEDIA_VIDEO_UPLOADS` — `true`/`false`; MP4 uploads are on by default except in production.
 - `BILLING_ENABLED` — leave unset; until billing ships every vendor gets the Pro media limits.
 
-Image processing uses `sharp` (a regular dependency, MIT; prebuilt binaries for Windows, Linux and Vercel install with `npm install`). Each photo is checked by magic bytes (JPEG/PNG/WebP/HEIC, max 15 MB; MP4 max 50 MB), de-duplicated by sha256 and stored as `thumb`, `card` and `full` WebP variants without EXIF under `uploads/vendors/<vendorId>/<uuid>/`.
+Image processing uses `sharp` (a regular dependency, MIT; prebuilt binaries for Windows, Linux and Vercel install with `npm install`). Each photo is checked by magic bytes (JPEG/PNG/WebP only, max 15 MB; MP4 max 50 MB; HEIC and RAW files are detected and refused with a 'save as JPEG' hint, since `sharp`'s prebuilt binaries can't decode HEIC), de-duplicated by sha256 and stored as `thumb`, `card` and `full` WebP variants without EXIF under `uploads/vendors/<vendorId>/<uuid>/`.
 
 Logo and cover uploads also keep an uncropped `source` copy. The media manager's crop dialog posts to `POST /api/vendor/media/crop` (`{which, mediaId, crop: {x, y, width, height}}`, with the crop given as fractions of the photo), and sharp makes the square or 16:9 variants from that copy.
 

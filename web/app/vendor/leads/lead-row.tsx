@@ -136,7 +136,7 @@ export function LeadRow({
           </div>
           <div className="text-ink-soft text-xs mt-1">Received {formatReceived(l.created_at)}</div>
         </div>
-        <LeadStatusControl leadId={l.id} status={l.status} leadName={l.name} hasEventDate={!!l.event_date} />
+        <LeadStatusControl leadId={l.id} status={l.status} leadName={l.name} hasEventDate={!!l.event_date} quoted={isQuoted(l.status, extras?.offer?.status)} />
       </div>
       <div className="mt-2 max-w-[66ch]">
         <p className="text-[13.5px]">

@@ -126,12 +126,14 @@ function ConfirmBar({
   message,
   confirmLabel,
   busy,
+  busyLabel = "Deleting…",
   onConfirm,
   onCancel,
 }: {
   message: string;
   confirmLabel: string;
   busy?: boolean;
+  busyLabel?: string;
   onConfirm: () => void;
   onCancel: () => void;
 }) {
@@ -142,7 +144,7 @@ function ConfirmBar({
       <p className="text-sm text-danger">{message}</p>
       <div className="mt-2.5 flex flex-wrap gap-2">
         <button ref={ref} type="button" className="btn btn-sm bg-danger text-white hover:opacity-90" disabled={busy} onClick={onConfirm}>
-          {busy ? "Deleting…" : confirmLabel}
+          {busy ? busyLabel : confirmLabel}
         </button>
         <button type="button" className="btn btn-secondary btn-sm" onClick={onCancel} disabled={busy}>
           Cancel
@@ -363,9 +365,22 @@ function BrandSlot({
   which: "logo" | "cover";
   asset: ClientAsset | undefined;
   onUploaded: () => void;
-  onRemove: () => void;
+  onRemove: () => Promise<void>;
   onCrop: () => void;
 }) {
+  // QA-044: removing the logo/cover changes the public profile at once, so ask first.
+  const [confirming, setConfirming] = useState(false);
+  const [removing, setRemoving] = useState(false);
+  const label = which === "logo" ? "logo" : "cover photo";
+  async function confirmRemove() {
+    setRemoving(true);
+    try {
+      await onRemove();
+    } finally {
+      setRemoving(false);
+      setConfirming(false);
+    }
+  }
   const src = asset ? (which === "logo" ? asset.urls.card ?? asset.urls.full : asset.urls.card ?? asset.urls.full) : null;
   const pill = asset ? STATUS_PILL[asset.status] : undefined;
   return (
@@ -404,14 +419,26 @@ function BrandSlot({
                 Adjust crop
               </button>
             ) : null}
-            {asset ? (
-              <button type="button" className="btn btn-ghost btn-sm" onClick={onRemove}>
+            {asset && !confirming ? (
+              <button type="button" className="btn btn-ghost btn-sm" onClick={() => setConfirming(true)}>
                 Remove
               </button>
             ) : null}
           </div>
         </div>
       </div>
+      {asset && confirming ? (
+        <div className="mt-3">
+          <ConfirmBar
+            message={`Remove your ${label}? Customers stop seeing it on your profile and search cards straight away.`}
+            confirmLabel={`Remove ${label}`}
+            busyLabel="Removing…"
+            busy={removing}
+            onConfirm={() => void confirmRemove()}
+            onCancel={() => setConfirming(false)}
+          />
+        </div>
+      ) : null}
     </div>
   );
 }
@@ -695,8 +722,8 @@ export default function MediaManager({ vendorId, vendorStatus }: { vendorId: num
           Logo &amp; cover
         </h2>
         <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
-          <BrandSlot which="cover" asset={cover} onCrop={() => cover && setCropping({ which: "cover", asset: cover })} onUploaded={() => void load().then(() => say("Cover photo updated."))} onRemove={() => void setRole("cover", null).catch((e) => say(e.message, "error"))} />
-          <BrandSlot which="logo" asset={logo} onCrop={() => logo && setCropping({ which: "logo", asset: logo })} onUploaded={() => void load().then(() => say("Logo updated."))} onRemove={() => void setRole("logo", null).catch((e) => say(e.message, "error"))} />
+          <BrandSlot which="cover" asset={cover} onCrop={() => cover && setCropping({ which: "cover", asset: cover })} onUploaded={() => void load().then(() => say("Cover photo updated."))} onRemove={() => setRole("cover", null).catch((e) => say(e.message, "error"))} />
+          <BrandSlot which="logo" asset={logo} onCrop={() => logo && setCropping({ which: "logo", asset: logo })} onUploaded={() => void load().then(() => say("Logo updated."))} onRemove={() => setRole("logo", null).catch((e) => say(e.message, "error"))} />
         </div>
       </section>
 

@@ -168,25 +168,26 @@ export default function OfferingsManager({
             ))}
           </div>
         </div>
-        <div className="flex flex-wrap items-center gap-1.5 sm:justify-end">
-          <span className="inline-flex">
+        <div className="flex flex-wrap items-center gap-x-3 gap-y-2 sm:gap-1.5 sm:justify-end">
+          {/* QA-053: two separate 44 x 44 targets on phones (smaller on wider screens), so a thumb can't hit the wrong arrow. */}
+          <span role="group" aria-label={`Reorder ${o.title}`} className="inline-flex gap-2 sm:gap-1.5" data-reorder>
             <button
               type="button"
-              className="btn btn-ghost btn-sm !px-2.5"
+              className="btn btn-secondary btn-sm !px-0 min-w-11 sm:min-w-9 text-base"
               aria-label={`Move ${o.title} up`}
               disabled={index === 0}
               onClick={() => void move(all, index, -1)}
             >
-              ↑
+              <span aria-hidden>↑</span>
             </button>
             <button
               type="button"
-              className="btn btn-ghost btn-sm !px-2.5"
+              className="btn btn-secondary btn-sm !px-0 min-w-11 sm:min-w-9 text-base"
               aria-label={`Move ${o.title} down`}
               disabled={index === all.length - 1}
               onClick={() => void move(all, index, 1)}
             >
-              ↓
+              <span aria-hidden>↓</span>
             </button>
           </span>
           <button

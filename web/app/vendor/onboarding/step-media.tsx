@@ -29,29 +29,42 @@ interface MediaPayload {
 }
 
 type Purpose = "logo" | "cover" | "gallery";
-type Job = { id: string; name: string; purpose: Purpose; progress: number; error?: string; notice?: string; file: File };
+type Job = {
+  id: string;
+  name: string;
+  purpose: Purpose;
+  progress: number;
+  error?: string;
+  /** False when sending the same file again can't help (wrong type, too small, too big). */
+  retryable?: boolean;
+  notice?: string;
+  file: File;
+};
+
+/** Network trouble, timeouts, rate limits, conflicts and server errors can pass on a retry; 4xx refusals can't (QA-047). */
+const canRetry = (status: number) => status === 0 || status === 408 || status === 409 || status === 429 || status >= 500;
 
 const ACCEPT = "image/jpeg,image/png,image/webp";
 const MIN_PHOTOS = 3;
 
 function putFile(url: string, method: string, headers: Record<string, string>, file: File, onProgress: (p: number) => void) {
-  return new Promise<{ ok: boolean; error?: string }>((resolve) => {
+  return new Promise<{ ok: boolean; status: number; error?: string }>((resolve) => {
     const xhr = new XMLHttpRequest();
     xhr.open(method || "PUT", url);
     for (const [k, v] of Object.entries(headers)) xhr.setRequestHeader(k, v);
     if (!headers["Content-Type"] && !headers["content-type"]) xhr.setRequestHeader("Content-Type", file.type);
     xhr.upload.onprogress = (e) => e.lengthComputable && onProgress(Math.round((e.loaded / e.total) * 100));
     xhr.onload = () => {
-      if (xhr.status >= 200 && xhr.status < 300) return resolve({ ok: true });
+      if (xhr.status >= 200 && xhr.status < 300) return resolve({ ok: true, status: xhr.status });
       let error = "Upload failed.";
       try {
         error = JSON.parse(xhr.responseText).error ?? error;
       } catch {
         // not JSON
       }
-      resolve({ ok: false, error });
+      resolve({ ok: false, status: xhr.status, error });
     };
-    xhr.onerror = () => resolve({ ok: false, error: "Upload failed. Check your connection." });
+    xhr.onerror = () => resolve({ ok: false, status: 0, error: "Upload failed. Check your connection." });
     xhr.send(file);
   });
 }
@@ -86,28 +99,28 @@ export default function StepMedia({ data, setData, next, back }: StepProps) {
   async function run(job: Job) {
     const maxBytes = media?.maxImageBytes ?? 15 * 1024 * 1024;
     if (!ACCEPT.split(",").includes(job.file.type)) {
-      return setJob(job.id, { error: "Use a JPEG, PNG or WebP photo (iPhone HEIC: export as JPEG)." });
+      return setJob(job.id, { error: "Use a JPEG, PNG or WebP photo (iPhone HEIC: export as JPEG).", retryable: false });
     }
     if (job.file.size > maxBytes) {
-      return setJob(job.id, { error: `This photo is over ${Math.round(maxBytes / 1024 / 1024)} MB.` });
+      return setJob(job.id, { error: `This photo is over ${Math.round(maxBytes / 1024 / 1024)} MB.`, retryable: false });
     }
-    setJob(job.id, { error: undefined, progress: 1 });
+    setJob(job.id, { error: undefined, retryable: undefined, progress: 1 });
     const res = await api<{ assetId: number; uploadUrl: string; method: string; headers: Record<string, string> }>(
       "/api/vendor/media/uploads",
       "POST",
       { kind: "image", purpose: job.purpose, contentType: job.file.type, bytes: job.file.size }
     );
-    if (!res.ok) return setJob(job.id, { error: res.error, progress: 0 });
+    if (!res.ok) return setJob(job.id, { error: res.error, retryable: canRetry(res.status), progress: 0 });
     const put = await putFile(res.data.uploadUrl, res.data.method, res.data.headers ?? {}, job.file, (p) =>
       setJob(job.id, { progress: Math.max(1, Math.min(p, 95)) })
     );
-    if (!put.ok) return setJob(job.id, { error: put.error, progress: 0 });
+    if (!put.ok) return setJob(job.id, { error: put.error, retryable: canRetry(put.status), progress: 0 });
     const done = await api<{ duplicate?: boolean; message?: string }>(
       `/api/vendor/media/uploads/${res.data.assetId}/complete`,
       "POST",
       {}
     );
-    if (!done.ok) return setJob(job.id, { error: done.error, progress: 0 });
+    if (!done.ok) return setJob(job.id, { error: done.error, retryable: canRetry(done.status), progress: 0 });
     if (done.data.duplicate && job.purpose === "gallery") {
       // Same bytes as a photo already in the media library: say so for this file
       // instead of silently dropping it (QA-014).
@@ -260,9 +273,11 @@ export default function StepMedia({ data, setData, next, back }: StepProps) {
                   </button>
                 ) : j.error ? (
                   <>
-                    <button type="button" className="btn btn-secondary btn-sm" onClick={() => void run(j)}>
-                      Retry
-                    </button>
+                    {j.retryable !== false ? (
+                      <button type="button" className="btn btn-secondary btn-sm" onClick={() => void run(j)}>
+                        Retry
+                      </button>
+                    ) : null}
                     <button
                       type="button"
                       className="btn btn-ghost btn-sm"
