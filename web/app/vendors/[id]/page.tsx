@@ -23,7 +23,7 @@ import { reviewBreakdown, reviewEligibility } from "@/lib/vendor-reviews";
 import { findLatestOpenEnquiry } from "@/lib/enquiries-create";
 import { findEnquiryDefaults } from "@/lib/shortlist";
 import EnquirySentLink from "./enquiry-sent-link";
-import { reviewCountLabel, vendorFromPrice } from "@/lib/vendor-display";
+import { reviewCountLabel, vendorFromPrice, startingFromAmount } from "@/lib/vendor-display";
 import Gallery from "./gallery";
 import OfferingsSection from "./offerings";
 import VendorBeacon from "./vendor-beacon";
@@ -161,7 +161,9 @@ export default async function VendorProfilePage({
   const hasRating = vendor.reviews_count > 0 && ratingNum > 0;
   // One price for this vendor everywhere (QA-023): the vendors.price_label cache.
   const fromPrice = vendorFromPrice(vendor);
-  const priceText = fromPrice ?? "Price on request";
+  // After a "Starting from" lead-in (QA-066); without a price there is no lead-in.
+  const startingText = fromPrice ? startingFromAmount(fromPrice) : "Price on request";
+  const priceLead = fromPrice ? "Starting from" : "Pricing";
   // vendors.rating/reviews_count are recomputed from the visible reviews
   // (QA-010). Any older, imported ratings not listed here are called out
   // instead of silently inflating the count next to the breakdown.
@@ -376,7 +378,7 @@ export default async function VendorProfilePage({
                 {fromPrice ? (
                   <p className="text-sm">
                     <span className="text-ink-soft">Starting from </span>
-                    <span className="text-accent font-semibold">{fromPrice}</span>
+                    <span className="text-accent font-semibold">{startingText}</span>
                   </p>
                 ) : null}
               </div>
@@ -444,7 +446,8 @@ export default async function VendorProfilePage({
             </h2>
             <OfferingsSection
               data={offerings}
-              fallbackPrice={priceText}
+              fallbackPrice={startingText}
+              fallbackLead={priceLead}
               quote={
                 isOwnListing
                   ? undefined
@@ -596,8 +599,8 @@ export default async function VendorProfilePage({
         </div>
 
         <aside className="hidden lg:block sticky top-[calc(var(--header-h)+20px)] mt-[88px] card p-6 shadow-card">
-          <div className="text-caption text-ink-soft">Starting from</div>
-          <div className="font-display text-accent font-semibold text-heading mt-0.5">{priceText}</div>
+          <div className="text-caption text-ink-soft">{priceLead}</div>
+          <div className="font-display text-accent font-semibold text-heading mt-0.5">{startingText}</div>
           <div className="mt-2">{ratingRow}</div>
           <div className="mt-5 pt-5 border-t border-line">
             {isOwnListing ? (
@@ -640,8 +643,8 @@ export default async function VendorProfilePage({
             </a>
           ) : (
             <div className="min-w-0">
-              <div className="text-[11px] text-ink-soft">Starting from</div>
-              <div className="text-accent font-semibold text-[15px] truncate">{priceText}</div>
+              <div className="text-[11px] text-ink-soft">{priceLead}</div>
+              <div className="text-accent font-semibold text-[15px] truncate">{startingText}</div>
             </div>
           )}
           {isOwnListing ? (

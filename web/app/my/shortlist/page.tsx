@@ -4,6 +4,7 @@ import { categoryLabeller, getTaxonomy } from "@/lib/taxonomy";
 import type { Taxonomy, VendorRecord } from "@/lib/db";
 import { findEnquiryDefaults, listShortlist } from "@/lib/shortlist";
 import { listCustomerEnquiries } from "@/lib/enquiry-thread";
+import { OPEN_ENQUIRY_STATUSES } from "@/lib/enquiries-create";
 import { findCardMedia } from "@/app/search/card-media";
 import ShortlistBoard, { type BoardItem } from "./shortlist-board";
 
@@ -44,8 +45,17 @@ export default async function ShortlistPage() {
     if (!enquired.has(e.vendor.id)) enquired.set(e.vendor.id, e.id);
   }
 
+  // Dates of the customer's open enquiries per vendor: the send sheet must not
+  // prefill a date every selected vendor would refuse as a duplicate (QA-063).
+  const openDates = new Map<number, string[]>();
+  for (const e of enquiries) {
+    if (!e.eventDate || !(OPEN_ENQUIRY_STATUSES as readonly string[]).includes(e.status)) continue;
+    openDates.set(e.vendor.id, [...(openDates.get(e.vendor.id) ?? []), e.eventDate]);
+  }
+
   const board: BoardItem[] = items.map((i) => ({
     ...i,
+    openEnquiryDates: openDates.get(i.vendorId) ?? [],
     image: media.get(i.vendorId)?.src ?? null,
     color: media.get(i.vendorId)?.color ?? null,
     enquiryId: enquired.get(i.vendorId) ?? null,

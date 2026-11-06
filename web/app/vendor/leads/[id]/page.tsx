@@ -56,7 +56,11 @@ export default async function VendorLeadPage({ params }: { params: Promise<{ id:
   // Loaded first (so new messages still show as new), then marked read.
   await markThreadRead(leadId, "vendor", session.userId);
   const latestOffer = thread.offers[0] ?? null;
-  const liveOffer = thread.offers.find((o) => o.status === "sent" || o.status === "accepted") ?? null;
+  // The offer to show on top: the open one, else the latest one if booking or
+  // declining the lead closed it (QA-067), so the card explains what happened.
+  const liveOffer =
+    thread.offers.find((o) => o.status === "sent" || o.status === "accepted") ??
+    (latestOffer?.status === "closed" ? latestOffer : null);
   const olderOffers = thread.offers.filter((o) => o !== liveOffer);
   const firstName = l.name.split(" ")[0] || l.name;
   const closed =
@@ -204,7 +208,21 @@ export default async function VendorLeadPage({ params }: { params: Promise<{ id:
               Offer
             </h2>
             {liveOffer ? (
-              <OfferCard offer={liveOffer} title={`Your offer v${liveOffer.version}`} />
+              <OfferCard
+                offer={liveOffer}
+                title={`Your offer v${liveOffer.version}`}
+                actions={
+                  liveOffer.status === "closed" ? (
+                    <p className="text-body text-ink-soft">
+                      {l.status === "booked"
+                        ? `Closed when you marked this lead Booked, so ${firstName} can no longer accept or decline it. Agree the final amount with them directly.`
+                        : l.status === "declined"
+                          ? `Closed when you declined this lead. ${firstName} can no longer accept it.`
+                          : "This offer is closed."}
+                    </p>
+                  ) : null
+                }
+              />
             ) : (
               <p className="text-body text-ink-soft mb-3">
                 {thread.offers.length

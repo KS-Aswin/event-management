@@ -70,10 +70,13 @@ function UnitRow({ o, quote, nested }: { o: OfferingView; quote?: (id: number) =
 export default function OfferingsSection({
   data,
   fallbackPrice,
+  fallbackLead = "Starting from",
   quote,
 }: {
   data: ProfileOfferings;
   fallbackPrice: string;
+  /** "Starting from", or "Pricing" when there is no price (QA-066). */
+  fallbackLead?: string;
   /** Renders a "Request quote" trigger for an offering (omitted for the owner). */
   quote?: (id: number) => ReactNode;
 }) {
@@ -81,7 +84,7 @@ export default function OfferingsSection({
     return (
       <ul className="overflow-hidden rounded-card border border-line">
         <li className="flex items-start justify-between gap-4 p-4 sm:p-5">
-          <span className="text-sm text-ink-soft">Starting from</span>
+          <span className="text-sm text-ink-soft">{fallbackLead}</span>
           <span className="text-right text-sm font-semibold text-accent">{fallbackPrice}</span>
         </li>
       </ul>

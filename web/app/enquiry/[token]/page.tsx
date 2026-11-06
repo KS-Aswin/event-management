@@ -68,6 +68,7 @@ const OFFER_STATUS: Record<string, string> = {
   declined: "Declined",
   superseded: "Replaced by a newer version",
   expired: "Expired",
+  closed: "Closed",
 };
 
 function rupees(paise: number): string {
@@ -147,6 +148,20 @@ export default async function EnquiryTrackingPage({ params }: { params: Promise<
   if (!e) notFound();
 
   const status = STATUS[e.status] ?? STATUS.pending;
+  // "Replied" says what the vendor actually sent: a message, an offer or
+  // both, so it never points at an offer that isn't there (QA-065).
+  let hint = status.hint;
+  if (e.status === "responded") {
+    const hasOffer = e.offers.some((o) => o.status === "sent");
+    const hasMessage = e.messages.some((m) => m.from === "vendor");
+    hint = hasOffer
+      ? hasMessage
+        ? "The vendor has replied. See their offer and messages below."
+        : "The vendor has sent you an offer. See it below."
+      : hasMessage
+        ? "The vendor has replied with a message. See it below. No priced offer yet."
+        : "The vendor has seen your request and will contact you on your preferred channel.";
+  }
   const details: [string, string][] = [];
   if (e.eventType) details.push(["Event", e.eventType]);
   if (e.eventDate) {
@@ -160,8 +175,9 @@ export default async function EnquiryTrackingPage({ params }: { params: Promise<
   if (e.slot) details.push(["Time", SLOT_LABEL[e.slot] ?? e.slot]);
   if (e.guestCount) details.push(["Guests", e.guestCount.toLocaleString("en-IN")]);
   if (e.district || e.venueType || e.venueText) {
+    // "Where", as on the signed-in thread: a district alone isn't a venue (QA-065).
     details.push([
-      "Venue",
+      "Where",
       [e.venueText, e.venueType ? VENUE_TYPE_LABEL[e.venueType] ?? e.venueType : null, e.district].filter(Boolean).join(", "),
     ]);
   }
@@ -185,7 +201,9 @@ export default async function EnquiryTrackingPage({ params }: { params: Promise<
         )}
       </h1>
       <p className="text-ink-soft text-sm mt-1.5">
-        {e.vendor.category} · {e.vendor.location} · sent {formatReceived(e.createdAt)}
+        {/* The vendor's base town, not the event's location (QA-065). */}
+        {e.vendor.category}
+        {e.vendor.location ? ` · based in ${e.vendor.location}` : ""} · sent {formatReceived(e.createdAt)}
       </p>
 
       <section aria-labelledby="status-heading" className="card mt-5 sm:mt-6">
@@ -195,7 +213,7 @@ export default async function EnquiryTrackingPage({ params }: { params: Promise<
         <span className={`inline-flex items-center rounded-full border px-3 py-1 text-sm font-medium ${status.pill}`}>
           {status.label}
         </span>
-        <p className="text-sm text-ink-soft mt-2.5 max-w-[60ch]">{status.hint}</p>
+        <p className="text-sm text-ink-soft mt-2.5 max-w-[60ch]">{hint}</p>
         {!e.vendor.available ? (
           <p role="note" className="alert-error mt-3">
             This vendor isn&apos;t available on Vela right now, so they may not reply. You can{" "}

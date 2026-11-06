@@ -14,6 +14,7 @@ const STATUS: Record<Offer["status"], { label: string; cls: string }> = {
   declined: { label: "Declined", cls: "bg-surface-muted text-[#3c4043] border-line-strong" },
   superseded: { label: "Replaced by a newer offer", cls: "bg-surface-muted text-ink-soft border-line" },
   expired: { label: "Expired", cls: "bg-surface-muted text-ink-soft border-line" },
+  closed: { label: "Closed", cls: "bg-surface-muted text-ink-soft border-line" },
 };
 
 export function OfferStatusPill({ status }: { status: Offer["status"] }) {

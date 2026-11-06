@@ -39,7 +39,11 @@ export default async function MyEnquiryPage({ params }: { params: Promise<{ id: 
 
   const { offers, messages, events } = e.thread;
   const categoryLabel = await getCategoryLabeller();
-  const live = offers.find((o) => o.status === "sent" || o.status === "accepted") ?? null;
+  // The open offer, else the latest one if the vendor's booking or decline
+  // closed it (QA-067): shown with why it can't be answered any more.
+  const live =
+    offers.find((o) => o.status === "sent" || o.status === "accepted") ??
+    (offers[0]?.status === "closed" ? offers[0] : null);
   const older = offers.filter((o) => o !== live);
   const canAccept = canTransition(e.status, "accepted", "customer");
   const canWithdraw = canTransition(e.status, "withdrawn", "customer");
@@ -110,6 +114,14 @@ export default async function MyEnquiryPage({ params }: { params: Promise<{ id: 
                     />
                   ) : live.status === "accepted" && canBook ? (
                     <p className="alert-success">You accepted this offer. Once you&apos;ve confirmed with the vendor, mark the enquiry as booked.</p>
+                  ) : live.status === "closed" ? (
+                    <p className="text-body text-ink-soft">
+                      {e.status === "booked"
+                        ? `${e.vendor.name} confirmed the booking, so this offer is closed. Confirm the final amount with them directly.`
+                        : e.status === "declined"
+                          ? `${e.vendor.name} can't take this enquiry, so this offer is closed.`
+                          : "This offer is closed."}
+                    </p>
                   ) : null
                 }
               />
@@ -142,7 +154,8 @@ export default async function MyEnquiryPage({ params }: { params: Promise<{ id: 
               messages={messages}
               viewer="customer"
               otherName={e.vendor.name}
-              emptyText={`No messages yet. Ask ${e.vendor.name} anything about your event.`}
+              // A closed thread doesn't invite a message it can't take (QA-064).
+              emptyText={closed ? "No messages were exchanged." : `No messages yet. Ask ${e.vendor.name} anything about your event.`}
             />
             <div className="mt-4 border-t border-line pt-4">
               <Composer

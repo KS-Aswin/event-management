@@ -7,7 +7,13 @@ import CardImage from "@/app/search/card-image";
 import type { EnquiryDefaults, ShortlistItem } from "@/lib/shortlist";
 import { SHORTLIST_CHANGED } from "@/lib/guest-shortlist";
 
-export type BoardItem = ShortlistItem & { image: string | null; color: string | null; enquiryId: number | null };
+export type BoardItem = ShortlistItem & {
+  image: string | null;
+  color: string | null;
+  enquiryId: number | null;
+  /** Event dates (YYYY-MM-DD) of this customer's open enquiries with the vendor. */
+  openEnquiryDates: string[];
+};
 
 const MAX_SEND = 5;
 const MAX_COMPARE = 4;
@@ -448,7 +454,14 @@ function SendDialog({
   // Prefill (QA-029): only values the controls can show; a date already past
   // (the sheet stayed open over midnight) or a retired option starts blank.
   const pre = {
-    eventDate: defaults.eventDate && defaults.eventDate >= today ? defaults.eventDate : "",
+    // Not a date every selected vendor already has an open enquiry for: the
+    // first Send would only be refused as a duplicate (QA-063, as QA-040).
+    eventDate:
+      defaults.eventDate &&
+      defaults.eventDate >= today &&
+      !vendors.every((v) => v.openEnquiryDates.includes(defaults.eventDate!))
+        ? defaults.eventDate
+        : "",
     eventTypeId: eventTypes.some((t) => t.id === defaults.eventTypeId) ? String(defaults.eventTypeId) : "",
     districtId: districts.some((d) => d.id === defaults.districtId) ? String(defaults.districtId) : "",
     guestCount: defaults.guestCount ? String(defaults.guestCount) : "",

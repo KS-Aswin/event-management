@@ -30,6 +30,9 @@ function offerLine(e: CustomerEnquirySummary): string | null {
       return `${what} · you declined`;
     case "expired":
       return `${what} · expired`;
+    case "closed":
+      // The vendor booked or declined while it waited for a reply (QA-067).
+      return e.status === "booked" ? `${what} · booking confirmed` : `${what} · closed`;
     default:
       return what;
   }

@@ -14,3 +14,12 @@ export function reviewCountLabel(n: number): string {
 export function vendorFromPrice(v: { price?: number | string | null; price_label?: string | null }): string | null {
   return Number(v.price) > 0 && v.price_label ? v.price_label : null;
 }
+
+/**
+ * The price to show after a "Starting from" lead-in: "₹30,000 onwards" would
+ * read "Starting from ₹30,000 onwards" (QA-066), so the "onwards" goes.
+ * "₹450 per plate" is kept as it is.
+ */
+export function startingFromAmount(label: string): string {
+  return label.replace(/\s+onwards$/i, "");
+}

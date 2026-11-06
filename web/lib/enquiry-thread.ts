@@ -103,7 +103,8 @@ export interface OfferLine {
 export interface Offer {
   id: number;
   version: number;
-  status: "sent" | "accepted" | "declined" | "superseded" | "expired";
+  /** closed: the lead was booked or declined while the offer still waited for a reply (QA-067). */
+  status: "sent" | "accepted" | "declined" | "superseded" | "expired" | "closed";
   subtotalPaise: number;
   travelPaise: number;
   discountPaise: number;
@@ -733,6 +734,7 @@ export async function customerAct(scope: CustomerScope, userId: number | null, q
         declined: "You've already declined this offer.",
         superseded: "The vendor has sent a newer offer. Please look at the latest one.",
         expired: "This offer has expired. Ask the vendor for a fresh one.",
+        closed: "This offer is closed: the vendor has already updated this enquiry.",
       };
       throw new TransitionError(status, act.action === "accept" ? "accepted" : status, why[offer.status] ?? "This offer is no longer open.", "OFFER_NOT_OPEN");
     }

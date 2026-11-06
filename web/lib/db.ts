@@ -2846,6 +2846,20 @@ export async function updateVendorLead(
       userId,
     ]);
     await notifyStatusChange(client, leadId, p.status!, p.actor ?? "vendor");
+    // QA-067: booking or declining closes an offer still waiting for the
+    // customer's reply (an accepted one stays accepted), so neither side shows
+    // "waiting for reply" on a settled lead. Moving the lead back to replied
+    // (undoing a mis-tap) reopens it if it is still the latest version.
+    if (p.status === "booked" || p.status === "declined") {
+      await client.query("UPDATE quote_offers SET status = 'closed' WHERE quote_request_id = $1 AND status = 'sent'", [leadId]);
+    } else if (p.status === "responded" && (old.status === "booked" || old.status === "declined")) {
+      await client.query(
+        `UPDATE quote_offers SET status = 'sent'
+          WHERE id = (SELECT id FROM quote_offers WHERE quote_request_id = $1 ORDER BY version DESC LIMIT 1)
+            AND status = 'closed'`,
+        [leadId]
+      );
+    }
     if (!old.event_date) return true;
     const slot = old.slot ?? "full";
     // Calendar hook (P2-6, lib/availability-booking.ts): booked adds one to
