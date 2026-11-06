@@ -91,11 +91,15 @@ test("QA-040/041/038: profile with an open enquiry: link, prefilled sheet, dupli
   await expect(d.getByText(/You already have an open enquiry with/)).toBeVisible();
   await expect(d.getByLabel("Phone number")).toHaveValue("+919847011111");
   await expect(d.getByRole("spinbutton", { name: "Guests" })).toHaveValue("300");
-  await expect(d.getByLabel("Event date")).not.toHaveValue("");
+  // The saved date is the open enquiry's own date with this vendor, so it is
+  // not prefilled here (it could only be refused as a duplicate).
+  await expect(d.getByLabel("Event date")).toHaveValue("");
   await expect(d.getByLabel("District")).not.toHaveValue("");
   await expect(d.getByText(/Filled in from your .+ enquiry/)).toBeVisible();
 
   // Same date again: refused, pointing at the existing enquiry.
+  const sameDate = new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Kolkata" }).format(new Date(Date.now() + 100 * 86_400_000));
+  await d.getByLabel("Event date").fill(sameDate);
   await d.getByRole("button", { name: "Send request" }).click();
   const alert = d.getByRole("alert");
   // The first send compiles the API route in dev: allow for it.

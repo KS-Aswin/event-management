@@ -280,7 +280,9 @@ export default function QuoteButton({
   // show; a date already past or a retired option starts blank.
   const today = minDate || todayInIST();
   const pre = {
-    eventDate: prefill?.eventDate && prefill.eventDate >= today ? prefill.eventDate : "",
+    // Not the date of the open enquiry with this vendor: that would only be refused as a duplicate.
+    eventDate:
+      prefill?.eventDate && prefill.eventDate >= today && prefill.eventDate !== openEnquiry?.eventDate ? prefill.eventDate : "",
     eventTypeId: prefill && eventTypes.some((t) => t.id === prefill.eventTypeId) ? String(prefill.eventTypeId) : "",
     districtId: prefill && districts.some((d) => d.id === prefill.districtId) ? String(prefill.districtId) : "",
     budget: prefill ? budgetPreset(prefill.budgetMin, prefill.budgetMax) : "",
