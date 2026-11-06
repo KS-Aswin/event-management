@@ -16,6 +16,7 @@ export type NotificationKind =
   | "media.approved"
   | "media.rejected"
   | "review.hidden"
+  | "review.unhidden"
   | "offering.promoted"
   | "offering.merged"
   | "offering.rejected"

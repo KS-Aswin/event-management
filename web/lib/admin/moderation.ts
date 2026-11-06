@@ -555,6 +555,17 @@ export async function unhideReview(params: {
     );
     await recomputeVendorRating(client, rv.vendor_id);
     const after = await vendorRating(client, rv.vendor_id);
+    // QA-099: mirror review.hidden (and media.unhidden) so the vendor knows why
+    // the review and their rating changed again.
+    await notify(
+      client,
+      rv.owner_id,
+      "review.unhidden",
+      "A review is back on your profile",
+      params.reason ?? "Vela's team reviewed it again and it is public now. Your rating has been updated.",
+      "/vendor/reviews",
+      { reviewId: rv.id }
+    );
     const auditId = await audit(client, {
       actorId: params.actorId,
       action: "review.unhide",
