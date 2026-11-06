@@ -170,18 +170,44 @@ export default function DecisionPanel({
     });
   }
 
-  async function toggleVerified() {
+  async function setVerified(next: boolean, reason?: string): Promise<string | null> {
     setVerifyBusy(true);
     setMessage(null);
-    const r = await adminFetch(`/api/admin/vendors/${vendorId}/verify`, "POST", { verified: !verified });
+    const r = await adminFetch(`/api/admin/vendors/${vendorId}/verify`, "POST", { verified: next, reason: reason || undefined });
     setVerifyBusy(false);
     if (!r.ok) {
+      if (r.status === 400) return r.error;
+      setDialog(null);
       setMessage({ kind: "error", text: r.status === 409 ? `${r.error} The page has been refreshed.` : r.error });
       if (r.status === 409) router.refresh();
+      return null;
+    }
+    setDialog(null);
+    setMessage({
+      kind: "ok",
+      text: next ? "Verified badge added to the public profile." : "Verified badge removed. The vendor has been told.",
+    });
+    router.refresh();
+    return null;
+  }
+
+  function toggleVerified() {
+    if (!verified) {
+      void setVerified(true);
       return;
     }
-    setMessage({ kind: "ok", text: verified ? "Verified badge removed." : "Verified badge added to the public profile." });
-    router.refresh();
+    // QA-107: removing the badge is visible to the vendor, so confirm it first
+    // and let the admin say why (optional; it is sent to the vendor).
+    setMessage(null);
+    setDialog({
+      title: "Remove the Verified badge?",
+      description: `The badge will no longer show on ${name}'s public profile. The vendor is notified, with your note if you add one.`,
+      confirmLabel: "Remove badge",
+      danger: true,
+      required: false,
+      label: "Note to the vendor (optional)",
+      onConfirm: (reason) => setVerified(false, reason),
+    });
   }
 
   const sorted = ORDER.filter((a) => actions.includes(a));

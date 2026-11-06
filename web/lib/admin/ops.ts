@@ -261,12 +261,17 @@ export async function searchUsers(f: UserListFilters): Promise<Paged<UserListRow
   if (f.q) {
     const like = add(`%${likeEscape(f.q.toLowerCase())}%`);
     const parts = [`lower(u.name) LIKE ${like}`, `lower(u.email) LIKE ${like}`];
-    const digits = f.q.replace(/\D/g, "");
+    // QA-106: a plain local number ("09847011122") is stored as +919847011122,
+    // so drop a leading trunk 0 before the substring match.
+    let digits = f.q.replace(/\D/g, "");
+    if (digits.length === 11 && digits.startsWith("0")) digits = digits.slice(1);
     if (digits.length >= 4) {
       const d = add(`%${digits}%`);
       parts.push(`u.phone_e164 LIKE ${d}`, `regexp_replace(COALESCE(v.phone, ''), '\\D', '', 'g') LIKE ${d}`);
     }
-    if (/^\d+$/.test(f.q)) parts.push(`u.id = ${add(Number(f.q))}`);
+    // QA-106: users.id is int4. A longer digit string (a phone number) would
+    // overflow it and Postgres throws, so only match the id when it fits.
+    if (/^\d+$/.test(f.q.trim()) && Number(f.q.trim()) <= 2147483647) parts.push(`u.id = ${add(Number(f.q.trim()))}`);
     where.push(`(${parts.join(" OR ")})`);
   }
   if (f.role) where.push(`u.role = ${add(f.role)}`);
@@ -537,13 +542,16 @@ export async function applyUserAction(params: {
           listing = { id: prev.id, from: "suspended", to: prev.from, eventId: ev.rows[0].id };
         }
       }
+      // QA-108: say what the listing actually went back to (it is only live
+      // again if it was live before) and link a vendor to their workspace.
       await notify(
         client,
         targetId,
         "account.unsuspended",
         "Your account is active again",
-        listing ? "Your listing has been restored." : null,
-        null
+        listing ? reinstatedListingCopy(listing.to) : null,
+        listing || user.role === "vendor" ? "/vendor" : null,
+        listing ? { vendorId: listing.id } : undefined
       );
       const after = { status: "active", session_version: user.session_version, listing };
       await audit(client, { actorId, action: "user.unsuspend", entityType: "user", entityId: targetId, before, after, reason, ip });
@@ -556,6 +564,24 @@ export async function applyUserAction(params: {
       throw new HttpError(409, "Someone else changed this account at the same time. Reload and try again.", "CONFLICT");
     }
     throw err;
+  }
+}
+
+/** QA-108: the reinstate notification's body for the status the listing went back to. */
+export function reinstatedListingCopy(status: string): string {
+  switch (status) {
+    case "approved":
+      return "Your listing is live again on Vela.";
+    case "changes_requested":
+      return "Your listing is back, but it is not live yet: it still needs the changes our team asked for. Open your workspace to see the note.";
+    case "pending":
+      return "Your listing is back in the review queue. We'll let you know when it is approved.";
+    case "rejected":
+      return "Your listing is back, but it is still not approved. Open your workspace to see why.";
+    case "draft":
+      return "Your listing is back as a draft. Finish it and submit it for review when you're ready.";
+    default:
+      return "Your listing is back. Open your workspace to see its status.";
   }
 }
 
@@ -849,7 +875,7 @@ export async function listAudit(f: AuditFilters): Promise<Paged<AuditRow>> {
   if (f.entityType) where.push(`a.entity_type = ${add(f.entityType)}`);
   if (f.entityId) where.push(`a.entity_id = ${add(f.entityId)}`);
   if (f.actor) {
-    if (/^\d+$/.test(f.actor)) where.push(`a.actor_id = ${add(Number(f.actor))}`);
+    if (/^\d{1,9}$/.test(f.actor)) where.push(`a.actor_id = ${add(Number(f.actor))}`);
     else {
       const like = add(`%${likeEscape(f.actor.toLowerCase())}%`);
       where.push(`(lower(u.email) LIKE ${like} OR lower(u.name) LIKE ${like})`);

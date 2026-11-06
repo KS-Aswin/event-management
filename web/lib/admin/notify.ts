@@ -11,6 +11,7 @@ export type NotificationKind =
   | "vendor.suspended"
   | "vendor.unsuspended"
   | "vendor.verified"
+  | "vendor.unverified"
   | "vendor.edited"
   | "vendor.claimed"
   | "media.approved"
@@ -23,6 +24,7 @@ export type NotificationKind =
   | "document.verified"
   | "document.rejected"
   | "account.suspended"
+  | "account.unsuspended"
   | (string & {});
 
 export interface NotificationPayload {

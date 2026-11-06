@@ -152,7 +152,9 @@ function listWhere(f: VendorListFilters, values: unknown[]): string[] {
     values.push(`%${escapeLike(q)}%`);
     const like = `$${values.length}`;
     parts.push(`v.name ILIKE ${like}`, `v.legal_name ILIKE ${like}`, `u.email ILIKE ${like}`);
-    const digits = q.replace(/\D/g, "");
+    let digits = q.replace(/\D/g, "");
+    // QA-106: a local number typed with its trunk 0 still finds +91 numbers.
+    if (digits.length === 11 && digits.startsWith("0")) digits = digits.slice(1);
     if (digits.length >= 5) {
       values.push(`%${digits}%`);
       const d = `$${values.length}`;
@@ -639,7 +641,13 @@ export async function decideVendor(input: DecisionInput) {
 // Verified badge
 // ---------------------------------------------------------------------------
 
-export async function setVendorVerified(actorId: number, vendorId: number, verified: boolean, ip?: string | null) {
+export async function setVendorVerified(
+  actorId: number,
+  vendorId: number,
+  verified: boolean,
+  ip?: string | null,
+  reason?: string | null
+) {
   return withTransaction(async (client) => {
     const v = await lockVendor(client, vendorId);
     const isVerified = !!v.verified_at;
@@ -661,6 +669,19 @@ export async function setVendorVerified(actorId: number, vendorId: number, verif
     const after = upd.rows[0];
     if (verified) {
       await notify(client, v.owner_id, "vendor.verified", "You're now a Verified business", "The Verified badge now shows on your public profile.", "/vendor", { vendorId });
+    } else {
+      // QA-107: removing the badge tells the vendor too, with the admin's note if any.
+      await notify(
+        client,
+        v.owner_id,
+        "vendor.unverified",
+        "The Verified badge was removed",
+        reason
+          ? `The Verified badge no longer shows on your public profile. Note from the Vela team: ${reason}`
+          : "The Verified badge no longer shows on your public profile. Contact support if you have questions.",
+        "/vendor",
+        { vendorId }
+      );
     }
     await audit(client, {
       actorId,
@@ -669,6 +690,7 @@ export async function setVendorVerified(actorId: number, vendorId: number, verif
       entityId: vendorId,
       before: { verified_at: v.verified_at ?? null },
       after: { verified_at: after.verified_at ?? null },
+      reason: reason ?? null,
       ip,
     });
     return after;
