@@ -110,14 +110,20 @@ export default function AreasForm({
             <p className="text-body mt-1">
               <span className="font-medium">{home.name}</span>
               <span className="text-ink-soft"> is always included, with no travel fee. </span>
-              <Link href="/vendor/profile#location" className="text-accent font-medium hover:underline underline-offset-2">
+              <Link
+                href="/vendor/profile#location"
+                className="inline-flex items-center min-h-11 align-middle text-accent font-medium underline underline-offset-2 hover:text-accent-hover"
+              >
                 Change
               </Link>
             </p>
           ) : (
             <p className="text-body mt-1 text-ink-soft">
               You haven&apos;t set a home district yet.{" "}
-              <Link href="/vendor/profile#location" className="text-accent font-medium hover:underline underline-offset-2">
+              <Link
+                href="/vendor/profile#location"
+                className="inline-flex items-center min-h-11 align-middle text-accent font-medium underline underline-offset-2 hover:text-accent-hover"
+              >
                 Set it in your profile
               </Link>
             </p>
