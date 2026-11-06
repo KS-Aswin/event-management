@@ -1,0 +1,17 @@
+# Files the Vercel CLI must not upload (npm run deploy). Secrets stay local;
+# Vercel installs dependencies and builds itself.
+.env*
+!.env.example
+!.env.deploy.example
+node_modules
+uploads
+.next
+.next-*
+test-results*
+playwright-report
+tests
+e2e
+skills-lock.json
+.claude
+.agents
+*.tsbuildinfo

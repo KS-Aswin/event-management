@@ -168,7 +168,7 @@ export async function createOwnDocument(input: {
   data: Uint8Array;
 }): Promise<VendorDocument> {
   if (input.data.byteLength === 0) throw new HttpError(400, "The file is empty.", "VALIDATION");
-  if (input.data.byteLength > MAX_DOC_BYTES) throw new HttpError(413, "The file is larger than 10 MB.", "TOO_LARGE");
+  if (input.data.byteLength > MAX_DOC_BYTES) throw new HttpError(413, "The file is larger than 4 MB.", "TOO_LARGE");
   const kind = sniffDocument(input.data);
   if (!kind) throw new HttpError(415, "Upload a PDF, JPEG or PNG file.", "UNSUPPORTED_TYPE");
 

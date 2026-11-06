@@ -17,6 +17,12 @@ import readline from "node:readline";
 import { Writable } from "node:stream";
 import bcrypt from "bcryptjs";
 import pg from "pg";
+import { pgSettings } from "../lib/pg-config.ts";
+// SSL for remote databases, sslmode/pgbouncer URL params handled (lib/pg-config.ts).
+const clientSettings = (url) => {
+  const { connectionString, ssl, connectionTimeoutMillis } = pgSettings(url, { serverless: false });
+  return { connectionString, ssl, connectionTimeoutMillis };
+};
 
 const SALT_ROUNDS = 10; // same as lib/password.ts
 const MIN_PASSWORD = 12;
@@ -108,7 +114,7 @@ if (!isLocalDb(connectionString) && !args.allowRemote) {
   process.exit(1);
 }
 
-const client = new pg.Client({ connectionString });
+const client = new pg.Client(clientSettings(connectionString));
 let exitCode = 0;
 try {
   await client.connect();

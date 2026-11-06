@@ -1,11 +1,12 @@
-import { getStorage, isPrivateKey, isSafeKey } from "@/lib/storage";
+import { currentStorageDriver, getStorage, isPrivateKey, isSafeKey } from "@/lib/storage";
 import { pool } from "@/lib/db";
 import { getLiveSession } from "@/app/api/_lib/auth";
 
-// Serves stored media for the local driver (docs/PRODUCT_PLAN.md 4.4):
+// Serves stored media (docs/PRODUCT_PLAN.md 4.4). Local driver:
 // correct Content-Type, immutable caching (keys are content-unique),
 // HTTP Range for MP4 seeking, traversal -> 400, private/ -> 404, and media
 // that isn't approved yet -> 404 for everyone but its vendor and admins.
+// Remote drivers get the same access rules, then a redirect (see serve()).
 
 export const dynamic = "force-dynamic";
 
@@ -44,25 +45,28 @@ const ASSET_KEY = /^(vendors\/\d+\/[0-9a-f-]{36})\/([^/]+)$/i;
  * upload.bin) is only served to the owning vendor or an admin, uncached.
  * Keys outside vendors/<id>/<uuid>/ (none today) stay public.
  */
-async function accessFor(key: string): Promise<"public" | "private" | "deny"> {
+type Access = { access: "public" | "private" | "deny"; driver: string | null };
+
+async function accessFor(key: string): Promise<Access> {
   const m = ASSET_KEY.exec(key);
-  if (!m) return "public";
+  if (!m) return { access: "public", driver: null };
   const [, base, file] = m;
-  const { rows } = await pool.query<{ status: string; owner_id: number | null }>(
-    `SELECT m.status, v.owner_id
+  const { rows } = await pool.query<{ status: string; owner_id: number | null; storage_driver: string | null }>(
+    `SELECT m.status, v.owner_id, m.storage_driver
        FROM media_assets m JOIN vendors v ON v.id = m.vendor_id
       WHERE m.storage_key = $1
       LIMIT 1`,
     [base]
   );
   const row = rows[0];
-  if (!row) return "deny";
-  if (row.status === "approved" && file !== "upload.bin") return "public";
+  if (!row) return { access: "deny", driver: null };
+  const driver = row.storage_driver;
+  if (row.status === "approved" && file !== "upload.bin") return { access: "public", driver };
   const session = await getLiveSession();
-  if (!session) return "deny";
-  if (session.role === "admin") return "private";
-  if (session.role === "vendor" && row.owner_id === session.userId) return "private";
-  return "deny";
+  if (!session) return { access: "deny", driver };
+  if (session.role === "admin") return { access: "private", driver };
+  if (session.role === "vendor" && row.owner_id === session.userId) return { access: "private", driver };
+  return { access: "deny", driver };
 }
 
 /** Parses a single "bytes=a-b" range. Returns "invalid" when unsatisfiable, null when absent/ignored. */
@@ -94,10 +98,33 @@ async function serve(request: Request, { params }: Ctx, headOnly: boolean) {
   const key = keyFromSegments(segments ?? []);
   if (!key) return plain(400, "Bad request");
   if (isPrivateKey(key)) return plain(404, "Not found");
-  const access = await accessFor(key);
+  const { access, driver } = await accessFor(key);
   if (access === "deny") return plain(404, "Not found");
 
-  const storage = getStorage("local");
+  const storage = getStorage(driver && driver !== "url" ? driver : currentStorageDriver());
+
+  // Remote drivers (supabase, s3, r2): never proxy the bytes (serverless
+  // response limits, cost). Approved media redirects to the bucket's public
+  // URL; private media to a short-lived signed URL that is never cached.
+  if (storage.driver !== "local") {
+    const direct = access === "public" ? storage.directUrl?.(key) : null;
+    if (direct) {
+      return new Response(null, {
+        status: 302,
+        headers: { Location: direct, "Cache-Control": "public, max-age=3600" },
+      });
+    }
+    if (!storage.signedUrl) return plain(404, "Not found");
+    const signed = await storage.signedUrl(key, 300, key.endsWith("/upload.bin") ? { download: "" } : undefined);
+    return new Response(null, {
+      status: 302,
+      headers: {
+        Location: signed,
+        "Cache-Control": access === "public" ? "public, max-age=240" : "private, no-store",
+      },
+    });
+  }
+
   const info = await storage.head(key);
   if (!info) return plain(404, "Not found");
 

@@ -458,7 +458,9 @@ export interface ClientAsset {
   createdAt: string;
 }
 
-export function assetUrls(row: Pick<MediaAssetRow, "storage_driver" | "storage_key" | "variants">): ClientAsset["urls"] {
+export function assetUrls(
+  row: Pick<MediaAssetRow, "storage_driver" | "storage_key" | "variants"> & { status?: string | null }
+): ClientAsset["urls"] {
   const urls: ClientAsset["urls"] = {};
   if (!row.storage_driver) return urls;
   // Legacy portfolio rows copied by migration 004: storage_key is a plain URL.
@@ -476,7 +478,11 @@ export function assetUrls(row: Pick<MediaAssetRow, "storage_driver" | "storage_k
   const variants = row.variants ?? {};
   for (const name of ["thumb", "card", "full", "video", "source"] as const) {
     const v = variants[name];
-    if (v?.key && isSafeKey(v.key)) urls[name] = storage.publicUrl(v.key);
+    if (!v?.key || !isSafeKey(v.key)) continue;
+    // Approved media on a remote driver: load straight from the bucket's CDN
+    // (the /media route would only redirect there). Everything else goes
+    // through /media, which applies the review rules.
+    urls[name] = (row.status === "approved" && storage.directUrl?.(v.key)) || storage.publicUrl(v.key);
   }
   // Legacy local rows without variants: the key is the file itself.
   if (!urls.full && !urls.video && Object.keys(variants).length === 0 && row.storage_key && isSafeKey(row.storage_key)) {

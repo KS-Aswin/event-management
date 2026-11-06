@@ -1,12 +1,11 @@
 import type { MetadataRoute } from "next";
 import { findTaxonomy, findVendors } from "@/lib/db";
+import { siteUrl } from "@/lib/site-url";
 
-// Regenerate at most hourly so new vendors appear without a rebuild.
-export const revalidate = 3600;
-
-function siteUrl() {
-  return (process.env.NEXT_PUBLIC_SITE_URL || "http://localhost:3000").replace(/\/$/, "");
-}
+// Rendered per request (not at build time), so it always uses the deployed
+// public URL (lib/site-url.ts) and the live vendor list; the build never needs
+// the database.
+export const dynamic = "force-dynamic";
 
 export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   const base = siteUrl();

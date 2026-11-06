@@ -1,4 +1,5 @@
 import { Pool, type PoolClient } from "pg";
+import { pgSettings } from "./pg-config";
 import { assertTransition, type EnquiryStatus } from "./enquiry-status";
 import { notifyStatusChange } from "./enquiry-notify";
 import { recordBooking, releaseBooking } from "./availability-booking";
@@ -28,13 +29,9 @@ function createPool() {
       "DATABASE_URL is not set. Copy .env.example to .env.local and fill it in."
     );
   }
-  const p = new Pool({
-    connectionString,
-    max: 10,
-    idleTimeoutMillis: 30_000,
-    // Fail fast when the database is unreachable instead of hanging requests.
-    connectionTimeoutMillis: 5_000,
-  });
+  // SSL for remote hosts, small pool + transaction-pooler-safe settings on
+  // serverless (lib/pg-config.ts). Timeouts fail fast instead of hanging requests.
+  const p = new Pool(pgSettings(connectionString));
   // An idle client losing its connection (DB restart, network blip) emits
   // 'error' on the pool; without a listener Node would crash the server.
   p.on("error", (err) => {
@@ -164,6 +161,8 @@ export interface VendorRecord {
   status_reason?: string | null;
   verified_at?: string | null;
   founding_vendor?: boolean;
+  /** Migration 013: sample listing created by db:seed:demo. */
+  is_demo?: boolean;
   logo_media_id?: number | null;
   cover_media_id?: number | null;
   rereview_required?: boolean;
@@ -453,7 +452,7 @@ export const PUBLIC_VENDOR_FIELDS = [
   // Migration 004: public business details (no contact numbers, GSTIN or address).
   "primary_category_id", "years_experience", "year_established", "team_size", "languages",
   "max_guests", "max_events_per_day", "travel_outside_kerala", "instagram_url", "youtube_url",
-  "website_url", "verified_at", "founding_vendor",
+  "website_url", "verified_at", "founding_vendor", "is_demo",
 ] as const;
 
 export function toPublicVendor(v: VendorRecord): Partial<VendorRecord> {

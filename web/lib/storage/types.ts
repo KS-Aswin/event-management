@@ -46,8 +46,19 @@ export interface StorageAdapter {
   delete(key: string): Promise<void>;
   /** Deletes every object under `prefix/` (used when an asset is removed). Idempotent. */
   deletePrefix(prefix: string): Promise<void>;
-  /** URL the browser can load. */
+  /**
+   * URL the browser can load. Always an app path (/media/<key>), so the
+   * /media route can apply the review rules (pending media stays private).
+   */
   publicUrl(key: string): string;
+  /**
+   * Remote drivers only: the bucket's own public URL for a key, used for media
+   * that is approved (public) so the browser loads it from the storage CDN.
+   * Never returned for private/ keys.
+   */
+  directUrl?(key: string): string | null;
+  /** Remote drivers only: a short-lived URL that lets the holder read one object. */
+  signedUrl?(key: string, expiresInSeconds: number, opts?: { download?: string }): Promise<string>;
   /** Optional direct-to-bucket uploads (S3/R2/Supabase). The local driver uses an /api URL instead. */
   createUploadUrl?(
     key: string,

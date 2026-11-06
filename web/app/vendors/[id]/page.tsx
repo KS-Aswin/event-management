@@ -24,6 +24,7 @@ import Gallery from "./gallery";
 import OfferingsSection from "./offerings";
 import VendorBeacon from "./vendor-beacon";
 import { loadProfileMedia, loadProfileOfferings } from "./profile-data";
+import { siteUrl } from "@/lib/site-url";
 
 const MAX_INT4 = 2147483647;
 
@@ -53,10 +54,6 @@ function canView(vendor: VendorRecord, session: SessionPayload | null) {
   if (isPublic(vendor)) return true;
   if (!session) return false;
   return vendor.owner_id === session.userId || session.role === "admin";
-}
-
-function siteUrl() {
-  return (process.env.NEXT_PUBLIC_SITE_URL || "http://localhost:3000").replace(/\/$/, "");
 }
 
 function WhatsappIcon({ className = "w-[18px] h-[18px]" }: { className?: string }) {
@@ -327,6 +324,12 @@ export default async function VendorProfilePage({
                     ? ` · ${vendor.experience} experience`
                     : ""}
               </p>
+              {vendor.is_demo ? (
+                <p className="mt-2.5 rounded-card bg-surface-muted px-3 py-2 text-sm text-ink-soft">
+                  <strong className="font-semibold text-foreground">Demo listing.</strong> A sample business that shows how
+                  Vela works. It isn&apos;t a real vendor, so don&apos;t book it.
+                </p>
+              ) : null}
               {vendor.verified_at || vendor.founding_vendor || languages.length ? (
                 <ul className="flex flex-wrap gap-1.5 mt-2.5" aria-label="Highlights">
                   {vendor.verified_at ? <li className="chip bg-accent-tint text-accent-hover">Verified business</li> : null}

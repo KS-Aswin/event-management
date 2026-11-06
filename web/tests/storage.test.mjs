@@ -122,7 +122,10 @@ await test("private/ keys are detected", () => {
 await test("unknown STORAGE_DRIVER fails fast with a clear error", () => {
   assert.throws(() => parseStorageDriver("dropbox"), /Unknown STORAGE_DRIVER "dropbox"/);
   assert.throws(() => getStorage("dropbox"), /Unknown STORAGE_DRIVER/);
-  assert.throws(() => getStorage("s3"), /not implemented yet/);
+  delete process.env.S3_ENDPOINT;
+  delete process.env.SUPABASE_URL;
+  assert.throws(() => getStorage("s3"), /STORAGE_DRIVER=s3 needs S3_ENDPOINT, S3_ACCESS_KEY_ID, S3_SECRET_ACCESS_KEY/);
+  assert.throws(() => getStorage("supabase"), /STORAGE_DRIVER=supabase needs SUPABASE_URL, SUPABASE_SECRET_KEY/);
   assert.equal(parseStorageDriver(undefined), "local");
   assert.equal(parseStorageDriver(" Local "), "local");
 });

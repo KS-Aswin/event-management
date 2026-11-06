@@ -838,7 +838,7 @@ Conventions:
 | POST | `/api/vendor/leads/[id]/messages` | thread message (P2) |
 | GET/PUT | `/api/vendor/availability?month=` | read the month / upsert or clear blocks (warns about pending leads on that date) (P2) |
 | POST | `/api/vendor/reviews/[id]/reply` | one public reply, editable for 7 days (P2) |
-| GET/POST/DELETE | `/api/vendor/documents[/id]` | private doc upload (PDF/JPEG/PNG ≤10 MB) (P1) |
+| GET/POST/DELETE | `/api/vendor/documents[/id]` | private doc upload (PDF/JPEG/PNG ≤4 MB) (P1) |
 | GET | `/api/vendor/insights?range=` | counts from `vendor_events` and `quote_requests` (P2) |
 
 Legacy `/api/vendors/[id]/services`, `/api/services/[id]` and the vendor PATCH on `/api/vendors/[id]` stay working as thin wrappers until P0 ships, then are removed in P0-14 cleanup.
@@ -1269,7 +1269,7 @@ AC: numbers match `vendor_events` and quotes fixtures, with a zero state.
 
 ### P3: Later (after income, or when an external account is approved)
 
-1. **P3-1 Production storage adapter** (R2 / S3-compatible, Supabase optional). **Required before the first production deploy.**
+1. [x] **P3-1 Production storage adapter** (R2 / S3-compatible, Supabase optional). **Required before the first production deploy.** _Done 2026-11-06 (prodready): `lib/storage/supabase.ts` (Supabase Storage HTTP API, plain fetch, public + private bucket) is the production driver; `lib/storage/s3.ts` (SigV4 via node:crypto, R2/MinIO/AWS/Supabase S3) is the alternative. Direct browser uploads through signed URLs, approved media from the bucket CDN, pending media and vendor documents through short-lived signed URLs after the usual access checks. Local driver refuses writes in production. Boot env check (`lib/env.ts`), pooler-safe Postgres settings with SSL (`lib/pg-config.ts`), `npm run deploy` (Vercel CLI), demo seed for an empty production DB (`is_demo`, migration 013) and docs/DEPLOY.md. Vendor documents capped at 4 MB (Vercel request limit)._
 2. **P3-2 Billing** (`005_billing.sql`, plans, `/pricing`, `/vendor/billing`, Razorpay test mode, webhooks).
 3. **P3-3 Lead unlock credits and contact masking.**
 4. **P3-4 Featured placements** and `/admin/revenue`.

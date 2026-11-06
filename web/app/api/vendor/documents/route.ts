@@ -25,7 +25,7 @@ export async function GET() {
 
 /**
  * POST /api/vendor/documents (multipart/form-data):
- *   file (PDF / JPEG / PNG, <= 10 MB, checked by magic bytes),
+ *   file (PDF / JPEG / PNG, <= 4 MB, checked by magic bytes),
  *   docType (gst | trade_licence | fssai | pan | other), number?, expiresAt? (YYYY-MM-DD)
  * -> 201 { document }
  */
@@ -35,7 +35,7 @@ export async function POST(request: Request) {
 
   const declared = Number(request.headers.get("content-length") || 0);
   if (declared > MAX_DOC_BYTES + 64 * 1024) {
-    return apiError(413, "The file is larger than 10 MB.", "TOO_LARGE", { field: "file" });
+    return apiError(413, "The file is larger than 4 MB.", "TOO_LARGE", { field: "file" });
   }
 
   let form: FormData;
@@ -54,7 +54,7 @@ export async function POST(request: Request) {
   if (expiresAt === "invalid") return apiError(400, "Enter a valid expiry date.", "VALIDATION", { field: "expiresAt" });
   const file = form.get("file");
   if (!file || typeof file === "string") return apiError(400, "Choose a file to upload.", "VALIDATION", { field: "file" });
-  if (file.size > MAX_DOC_BYTES) return apiError(413, "The file is larger than 10 MB.", "TOO_LARGE", { field: "file" });
+  if (file.size > MAX_DOC_BYTES) return apiError(413, "The file is larger than 4 MB.", "TOO_LARGE", { field: "file" });
 
   try {
     const data = new Uint8Array(await file.arrayBuffer());

@@ -45,7 +45,7 @@ export default function DocumentsManager({ initial }: { initial: VendorDocument[
   function pickFile(f: File | null) {
     setFile(f);
     setErrors((e) => ({ ...e, file: undefined }));
-    if (f && f.size > MAX_DOC_BYTES) setErrors((e) => ({ ...e, file: "This file is larger than 10 MB. Try a smaller scan." }));
+    if (f && f.size > MAX_DOC_BYTES) setErrors((e) => ({ ...e, file: "This file is larger than 4 MB. Try a smaller scan." }));
   }
 
   async function submit(e: React.FormEvent) {
@@ -54,7 +54,7 @@ export default function DocumentsManager({ initial }: { initial: VendorDocument[
     const next: FieldErrors = {};
     if (!docType) next.docType = "Choose what kind of document this is.";
     if (!file) next.file = "Choose a PDF, JPEG or PNG file.";
-    else if (file.size > MAX_DOC_BYTES) next.file = "This file is larger than 10 MB. Try a smaller scan.";
+    else if (file.size > MAX_DOC_BYTES) next.file = "This file is larger than 4 MB. Try a smaller scan.";
     setErrors(next);
     setFormError(null);
     setMessage(null);
@@ -122,7 +122,7 @@ export default function DocumentsManager({ initial }: { initial: VendorDocument[
         <h2 id={`${uid}-up`} className="text-title font-semibold">
           Upload a document
         </h2>
-        <p className="mt-1 text-caption text-ink-soft">PDF, JPEG or PNG, up to 10 MB. A clear phone photo is fine.</p>
+        <p className="mt-1 text-caption text-ink-soft">PDF, JPEG or PNG, up to 4 MB. A clear phone photo is fine.</p>
 
         <form onSubmit={submit} noValidate className="mt-4 space-y-4">
           <div>

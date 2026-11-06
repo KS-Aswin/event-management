@@ -36,7 +36,13 @@ import { existsSync, readFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import pg from "pg";
-import { allSeedVendors as vendors, reviewsByVendor, mediaPlan, fixtureSpecs, kolkaliOfferings } from "./seed-data.mjs";
+import { pgSettings, isLocalDatabase } from "../lib/pg-config.ts";
+// SSL for remote databases, sslmode/pgbouncer URL params handled (lib/pg-config.ts).
+const clientSettings = (url) => {
+  const { connectionString, ssl, connectionTimeoutMillis } = pgSettings(url, { serverless: false });
+  return { connectionString, ssl, connectionTimeoutMillis };
+};
+import { allSeedVendors, reviewsByVendor, mediaPlan, fixtureSpecs, kolkaliOfferings } from "./seed-data.mjs";
 import { ensureFixtures, FIXTURE_DIR } from "./fixtures/make-media.mjs";
 
 const WEB = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
@@ -67,7 +73,22 @@ if (!connectionString) {
 }
 
 const force = process.argv.includes("--force") || process.env.SEED_CONFIRM === "1";
-const client = new pg.Client({ connectionString });
+// --demo (npm run db:seed:demo): for an EMPTY production database. Only the
+// approved sample vendors, flagged is_demo (labelled "Demo listing" in the
+// app), no contact numbers, and none of the admin-queue fixtures (pending
+// listings, reports, spam enquiries). Refuses any database that already has
+// vendors, enquiries, reviews, favourites or non-admin users; --force does
+// not override that.
+const demo = process.argv.includes("--demo");
+if (!demo && !isLocalDatabase(connectionString) && !force) {
+  console.error(
+    "✗ db:seed wipes vendor data and adds admin-queue test fixtures; it only runs on a local database.\n" +
+      "  For a fresh production database use the demo seed: npm run db:seed:demo:deploy (see docs/DEPLOY.md)."
+  );
+  process.exit(1);
+}
+const vendors = demo ? allSeedVendors.filter((v) => !v.status || v.status === "approved") : allSeedVendors;
+const client = new pg.Client(clientSettings(connectionString));
 
 // Sample contact numbers (not real), one per vendor.
 const phoneFor = (i) => `+9198950${String(10001 + i).padStart(5, "0")}`;
@@ -77,7 +98,24 @@ try {
 
   // Guard: never silently wipe data the seed did not create.
   const { rows: [db] } = await client.query("SELECT current_database() AS name");
-  if (!force && !db.name.endsWith("_test")) {
+  if (demo) {
+    const { rows: [c] } = await client.query(
+      `SELECT (SELECT count(*) FROM vendors)::int AS vendors,
+              (SELECT count(*) FROM quote_requests)::int AS quotes,
+              (SELECT count(*) FROM vendor_reviews)::int AS reviews,
+              (SELECT count(*) FROM favorites)::int AS favorites,
+              (SELECT count(*) FROM users WHERE role <> 'admin')::int AS users`
+    );
+    if (c.vendors + c.quotes + c.reviews + c.favorites + c.users > 0) {
+      console.error(
+        `✗ Refusing the demo seed on "${db.name}": it is not empty ` +
+          `(${c.vendors} vendors, ${c.quotes} enquiries, ${c.reviews} reviews, ${c.favorites} favourites, ${c.users} non-admin users).\n` +
+          "  The demo seed only runs on a fresh database (admins are allowed). Nothing was changed."
+      );
+      await client.end();
+      process.exit(1);
+    }
+  } else if (!force && !db.name.endsWith("_test")) {
     const { rows: [c] } = await client.query(
       `SELECT
          (SELECT count(*) FROM vendors WHERE owner_id IS NOT NULL OR NOT (name = ANY($1::text[])))::int AS vendors,
@@ -141,7 +179,8 @@ try {
     const v = vendors[i];
     const primaryId = need(cats, v.category, "category");
     const districtId = need(districts, v.district, "district");
-    const phone = phoneFor(i);
+    // Demo listings get no phone: the sample numbers could belong to real people.
+    const phone = demo ? null : phoneFor(i);
     const { rows: [{ id: vendorId }] } = await client.query(
       `INSERT INTO vendors (name, category, location, price, price_label, rating, reviews_count, experience, tags, about,
                             vendor_type, district_id, status, phone, whatsapp, primary_category_id, legal_name,
@@ -297,8 +336,11 @@ try {
     }
   }
 
-  // ---- Admin queue fixtures (P1) ----------------------------------------
   const idOf = async (name) => (await client.query("SELECT id FROM vendors WHERE name = $1", [name])).rows[0].id;
+  if (demo) await client.query("UPDATE vendors SET is_demo = true");
+
+  // ---- Admin queue fixtures (P1; not in --demo) ---------------------------
+  if (!demo) {
   const { normaliseCustomName } = await tsImport("lib/offering-validation.ts");
 
   // Status history for the non-approved listings (vendor-visible timeline).
@@ -392,6 +434,8 @@ try {
     );
   }
 
+  } // end admin queue fixtures
+
   // ---- Search demo data (P2-7) ------------------------------------------
   // The event company sells candid photography on its own as well as its
   // package-only partner photography, so "Photography, Ernakulam" in the
@@ -416,7 +460,8 @@ try {
   );
 
   // A few verified businesses (admin-verified documents in a real listing).
-  await client.query(
+  // Not for demo listings: "Verified business" must only mean a real check.
+  if (!demo) await client.query(
     `UPDATE vendors SET verified_at = now() - interval '30 days'
       WHERE name IN ('Backwater Grand Palace', 'Malabar Spice Caterers', 'Kerala Celebrations Co.', 'Studio Frames by Arun')`
   );
@@ -462,7 +507,7 @@ try {
 
   await client.query("COMMIT");
   console.log(
-    `✓ Seeded ${vendors.length} vendors with ${offeringCount} offerings/packages/add-ons, ${mediaCount} media items (${driver} storage) and reviews.`
+    `✓ Seeded ${vendors.length} ${demo ? "DEMO " : ""}vendors with ${offeringCount} offerings/packages/add-ons, ${mediaCount} media items (${driver} storage) and reviews.`
   );
 } catch (err) {
   await client.query("ROLLBACK").catch(() => {});

@@ -60,7 +60,7 @@ Prisma needs to download a native query-engine binary from `binaries.prisma.sh` 
 
 Vendor photos and videos are stored through a `StorageAdapter` (`lib/storage/`). Locally the `local` driver writes to `web/uploads/` (git-ignored) and the app serves files at `/media/<key>`. Optional env vars:
 
-- `STORAGE_DRIVER` — `local` (default). `s3`, `r2` and `supabase` are reserved and fail at startup until implemented (P3).
+- `STORAGE_DRIVER` — `local` (default, development only), `supabase` (Supabase Storage over its HTTP API) or `s3`/`r2` (any S3-compatible API: Cloudflare R2, MinIO, AWS). Production refuses `local` (Vercel's disk is read-only). The remote drivers' settings are in [docs/DEPLOY.md](../docs/DEPLOY.md); missing ones stop the server at startup with a list.
 - `UPLOADS_DIR` (or `STORAGE_LOCAL_ROOT`) — another folder for local uploads.
 - `MEDIA_VIDEO_UPLOADS` — `true`/`false`; MP4 uploads are on by default except in production.
 - `BILLING_ENABLED` — leave unset; until billing ships every vendor gets the Pro media limits.
@@ -85,6 +85,12 @@ For a new account the password comes from the `ADMIN_PASSWORD` environment varia
 
 The `/admin` pages are a plain 404 for anyone who is not a live admin. `/api/admin/*` answers 401 when signed out and 403 for customers, vendors and suspended accounts (`requireAdmin()` in each handler). Every admin change writes one row to the append-only `admin_audit_log` in the same transaction.
 
+### Deploying (free tier)
+
+Vercel Hobby + a Supabase free project: see [docs/DEPLOY.md](../docs/DEPLOY.md). In short, fill `web/.env.deploy.local` from `.env.deploy.example`, `npx vercel login`, then `npm run deploy` (checks the env file, creates the buckets, migrates, pushes the env vars with `vercel env` and runs `vercel deploy --prod`). `npm run db:migrate:deploy`, `npm run admin:create:deploy` and `npm run db:seed:demo:deploy` (sample vendors marked "Demo listing", empty databases only) run against the same file.
+
+At startup the server checks its environment (`instrumentation.ts` → `lib/env.ts`) and refuses to start with one message listing every missing variable. Postgres settings (SSL for remote hosts, small pool and transaction-pooler-safe settings on Vercel) are in `lib/pg-config.ts`.
+
 ### Production build (local check)
 
 ```bash
@@ -92,7 +98,7 @@ npm run build
 npm run start            # serves the build on http://localhost:3000 (add -- -p <port> to change it)
 ```
 
-`npm run lint` and `npm run typecheck` should both pass (lint currently reports one warning, no errors). In production (`NODE_ENV=production`) the session cookie is marked `Secure` and an HSTS header is sent, so serve the site over HTTPS.
+`npm run lint` and `npm run typecheck` should both pass (lint currently reports one warning, no errors). `next start` refuses the local storage driver unless you add `STORAGE_ALLOW_LOCAL=1` (for a production-mode check on your PC). In production (`NODE_ENV=production`) the session cookie is marked `Secure` and an HSTS header is sent, so serve the site over HTTPS.
 
 ## What's built so far
 

@@ -4,15 +4,11 @@ import { getSession } from "@/lib/session";
 import Header from "./header";
 import Footer from "./footer";
 import CustomerTabBar from "./_nav/customer-tab-bar";
+import { siteUrl } from "@/lib/site-url";
 
 const SITE_NAME = "Vela";
 const SITE_DESCRIPTION =
   "Kerala's marketplace for weddings & events: find, compare and request quotes from local vendors.";
-// Public base URL for canonical/OG/JSON-LD links. Set NEXT_PUBLIC_SITE_URL in production.
-function siteUrl() {
-  return (process.env.NEXT_PUBLIC_SITE_URL || "http://localhost:3000").replace(/\/$/, "");
-}
-
 export const metadata: Metadata = {
   metadataBase: new URL(siteUrl()),
   title: {

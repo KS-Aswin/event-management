@@ -22,7 +22,15 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
   try {
     const ref = await getDocumentFile(id);
     if (!ref) return plain(404, "Not found");
-    const obj = await getStorage(ref.driver).get(ref.key);
+    const storage = getStorage(ref.driver);
+    if (storage.signedUrl) {
+      // Remote drivers: a 60-second signed link to the private bucket, so a
+      // document never passes through a serverless function.
+      if (!(await storage.head(ref.key))) return plain(404, "File missing");
+      const url = await storage.signedUrl(ref.key, 60);
+      return new Response(null, { status: 302, headers: { ...HEADERS, Location: url } });
+    }
+    const obj = await storage.get(ref.key);
     if (!obj) return plain(404, "File missing");
     const ext = ref.mime === "application/pdf" ? "pdf" : ref.mime === "image/png" ? "png" : "jpg";
     const body = obj.body instanceof ReadableStream ? obj.body : new Uint8Array(obj.body);

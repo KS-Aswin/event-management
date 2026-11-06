@@ -44,7 +44,9 @@ export const DOC_STATUS_CLASS: Record<DocDisplayStatus, string> = {
   expired: "bg-danger-tint text-danger",
 };
 
-export const MAX_DOC_BYTES = 10 * 1024 * 1024;
+// 4 MB: Vercel functions reject request bodies over 4.5 MB, and the file is
+// posted through /api/vendor/documents (docs/DEPLOY.md, limits).
+export const MAX_DOC_BYTES = 4 * 1024 * 1024;
 export const DOC_ACCEPT = "application/pdf,image/jpeg,image/png,.pdf,.jpg,.jpeg,.png";
 
 /** Admin queue tabs. */

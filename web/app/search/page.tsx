@@ -204,7 +204,7 @@ export default async function SearchPage({ searchParams }: { searchParams: Promi
         <div className="text-[13px] sm:text-sm text-ink-soft mt-0.5 line-clamp-2">
           {v.category} · {v.location} · {v.experience} experience
         </div>
-        <Badges verified={!!v.verified_at} featured={!!v.featured} />
+        <Badges verified={!!v.verified_at} featured={!!v.featured} demo={!!v.is_demo} />
         <Rating rating={v.rating} count={v.reviews_count} />
         {v.tags.length > 0 && (
           <div className="hidden sm:flex gap-1.5 flex-wrap mt-2.5">
@@ -445,10 +445,11 @@ function Rating({ rating, count }: { rating: string; count: number }) {
   );
 }
 
-function Badges({ verified, featured }: { verified: boolean; featured: boolean }) {
-  if (!verified && !featured) return null;
+function Badges({ verified, featured, demo = false }: { verified: boolean; featured: boolean; demo?: boolean }) {
+  if (!verified && !featured && !demo) return null;
   return (
     <div className="flex gap-1.5 flex-wrap mt-1.5">
+      {demo && <span className="chip">Demo listing</span>}
       {featured && <span className="chip bg-[#fbf3dc] text-gold-ink">Featured</span>}
       {verified && (
         <span className="chip bg-accent-tint text-accent-hover">

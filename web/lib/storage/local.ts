@@ -14,28 +14,30 @@ import {
 
 /** Default uploads root: web/uploads (git-ignored, outside public/). */
 export function defaultUploadsRoot(): string {
+  // turbopackIgnore: the uploads folder is runtime data, not code; without it
+  // Turbopack traces the whole project into the server bundle.
   return path.resolve(
-    process.env.UPLOADS_DIR || process.env.STORAGE_LOCAL_ROOT || path.join(process.cwd(), "uploads")
+    /*turbopackIgnore: true*/ process.env.UPLOADS_DIR || process.env.STORAGE_LOCAL_ROOT || path.join(process.cwd(), "uploads")
   );
 }
 
 /**
  * Local-disk driver for development (docs/PRODUCT_PLAN.md 4.4). Files live
  * under the uploads root and are served by app/media/[...key]/route.ts.
- * Not suitable for Vercel (ephemeral filesystem): S3/Supabase drivers come in P3.
+ * Not for Vercel (read-only filesystem): use the supabase or s3 driver there.
  */
 export class LocalDiskAdapter implements StorageAdapter {
   readonly driver = "local" as const;
   readonly root: string;
 
   constructor(root?: string) {
-    this.root = path.resolve(root ?? defaultUploadsRoot());
+    this.root = path.resolve(/*turbopackIgnore: true*/ root ?? defaultUploadsRoot());
   }
 
   /** Absolute path for a key; throws for keys that could escape the root. */
   resolvePath(key: string): string {
     assertSafeKey(key);
-    const full = path.resolve(this.root, ...key.split("/"));
+    const full = path.resolve(/*turbopackIgnore: true*/ this.root, ...key.split("/"));
     const rel = path.relative(this.root, full);
     if (!rel || rel.startsWith("..") || path.isAbsolute(rel)) {
       throw new Error("Storage key resolves outside the uploads root.");
@@ -48,6 +50,10 @@ export class LocalDiskAdapter implements StorageAdapter {
     body: Buffer | Uint8Array,
     opts: { contentType: string; cacheControl?: string }
   ): Promise<StoredObject> {
+    // Vercel (and most serverless hosts) have a read-only, ephemeral disk.
+    if (process.env.NODE_ENV === "production" && (process.env.VERCEL || process.env.STORAGE_ALLOW_LOCAL !== "1")) {
+      throw new Error("The local storage driver does not write in production. Set STORAGE_DRIVER=supabase, s3 or r2.");
+    }
     const file = this.resolvePath(key);
     await mkdir(path.dirname(file), { recursive: true });
     // Write to a temp file then rename, so a reader never sees a half file.
