@@ -81,7 +81,7 @@ test.describe("qa4 vendor findings", () => {
     await expect(page.getByText("qa4 Wedding day full cover").first()).toBeVisible();
 
     await page.goto("/vendor/offerings");
-    const card = page.locator("main li, main article, main div").filter({ hasText: /^Candid photography/ }).last();
+    const card = page.locator("main li").filter({ has: page.getByRole("link", { name: "Candid photography", exact: true }) });
     await card.getByRole("button", { name: "Delete" }).click();
     const dialog = page.getByRole("alertdialog").or(page.locator("dialog[open]"));
     // Expected: the confirm says the package will be hidden / changed.

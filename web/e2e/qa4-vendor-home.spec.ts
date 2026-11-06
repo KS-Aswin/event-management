@@ -73,7 +73,7 @@ test.describe("qa4 vendor home and notifications", () => {
 
   test("QA-096: notification titles and the areas Change link are 44 px tap targets at 390", async ({ page }, testInfo) => {
     test.skip(!isMobile(page), "phone tap targets");
-    await approvedVendor(page, runTag(testInfo));
+    await approvedVendor(page, `${runTag(testInfo)}t`); // its own vendor (QA4-V3 uses the plain tag)
 
     await page.goto("/vendor");
     const title = page.getByTestId("vendor-notifications").getByRole("link", { name: /qa4 update 18/ });
