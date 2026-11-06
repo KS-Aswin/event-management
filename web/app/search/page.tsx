@@ -217,7 +217,7 @@ export default async function SearchPage({ searchParams }: { searchParams: Promi
             </Link>
           </h2>
           <div className="relative z-10 shrink-0">
-            <FavoriteButton vendorId={v.id} initialFavorited={favoriteIds.has(v.id)} loggedIn={!!session} size="sm" />
+            <FavoriteButton vendorId={v.id} vendorName={v.name} initialFavorited={favoriteIds.has(v.id)} loggedIn={!!session} size="sm" />
           </div>
         </div>
         <div className="text-[13px] sm:text-sm text-ink-soft mt-0.5 line-clamp-2">
@@ -272,7 +272,7 @@ export default async function SearchPage({ searchParams }: { searchParams: Promi
               </Link>
             </h2>
             <div className="relative z-10 shrink-0">
-              <FavoriteButton vendorId={o.vendor.id} initialFavorited={favoriteIds.has(o.vendor.id)} loggedIn={!!session} size="sm" />
+              <FavoriteButton vendorId={o.vendor.id} vendorName={o.vendor.name} initialFavorited={favoriteIds.has(o.vendor.id)} loggedIn={!!session} size="sm" />
             </div>
           </div>
           <div className="text-[13px] sm:text-sm text-ink-soft mt-0.5">

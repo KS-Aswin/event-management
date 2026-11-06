@@ -15,11 +15,15 @@ import {
 // merged into the account after login by app/_nav/shortlist-merge.tsx.
 export default function FavoriteButton({
   vendorId,
+  vendorName,
   initialFavorited,
   loggedIn,
   size = "md",
 }: {
   vendorId: number;
+  /** Names the vendor in the button's label, so a page of cards (/search) has
+   *  distinct button names (QA-102). Optional on a single-vendor page. */
+  vendorName?: string;
   initialFavorited: boolean;
   loggedIn: boolean;
   size?: "sm" | "md";
@@ -81,7 +85,15 @@ export default function FavoriteButton({
         onClick={toggle}
         disabled={loading}
         aria-pressed={favorited}
-        aria-label={favorited ? "Remove from shortlist" : "Save to shortlist"}
+        aria-label={
+          vendorName
+            ? favorited
+              ? `Remove ${vendorName} from shortlist`
+              : `Save ${vendorName} to shortlist`
+            : favorited
+              ? "Remove from shortlist"
+              : "Save to shortlist"
+        }
         className="group shrink-0 -m-3 w-11 h-11 inline-flex items-center justify-center rounded-full hover:bg-surface-muted active:bg-line disabled:opacity-60 transition-colors"
       >
         <svg
