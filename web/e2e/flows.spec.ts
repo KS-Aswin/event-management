@@ -26,8 +26,8 @@ test.describe("vendor and customer journey", () => {
   });
 
   // Vendors land in the /vendor workspace. This journey creates the listing
-  // through the legacy one-form API (approved at once) so the customer half
-  // can find it; the onboarding wizard itself is covered in
+  // through the legacy one-form API (a draft since QA-004, approved here in the
+  // local DB) so the customer half can find it; the onboarding wizard itself is covered in
   // vendor-workspace.spec.ts.
   test("vendor signs up and lands in the workspace", async ({ page }) => {
     await signUp(page, "vendor", vendor);
@@ -59,6 +59,31 @@ test.describe("vendor and customer journey", () => {
     const body = await res.json();
     const id = body.vendor?.id ?? body.id;
     expect(typeof id).toBe("number");
+    // QA-004: the legacy listing starts as a non-public draft.
+    expect(body.status).toBe("draft");
+    expect((await page.request.get(`/vendors/${id}`)).status()).toBe(404);
+    // Approve it the way an admin review would (local DB only) so the customer
+    // half of this journey can find it.
+    const url = process.env.DATABASE_URL ?? "";
+    const host = (() => {
+      try {
+        return new URL(url).hostname;
+      } catch {
+        return "";
+      }
+    })();
+    if (!["localhost", "127.0.0.1", "::1", "[::1]"].includes(host)) throw new Error("needs a localhost DATABASE_URL");
+    const { default: pg } = await import("pg");
+    const client = new pg.Client({ connectionString: url });
+    await client.connect();
+    try {
+      await client.query(
+        "UPDATE vendors SET status = 'approved', submitted_at = now(), onboarding_completed_at = now() WHERE id = $1",
+        [id]
+      );
+    } finally {
+      await client.end();
+    }
     vendorPath = `/vendors/${id}`;
   });
 

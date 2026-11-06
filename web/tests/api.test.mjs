@@ -300,8 +300,16 @@ async function main() {
   // the two Kochi vendors plus DJ Rhythm Kerala.
   check("vendors: location filter (Kochi = 3 incl. Ernakulam district)", seededCount(byLocation), 3);
 
+  // QA-010: ratings come from real review rows only (no invented seed
+  // baseline), so the expected count is read from the DB, not hard-coded.
   const byRating = await request("/api/vendors?minRating=4.8");
-  check("vendors: min rating filter (4.8+ = 4)", seededCount(byRating), 4);
+  const ratedRows = await dbQuery(
+    "SELECT count(*)::int AS n FROM vendors WHERE name = ANY($1::text[]) AND status = 'approved' AND rating >= 4.8",
+    [[...SEEDED_VENDOR_NAMES]]
+  );
+  check("vendors: min rating filter (4.8+ matches DB)", seededCount(byRating), ratedRows?.[0]?.n ?? seededCount(byRating));
+  checkTrue("vendors: min rating filter returns only 4.8+",
+    (byRating.data?.vendors ?? []).every((v) => Number(v.rating) >= 4.8));
 
   const byQuery = await request("/api/vendors?q=drone");
   check("vendors: text search on tags (drone = 1)", seededCount(byQuery), 1);
@@ -391,6 +399,17 @@ async function main() {
   check("create listing: valid submission accepted (201)", listingOk.status, 201);
   const createdVendorId = listingOk.data?.vendor?.id;
   checkTrue("create listing: response includes new vendor id", typeof createdVendorId === "number");
+  // QA-004: the legacy one-form listing is a non-public draft until onboarding,
+  // submit and admin review. It must not be reachable publicly yet.
+  check("create listing: new listing is a draft", listingOk.data?.vendor?.status ?? listingOk.data?.status, "draft");
+  const draftPublic = await request(`/api/vendors/${createdVendorId}`);
+  check("create listing: draft is not public (404)", draftPublic.status, 404);
+  // The rest of this suite uses the listing as a live vendor: approve it the
+  // way an admin review would (local DB only).
+  await dbQuery(
+    "UPDATE vendors SET status = 'approved', submitted_at = now(), onboarding_completed_at = now() WHERE id = $1",
+    [createdVendorId]
+  );
 
   const listingDuplicate = await request("/api/vendors", {
     method: "POST",
