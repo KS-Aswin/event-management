@@ -55,6 +55,11 @@ export async function GET(request: Request) {
   });
 }
 
+/**
+ * Legacy one-form listing create (kept for API clients). Creates a DRAFT
+ * listing with one offering; it goes through the same onboarding ->
+ * submit -> admin review path as the wizard and is never public on create.
+ */
 export async function POST(request: Request) {
   const session = await getLiveSession();
   if (!session) {
@@ -113,5 +118,15 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "You already have a listing." }, { status: 409 });
   }
 
-  return NextResponse.json({ vendor }, { status: 201 });
+  // The listing starts as a draft (QA-004): it is not public until the vendor
+  // completes it in the onboarding wizard, submits it and an admin approves it.
+  return NextResponse.json(
+    {
+      vendor,
+      status: vendor.status,
+      next: "/vendor/onboarding",
+      message: "Listing saved as a draft. Add your photos and submit it for review to go live.",
+    },
+    { status: 201 }
+  );
 }

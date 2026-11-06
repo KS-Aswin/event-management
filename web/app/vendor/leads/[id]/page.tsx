@@ -26,6 +26,7 @@ import {
   formatEventDate,
   formatQty,
   formatReceived,
+  isQuoted,
   leadWhatsappText,
   phoneDigits,
   telHref,
@@ -105,7 +106,7 @@ export default async function VendorLeadPage({ params }: { params: Promise<{ id:
         <div className="min-w-0">
           <div className="flex flex-wrap items-center gap-2">
             <h1 className="font-display text-heading sm:text-display font-semibold tracking-tight">{l.name}</h1>
-            <StatusPill status={l.status} audience="vendor" />
+            <StatusPill status={l.status} audience="vendor" quoted={isQuoted(l.status, latestOffer?.status)} />
           </div>
           <p className="text-ink-soft text-body mt-1">
             Received {formatReceived(l.created_at)}

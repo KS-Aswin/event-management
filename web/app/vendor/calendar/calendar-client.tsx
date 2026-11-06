@@ -117,13 +117,28 @@ export default function CalendarClient({ data }: { data: CalendarMonth }) {
         body: JSON.stringify(change),
       });
       const body = await res.json().catch(() => ({}));
-      if (res.status === 409 && body.code === "PENDING_LEADS" && !change.force) {
+      if (res.status === 409 && (body.code === "PENDING_LEADS" || body.code === "BOOKED_DATES") && !change.force) {
         const leads: CalendarLead[] = Array.isArray(body.leads) ? body.leads : [];
+        const booked: CalendarLead[] = Array.isArray(body.bookings) ? body.bookings : [];
+        const list = (l: CalendarLead[]) => `${l.slice(0, 4).map(leadLine).join("; ")}${l.length > 4 ? "; …" : ""}`;
+        const parts: string[] = [];
+        if (leads.length) {
+          parts.push(`Open: ${list(leads)}. Blocking won't cancel ${leads.length === 1 ? "it" : "them"}; reply to let the customer know.`);
+        }
+        if (booked.length) {
+          parts.push(
+            `Booked: ${list(booked)}. ${booked.length === 1 ? "It stays" : "They stay"} on your calendar as Booked; only the free days are closed to new enquiries.`
+          );
+        }
         const ok = await confirm({
-          title: leads.length === 1 ? "There's an open enquiry on this date" : `${leads.length} open enquiries on these dates`,
-          description: `${leads.slice(0, 4).map(leadLine).join("; ")}${leads.length > 4 ? "; …" : ""}. Blocking won't cancel ${
-            leads.length === 1 ? "it" : "them"
-          }; reply to let the customer know.`,
+          title: leads.length
+            ? leads.length === 1
+              ? "There's an open enquiry on this date"
+              : `${leads.length} open enquiries on these dates`
+            : booked.length === 1
+              ? "You have a booked event in these dates"
+              : `${booked.length} booked events in these dates`,
+          description: parts.join(" "),
           confirmLabel: "Block anyway",
         });
         if (!ok) return false;
@@ -177,8 +192,12 @@ export default function CalendarClient({ data }: { data: CalendarMonth }) {
               {cells.slice(row * 7, row * 7 + 7).map((d, i) => {
                 if (!d) return <div key={`e${row}-${i}`} aria-hidden="true" />;
                 const entries = data.days[d];
-                const state = dayState(entries);
-                const label = cellLabel(state, entries);
+                const rawState = dayState(entries);
+                // A blocked day with a confirmed booking still reads "Booked" (QA-013),
+                // so the vendor never loses sight of an event by blocking around it.
+                const hasBooking = bookingsOn(d).length > 0;
+                const state = rawState === "blocked" && hasBooking ? "full" : rawState;
+                const label = rawState === "blocked" && hasBooking ? "Booked" : cellLabel(state, entries);
                 const nOpen = openOn(d).length;
                 const isSel = selected === d;
                 const isToday = d === data.today;
@@ -193,6 +212,7 @@ export default function CalendarClient({ data }: { data: CalendarMonth }) {
                       aria-label={`${fmtDay(d)}${desc ? `: ${desc}` : ""}`}
                       data-date={d}
                       data-state={state ?? "open"}
+                      data-blocked={rawState === "blocked" || undefined}
                       className={`relative w-full min-h-12 sm:min-h-[68px] rounded-control border text-left px-1.5 py-1 sm:px-2 transition-colors ${
                         state ? CELL_TONE[state] : "bg-surface"
                       } ${isSel ? "border-accent ring-2 ring-accent/30" : "border-line hover:border-line-strong"} ${
@@ -478,13 +498,14 @@ function RangeForm({
   const [to, setTo] = useState("");
   const [slot, setSlot] = useState<Slot>("full");
   const [note, setNote] = useState("");
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<{ field: "from" | "to" | null; text: string } | null>(null);
 
   async function submit(action: "block" | "unblock") {
     setError(null);
-    if (!from) return setError("Pick a start date.");
+    if (!from) return setError({ field: "from", text: "Pick a start date." });
+    if (from < today) return setError({ field: "from", text: "Past dates can't be changed. Pick today or later." });
     const end = to || from;
-    if (end < from) return setError("The end date must be on or after the start date.");
+    if (end < from) return setError({ field: "to", text: "The end date must be on or after the start date." });
     const ok = await send(
       { action, from, to: end, slot, note: action === "block" ? note.trim() || null : null },
       action === "block" ? `Blocked ${fmtShort(from)}${end !== from ? ` to ${fmtShort(end)}` : ""}.` : `Opened ${fmtShort(from)}${end !== from ? ` to ${fmtShort(end)}` : ""} again.`
@@ -500,6 +521,9 @@ function RangeForm({
       <p className="text-body text-ink-soft mt-1">For holidays, Ramadan, the monsoon or a long event. Up to 120 days at a time.</p>
       <form
         className="mt-3 grid grid-cols-2 gap-3"
+        // Checked in submit() so every mistake gets an inline message (the
+        // browser's own bubble for min= was easy to miss: QA-013).
+        noValidate
         onSubmit={(ev) => {
           ev.preventDefault();
           submit("block");
@@ -509,13 +533,38 @@ function RangeForm({
           <label htmlFor={`${uid}-from`} className="label">
             From
           </label>
-          <input id={`${uid}-from`} type="date" min={today} value={from} onChange={(e) => setFrom(e.target.value)} className="field" required />
+          <input
+            id={`${uid}-from`}
+            type="date"
+            min={today}
+            value={from}
+            onChange={(e) => {
+              setFrom(e.target.value);
+              setError(null);
+            }}
+            className="field"
+            required
+            aria-invalid={error?.field === "from" || undefined}
+            aria-describedby={error?.field === "from" ? `${uid}-err` : undefined}
+          />
         </div>
         <div>
           <label htmlFor={`${uid}-to`} className="label">
             To
           </label>
-          <input id={`${uid}-to`} type="date" min={from || today} value={to} onChange={(e) => setTo(e.target.value)} className="field" />
+          <input
+            id={`${uid}-to`}
+            type="date"
+            min={from || today}
+            value={to}
+            onChange={(e) => {
+              setTo(e.target.value);
+              setError(null);
+            }}
+            className="field"
+            aria-invalid={error?.field === "to" || undefined}
+            aria-describedby={error?.field === "to" ? `${uid}-err` : undefined}
+          />
         </div>
         <div className="col-span-2">
           <label htmlFor={`${uid}-slot`} className="label">
@@ -544,8 +593,8 @@ function RangeForm({
           />
         </div>
         {error && (
-          <p role="alert" className="alert-error col-span-2">
-            {error}
+          <p id={`${uid}-err`} role="alert" className="alert-error col-span-2" data-range-error>
+            {error.text}
           </p>
         )}
         <div className="col-span-2 flex flex-wrap gap-2">

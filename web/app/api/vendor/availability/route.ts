@@ -21,7 +21,8 @@ import {
 // booked and open leads with an event date in that month.
 // PUT {action:'block'|'unblock'|'capacity', from, to?, slot?, capacity?, note?, force?}
 // changes one slot on every date in [from, to]. Blocking a date that has an
-// open enquiry answers 409 PENDING_LEADS (with the leads) unless force=true.
+// open enquiry answers 409 PENDING_LEADS (with the leads), and one with a
+// booked event 409 BOOKED_DATES (with the bookings), unless force=true.
 // The vendor is always the caller's own listing; no vendorId is accepted.
 
 async function ownVendor() {
@@ -102,6 +103,17 @@ export async function PUT(request: Request) {
             : `You have ${result.leads.length} open enquiries on these dates. Block them anyway?`,
         code: "PENDING_LEADS",
         leads: result.leads,
+        bookings: result.bookings,
+      });
+    }
+    if (result.code === "BOOKED_DATES") {
+      return json(409, {
+        error:
+          result.bookings.length === 1
+            ? "You have a booked event on these dates. Block the dates anyway? The booking stays on your calendar."
+            : `You have ${result.bookings.length} booked events on these dates. Block the dates anyway? The bookings stay on your calendar.`,
+        code: "BOOKED_DATES",
+        bookings: result.bookings,
       });
     }
     return json(400, {

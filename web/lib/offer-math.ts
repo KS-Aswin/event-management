@@ -217,3 +217,15 @@ export function formatPaise(paise: number | string): string {
     maximumFractionDigits: 2,
   })}`;
 }
+
+const OFFER_DATE_FMT = new Intl.DateTimeFormat("en-IN", { day: "numeric", month: "short", year: "numeric", timeZone: "UTC" });
+
+/**
+ * A calendar day for notification copy: "2026-11-20" -> "20 Nov 2026" (the
+ * app's friendly Indian format; QA-030). Anything unparseable is returned as is.
+ */
+export function formatOfferDate(day: string): string {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(day)) return day;
+  const d = new Date(`${day}T00:00:00Z`);
+  return Number.isNaN(d.getTime()) ? day : OFFER_DATE_FMT.format(d);
+}

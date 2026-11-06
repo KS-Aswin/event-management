@@ -37,6 +37,16 @@ export const STATUS_PILL_CLASS: Record<QuoteStatusKey, string> = {
   expired: "bg-surface-muted text-ink-soft border-line",
 };
 
+/**
+ * "Quoted": the vendor replied with an itemised offer that is still waiting
+ * for the customer (status responded + latest offer sent). Not a stored
+ * status; the inbox tab, the row pill and the lead header all use this so
+ * they agree (QA-033).
+ */
+export function isQuoted(status: string, offerStatus: string | null | undefined): boolean {
+  return status === "responded" && offerStatus === "sent";
+}
+
 const STATUS_KEYS: readonly QuoteStatusKey[] = ["pending", "responded", "accepted", "booked", "declined", "withdrawn", "expired"];
 
 export function asStatus(s: string): QuoteStatusKey {

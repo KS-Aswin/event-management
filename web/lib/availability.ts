@@ -152,7 +152,8 @@ export interface AvailabilityChange {
 
 export type ApplyResult =
   | { ok: true; days: number }
-  | { ok: false; code: "PENDING_LEADS"; leads: CalendarLead[] }
+  | { ok: false; code: "PENDING_LEADS"; leads: CalendarLead[]; bookings: CalendarLead[] }
+  | { ok: false; code: "BOOKED_DATES"; bookings: CalendarLead[] }
   | { ok: false; code: "CAPACITY_BELOW_BOOKED"; dates: string[] };
 
 /**
@@ -160,7 +161,12 @@ export type ApplyResult =
  * block clashes with any slot; a half-day block with that slot or an
  * enquiry with no slot / full day.
  */
-async function clashingLeads(client: Pick<PoolClient, "query">, vendorId: number, c: AvailabilityChange): Promise<CalendarLead[]> {
+async function clashingLeads(
+  client: Pick<PoolClient, "query">,
+  vendorId: number,
+  c: AvailabilityChange,
+  statuses: readonly string[] = OPEN_LEAD_STATUSES
+): Promise<CalendarLead[]> {
   const r = await client.query<{ id: number; name: string; date: string; slot: string | null; status: string; event_type: string | null }>(
     `SELECT q.id, q.name, q.event_date::text AS date, q.slot, q.status, et.name AS event_type
        FROM quote_requests q LEFT JOIN event_types et ON et.id = q.event_type_id
@@ -168,7 +174,7 @@ async function clashingLeads(client: Pick<PoolClient, "query">, vendorId: number
         AND q.status = ANY($4::text[])
         AND ($5 = 'full' OR q.slot IS NULL OR q.slot IN ('full', $5))
       ORDER BY q.event_date, q.id LIMIT 20`,
-    [vendorId, c.from, c.to, [...OPEN_LEAD_STATUSES], c.slot]
+    [vendorId, c.from, c.to, [...statuses], c.slot]
   );
   return r.rows.map((x) => ({ id: x.id, name: x.name, date: x.date, slot: x.slot, status: x.status, eventType: x.event_type }));
 }
@@ -189,10 +195,20 @@ export async function applyAvailability(vendorId: number, c: AvailabilityChange)
 
     if (c.action === "block") {
       if (!c.force) {
-        const leads = await clashingLeads(client, vendorId, c);
+        // Open enquiries and confirmed bookings in the range are both worth a
+        // warning (QA-013): blocking never cancels them, and booked days stay
+        // shown as Booked on the calendar, but the vendor should know first.
+        const [leads, bookings] = await Promise.all([
+          clashingLeads(client, vendorId, c),
+          clashingLeads(client, vendorId, c, ["booked"]),
+        ]);
         if (leads.length) {
           await client.query("ROLLBACK");
-          return { ok: false, code: "PENDING_LEADS", leads };
+          return { ok: false, code: "PENDING_LEADS", leads, bookings };
+        }
+        if (bookings.length) {
+          await client.query("ROLLBACK");
+          return { ok: false, code: "BOOKED_DATES", bookings };
         }
       }
       await client.query(

@@ -114,6 +114,14 @@ export default function ProfileForm({
 
   async function save(section: string, keys: Key[]) {
     if (!dirty(keys)) return;
+    // Same rule as onboarding and the server (QA-032): a description under the
+    // minimum is an error here too, not just a hint.
+    if (keys.includes("about") && !same(values.about, saved.about) && values.about.trim().length < PROFILE_LIMITS.aboutMin) {
+      setErrors((e) => ({ ...e, about: `Write at least ${PROFILE_LIMITS.aboutMin} characters so customers know who you are.` }));
+      setNotice((n) => ({ ...n, [section]: { ok: false, text: "Please fix the highlighted field." } }));
+      formRefs.current[section]?.querySelector<HTMLElement>('[name="about"]')?.focus();
+      return;
+    }
     setBusy(section);
     setNotice((n) => ({ ...n, [section]: undefined }));
     const changed = keys.filter((k) => !same(values[k], saved[k]));
@@ -384,7 +392,13 @@ export default function ProfileForm({
                 placeholder="What you do, your style, the events you love working on, what's included…"
               />
               <p id="pf-about-count" className="hint flex justify-between gap-2">
-                <span>{aboutLen < 150 ? `Aim for at least 150 characters (${150 - aboutLen} more).` : "Good length."}</span>
+                <span>
+                  {aboutLen < PROFILE_LIMITS.aboutMin
+                    ? `At least ${PROFILE_LIMITS.aboutMin} characters (${PROFILE_LIMITS.aboutMin - aboutLen} more). 150+ reads best.`
+                    : aboutLen < 150
+                      ? `Aim for at least 150 characters (${150 - aboutLen} more).`
+                      : "Good length."}
+                </span>
                 <span className="tabular-nums">
                   {values.about.length}/{PROFILE_LIMITS.about}
                 </span>

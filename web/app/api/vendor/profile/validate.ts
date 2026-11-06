@@ -45,6 +45,8 @@ export const PROFILE_LIMITS = {
   name: 120,
   legalName: 160,
   about: 2000,
+  /** Same minimum as onboarding step 1 (ABOUT_MIN in listing/_parse.ts; QA-032). */
+  aboutMin: 30,
   location: 80,
   address: 200,
   landmark: 120,
@@ -219,6 +221,9 @@ export function parseProfileBody(body: unknown, currentYear = new Date().getFull
     if (typeof v !== "string") return fail("about", "About must be text.");
     const s = stripControl(v).trim();
     if (s.length > PROFILE_LIMITS.about) return fail("about", `About can be at most ${PROFILE_LIMITS.about} characters.`);
+    if (s.length < PROFILE_LIMITS.aboutMin) {
+      return fail("about", `Write at least ${PROFILE_LIMITS.aboutMin} characters so customers know who you are.`);
+    }
     patch.about = s;
   }
   if (has("yearsExperience")) {

@@ -621,9 +621,11 @@ export function maskContactDetails(text: string): { text: string; flagged: boole
   let out = text;
   let flagged = false;
   for (const re of CONTACT_PATTERNS) {
-    out = out.replace(re, () => {
+    out = out.replace(re, (m) => {
       flagged = true;
-      return "•••";
+      // Keep whitespace the phone pattern swallowed after the number, so
+      // "at 98470 12345 or" reads "at ••• or", not "at •••or" (QA-034).
+      return "•••" + (/\s+$/.exec(m)?.[0] ?? "");
     });
   }
   return { text: out, flagged };

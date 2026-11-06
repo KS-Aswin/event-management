@@ -155,8 +155,8 @@ export function maskMessageContacts(text: string, enabled: boolean = billingEnab
   for (const re of CONTACT_PATTERNS) {
     out = out.replace(re, (m) => {
       masked = true;
-      // Keep a trailing space the digit pattern may have swallowed.
-      return /\s$/.test(m) ? "••• " : "•••";
+      // Keep the whitespace (spaces or a line break) the digit pattern may have swallowed.
+      return "•••" + (/\s+$/.exec(m)?.[0] ?? "");
     });
   }
   return { text: out, masked };

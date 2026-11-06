@@ -215,6 +215,39 @@ async function discard(vendor: VendorRef, row: MediaAssetRow): Promise<void> {
   }
 }
 
+/**
+ * The response for an upload whose bytes match media the vendor already has
+ * (QA-014): the existing asset plus a plain message saying where the photo
+ * already is, so the uploader can explain per file why nothing new appeared.
+ */
+async function duplicateResult(vendor: VendorRef, row: MediaAssetRow, dup: MediaAssetRow): Promise<PipelineResult> {
+  const ids = await getVendorImageIds(vendor.id);
+  const where =
+    dup.id === ids.cover_media_id
+      ? "your cover photo"
+      : dup.id === ids.logo_media_id
+        ? "your logo"
+        : dup.kind === "image" && dup.purpose === "gallery"
+          ? "one of your portfolio photos"
+          : dup.kind === "image" && (dup.purpose === "logo" || dup.purpose === "cover")
+            ? `an earlier ${dup.purpose === "logo" ? "logo" : "cover photo"}`
+            : null;
+  let message: string;
+  if (row.purpose === "logo" || row.purpose === "cover") {
+    message = `This photo is already in your media, so it's now used as your ${row.purpose === "logo" ? "logo" : "cover photo"}.`;
+  } else if (row.kind === "video_file") {
+    message = "This video is already in your gallery.";
+  } else if (where && dup.purpose !== "gallery") {
+    message = `This photo is already in your media as ${where}. Choose a different photo for your portfolio.`;
+  } else {
+    message = "This photo is already in your portfolio, so it wasn't added again.";
+  }
+  return {
+    status: 200,
+    body: { asset: toClientAsset(dup), duplicate: true, duplicateOf: dup.purpose, message },
+  };
+}
+
 async function maybeSetVendorImage(vendor: VendorRef, row: MediaAssetRow): Promise<void> {
   if (row.purpose !== "logo" && row.purpose !== "cover") return;
   const urls = assetUrls(row);
@@ -268,7 +301,7 @@ export async function complete(
     const dup = await findAssetBySha(vendor.id, sha256);
     if (dup && dup.id !== row.id) {
       await discard(vendor, row);
-      return { status: 200, body: { asset: toClientAsset(dup), duplicate: true } };
+      return duplicateResult(vendor, row, dup);
     }
     const videoKey = `${row.storage_key}/video.mp4`;
     await storage.put(videoKey, buf, { contentType: "video/mp4" });
@@ -288,7 +321,7 @@ export async function complete(
       const again = await findAssetBySha(vendor.id, sha256);
       await discard(vendor, row);
       return again
-        ? { status: 200, body: { asset: toClientAsset(again), duplicate: true } }
+        ? duplicateResult(vendor, row, again)
         : fail(409, "Upload could not be saved. Please try again.", "CONFLICT");
     }
     return { status: 201, body: { asset: toClientAsset(done), duplicate: false } };
@@ -306,7 +339,7 @@ export async function complete(
     if (row.purpose === "logo" || row.purpose === "cover") {
       await maybeSetVendorImage(vendor, { ...dup, purpose: row.purpose });
     }
-    return { status: 200, body: { asset: toClientAsset(dup), duplicate: true } };
+    return duplicateResult(vendor, row, dup);
   }
 
   let variants: Record<string, VariantRef> = {};
@@ -365,7 +398,7 @@ export async function complete(
     const again = await findAssetBySha(vendor.id, sha256);
     await discard(vendor, row);
     return again
-      ? { status: 200, body: { asset: toClientAsset(again), duplicate: true } }
+      ? duplicateResult(vendor, row, again)
       : fail(409, "Upload could not be saved. Please try again.", "CONFLICT");
   }
   await maybeSetVendorImage(vendor, done);

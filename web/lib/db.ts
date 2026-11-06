@@ -586,12 +586,13 @@ export async function createVendorListing(params: {
     const result = await pool.query<VendorRecord>(
       `WITH new_vendor AS (
          INSERT INTO vendors (owner_id, name, category, location, price, price_label, experience, tags, about, rating, reviews_count, district_id, phone, whatsapp,
-                              status, primary_category_id, onboarding_step, onboarding_completed_at)
+                              status, primary_category_id, onboarding_step, published)
          VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,0,0,$10,$11,$12,
-                 -- Legacy one-form listing: live at once, as before migration 004
-                 -- (whose default is 'draft'). The onboarding wizard uses
-                 -- createDraftListing instead.
-                 'approved', (SELECT id FROM categories WHERE name = $3), 6, now())
+                 -- Legacy one-form listing (POST /api/vendors): a DRAFT, like the
+                 -- onboarding wizard's createDraftListing. It is not public until
+                 -- the vendor adds photos, submits it and an admin approves it
+                 -- (QA-004: it used to go live as 'approved' with no review).
+                 'draft', (SELECT id FROM categories WHERE name = $3), 1, true)
          RETURNING *
        ), new_service AS (
          INSERT INTO services (vendor_id, category_id, title, description, price_from, price_unit)

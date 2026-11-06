@@ -179,7 +179,7 @@ async function sendBlob(
     posterMediaId?: number | null;
   },
   onProgress: (f: number) => void
-): Promise<{ asset: ClientAsset; duplicate: boolean }> {
+): Promise<{ asset: ClientAsset; duplicate: boolean; message?: string }> {
   const reserve = await fetch("/api/vendor/media/uploads", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -201,7 +201,7 @@ async function sendBlob(
     body: JSON.stringify(meta.posterMediaId ? { posterMediaId: meta.posterMediaId } : {}),
   });
   if (!done.ok) throw await readError(done);
-  return (await done.json()) as { asset: ClientAsset; duplicate: boolean };
+  return (await done.json()) as { asset: ClientAsset; duplicate: boolean; message?: string };
 }
 
 /** Uploads one File end to end. Throws UploadError with a user-facing message. */
@@ -209,7 +209,7 @@ export async function uploadMediaFile(
   file: File,
   opts: { purpose: UploadPurpose; albumId?: number | null; videosEnabled?: boolean },
   onProgress: (fraction: number, stage: string) => void
-): Promise<{ asset: ClientAsset; duplicate: boolean }> {
+): Promise<{ asset: ClientAsset; duplicate: boolean; message?: string }> {
   const type = (file.type || "").toLowerCase();
   const name = file.name.toLowerCase();
   if (type === "image/heic" || type === "image/heif" || /\.(heic|heif)$/.test(name)) {
@@ -314,7 +314,7 @@ export function useUploadQueue(opts: {
           patch(item.key, {
             state: "done",
             progress: 1,
-            stage: res.duplicate ? "Already in your gallery" : "Uploaded",
+            stage: res.duplicate ? res.message || "Already in your gallery" : "Uploaded",
             duplicate: res.duplicate,
           });
           o.onUploaded?.(res.asset, res.duplicate);

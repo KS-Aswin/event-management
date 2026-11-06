@@ -5,7 +5,7 @@ import { requirePageRole } from "@/app/api/_lib/auth";
 import { findDistricts, findLeadsByVendor, findOfferingsByVendor, getOwnVendor, type LeadFilters } from "@/lib/db";
 import { sweepExpired, vendorLeadExtras } from "@/lib/enquiry-thread";
 import { LeadRow } from "./lead-row";
-import { LEAD_STATUS_LABEL, daysFromToday, type QuoteStatusKey } from "./format";
+import { LEAD_STATUS_LABEL, daysFromToday, isQuoted, type QuoteStatusKey } from "./format";
 
 export const metadata: Metadata = { title: "Leads" };
 
@@ -62,7 +62,7 @@ export default async function VendorLeadsPage({
     findOfferingsByVendor(vendor.id, { includeInactive: true }),
     vendorLeadExtras(vendor.id),
   ]);
-  const quoted = (l: (typeof leads)[number]) => l.status === "responded" && extras.get(l.id)?.offer?.status === "sent";
+  const quoted = (l: (typeof leads)[number]) => isQuoted(l.status, extras.get(l.id)?.offer?.status);
   const inTab = (key: TabKey) => (l: (typeof leads)[number]) => {
     if (key === "all") return true;
     if (key === "followup") {

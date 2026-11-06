@@ -19,15 +19,29 @@ import {
   phoneDigits,
   telHref,
   whatsappUrl,
+  isQuoted,
   type QuoteStatusKey,
 } from "./format";
 
-export function StatusPill({ status, audience }: { status: string; audience: "vendor" | "customer" }) {
+export function StatusPill({
+  status,
+  audience,
+  quoted = false,
+}: {
+  status: string;
+  audience: "vendor" | "customer";
+  /** Vendor side: an offer is out and waiting for the customer (see isQuoted). */
+  quoted?: boolean;
+}) {
   const s: QuoteStatusKey = asStatus(status);
-  const label = audience === "vendor" ? LEAD_STATUS_LABEL[s] : CUSTOMER_STATUS_LABEL[s];
+  const showQuoted = audience === "vendor" && quoted && s === "responded";
+  const label = showQuoted ? "Quoted" : audience === "vendor" ? LEAD_STATUS_LABEL[s] : CUSTOMER_STATUS_LABEL[s];
   return (
     <span
-      className={`inline-block text-[11.5px] font-medium px-2 py-0.5 rounded-full border whitespace-nowrap ${STATUS_PILL_CLASS[s]}`}
+      data-status-pill={showQuoted ? "quoted" : s}
+      className={`inline-block text-[11.5px] font-medium px-2 py-0.5 rounded-full border whitespace-nowrap ${
+        showQuoted ? STATUS_PILL_CLASS.accepted : STATUS_PILL_CLASS[s]
+      }`}
     >
       {label}
     </span>
@@ -107,7 +121,7 @@ export function LeadRow({
                 {l.name}
               </Link>
             </h3>
-            <StatusPill status={l.status} audience="vendor" />
+            <StatusPill status={l.status} audience="vendor" quoted={isQuoted(l.status, extras?.offer?.status)} />
             {extras && extras.unread > 0 && (
               <span className="inline-flex items-center gap-1 text-[11.5px] font-semibold text-accent">
                 <span aria-hidden="true" className="size-2 rounded-full bg-accent" />

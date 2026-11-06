@@ -22,7 +22,7 @@ import {
 } from "@/lib/enquiry-status";
 import { customerLink, loadParties, notifyOnce, notifyStatusChange, preview, vendorLink } from "@/lib/enquiry-notify";
 import { notify } from "@/lib/admin/notify";
-import { formatPaise, type OfferInput } from "@/lib/offer-math";
+import { formatOfferDate, formatPaise, type OfferInput } from "@/lib/offer-math";
 
 type Client = Pick<PoolClient, "query">;
 
@@ -666,7 +666,7 @@ export async function sendOffer(
       "enquiry.offer",
       leadId,
       version > 1 ? `${p.vendorName} sent a revised offer` : `${p.vendorName} sent you an offer`,
-      `Offer v${version}: ${formatPaise(input.totalPaise)} total${input.validUntil ? `, valid until ${input.validUntil}` : ""}`,
+      `Offer v${version}: ${formatPaise(input.totalPaise)} total${input.validUntil ? `, valid until ${formatOfferDate(input.validUntil)}` : ""}`,
       customerLink(leadId)
     );
     return { offerId, version, status: newStatus };

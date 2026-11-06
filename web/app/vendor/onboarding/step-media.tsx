@@ -29,7 +29,7 @@ interface MediaPayload {
 }
 
 type Purpose = "logo" | "cover" | "gallery";
-type Job = { id: string; name: string; purpose: Purpose; progress: number; error?: string; file: File };
+type Job = { id: string; name: string; purpose: Purpose; progress: number; error?: string; notice?: string; file: File };
 
 const ACCEPT = "image/jpeg,image/png,image/webp";
 const MIN_PHOTOS = 3;
@@ -102,9 +102,22 @@ export default function StepMedia({ data, setData, next, back }: StepProps) {
       setJob(job.id, { progress: Math.max(1, Math.min(p, 95)) })
     );
     if (!put.ok) return setJob(job.id, { error: put.error, progress: 0 });
-    const done = await api(`/api/vendor/media/uploads/${res.data.assetId}/complete`, "POST", {});
+    const done = await api<{ duplicate?: boolean; message?: string }>(
+      `/api/vendor/media/uploads/${res.data.assetId}/complete`,
+      "POST",
+      {}
+    );
     if (!done.ok) return setJob(job.id, { error: done.error, progress: 0 });
-    setJobs((js) => js.filter((j) => j.id !== job.id));
+    if (done.data.duplicate && job.purpose === "gallery") {
+      // Same bytes as a photo already in the media library: say so for this file
+      // instead of silently dropping it (QA-014).
+      setJob(job.id, {
+        progress: 100,
+        notice: done.data.message || "This photo is already in your media, so it wasn't added again.",
+      });
+    } else {
+      setJobs((js) => js.filter((j) => j.id !== job.id));
+    }
     await refresh();
   }
 
@@ -236,7 +249,16 @@ export default function StepMedia({ data, setData, next, back }: StepProps) {
             <li key={j.id} className="card !py-3 flex flex-col gap-2">
               <div className="flex items-center gap-3">
                 <span className="flex-1 min-w-0 truncate text-sm">{j.name}</span>
-                {j.error ? (
+                {j.notice ? (
+                  <button
+                    type="button"
+                    className="btn btn-ghost btn-sm"
+                    onClick={() => setJobs((js) => js.filter((x) => x.id !== j.id))}
+                    aria-label={`Dismiss ${j.name}`}
+                  >
+                    Dismiss
+                  </button>
+                ) : j.error ? (
                   <>
                     <button type="button" className="btn btn-secondary btn-sm" onClick={() => void run(j)}>
                       Retry
@@ -254,7 +276,11 @@ export default function StepMedia({ data, setData, next, back }: StepProps) {
                   <span className="text-caption text-ink-soft">{j.progress ? `${j.progress}%` : "Waiting…"}</span>
                 )}
               </div>
-              {j.error ? (
+              {j.notice ? (
+                <p className="text-caption text-gold-ink" role="status" data-upload-notice>
+                  {j.notice}
+                </p>
+              ) : j.error ? (
                 <p className="text-caption text-danger" role="alert">
                   {j.error}
                 </p>
