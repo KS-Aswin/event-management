@@ -8,6 +8,7 @@ const LINKS = [
   { href: "/for-vendors", label: "For vendors" },
   { href: "/about", label: "About" },
   { href: "/help", label: "Help" },
+  { href: "/terms", label: "Terms" },
   { href: "/privacy", label: "Privacy" },
 ];
 

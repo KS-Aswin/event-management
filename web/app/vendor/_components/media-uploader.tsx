@@ -517,7 +517,14 @@ export default function MediaUploader({
               if (e.target.checked) onConsent?.();
             }}
           />
-          <span>I have my clients&apos; permission to publish these photos and videos.</span>
+          <span>
+            I own these photos and videos, or I have my clients&apos; permission to publish them, including from
+            anyone who can be recognised in them (see the{" "}
+            <a href="/terms#media" target="_blank" rel="noopener" className="font-medium text-accent underline underline-offset-2">
+              Terms
+            </a>
+            ).
+          </span>
         </label>
       ) : null}
 

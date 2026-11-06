@@ -180,7 +180,11 @@ export default function StepMedia({ data, setData, next, back }: StepProps) {
           onChange={(e) => setConsent(e.target.checked)}
         />
         <span>
-          These are photos of my own work, and I have permission from the people in them to show them publicly.
+          These are photos of my own work, and I have permission from the people in them to show them publicly (see the{" "}
+          <Link href="/terms#media" target="_blank" className="font-medium text-accent underline underline-offset-2">
+            Terms
+          </Link>
+          ).
         </span>
       </label>
 
