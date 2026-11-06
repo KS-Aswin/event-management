@@ -153,7 +153,7 @@ function parseDate(raw: unknown, field: string, label: string): string | null | 
   const max = new Date(today);
   max.setUTCFullYear(max.getUTCFullYear() + 3);
   if (d.getTime() > max.getTime()) {
-    return fail(400, `Please choose a ${label} within the next three years.`, "VALIDATION", field);
+    return fail(400, "Choose a date within the next three years.", "VALIDATION", field);
   }
   return raw;
 }

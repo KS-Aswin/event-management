@@ -40,6 +40,13 @@ function todayInIndia() {
   return new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Kolkata" }).format(new Date());
 }
 
+/** Latest event date the server accepts: today + 3 years (lib/enquiries-create.ts parseDate). */
+function maxEventDate(today: string) {
+  const d = new Date(`${today}T00:00:00Z`);
+  d.setUTCFullYear(d.getUTCFullYear() + 3);
+  return d.toISOString().slice(0, 10);
+}
+
 export default function ShortlistBoard({
   items: initial,
   categoryOrder,
@@ -608,7 +615,7 @@ function SendDialog({
                 <input id={`${f}-phone`} name="phone" type="tel" inputMode="tel" className="field" defaultValue={defaults.phone} required autoComplete="tel" aria-invalid={inv("phone")} />
               </Field>
               <Field id={`${f}-eventDate`} label="Event date" error={fieldError("eventDate")}>
-                <input id={`${f}-eventDate`} name="eventDate" type="date" min={today} className="field" defaultValue={pre.eventDate} aria-invalid={inv("eventDate")} />
+                <input id={`${f}-eventDate`} name="eventDate" type="date" min={today} max={maxEventDate(today)} className="field" defaultValue={pre.eventDate} aria-invalid={inv("eventDate")} />
               </Field>
               <Field id={`${f}-eventTypeId`} label="Occasion" error={fieldError("eventTypeId")}>
                 <select id={`${f}-eventTypeId`} name="eventTypeId" className="field" defaultValue={pre.eventTypeId} aria-invalid={inv("eventTypeId")}>

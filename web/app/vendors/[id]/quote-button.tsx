@@ -90,6 +90,13 @@ function todayInIST() {
   return new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Kolkata" }).format(new Date());
 }
 
+/** Latest event date the server accepts: today + 3 years (lib/enquiries-create.ts parseDate). */
+function maxEventDate(today: string) {
+  const d = new Date(`${today}T00:00:00Z`);
+  d.setUTCFullYear(d.getUTCFullYear() + 3);
+  return d.toISOString().slice(0, 10);
+}
+
 function noun(s: QuoteService, n: number) {
   if (s.unitLabel) return s.unitLabel;
   const pair = UNIT_NOUN[s.priceUnit ?? ""];
@@ -212,6 +219,10 @@ export default function QuoteButton({
     const eventDate = str("eventDate");
     if (eventDate && minDate && eventDate < minDate) {
       showError("Please pick an event date that is today or later.", "eventDate");
+      return;
+    }
+    if (eventDate && minDate && eventDate > maxEventDate(minDate)) {
+      showError("Choose a date within the next three years.", "eventDate");
       return;
     }
     const [bMin, bMax] = str("budgetBand").split("-");
@@ -546,6 +557,7 @@ export default function QuoteButton({
                         type="date"
                         required
                         min={minDate}
+                        max={minDate ? maxEventDate(minDate) : undefined}
                         defaultValue={pre.eventDate}
                         invalid={invalid("eventDate")}
                       />
@@ -726,6 +738,7 @@ function FormField({
   placeholder,
   defaultValue,
   min,
+  max,
   autoComplete,
   inputMode,
   hint,
@@ -738,6 +751,7 @@ function FormField({
   placeholder?: string;
   defaultValue?: string;
   min?: string;
+  max?: string;
   autoComplete?: string;
   inputMode?: React.HTMLAttributes<HTMLInputElement>["inputMode"];
   hint?: string;
@@ -757,6 +771,7 @@ function FormField({
         placeholder={placeholder}
         defaultValue={defaultValue}
         min={min || undefined}
+        max={max || undefined}
         autoComplete={autoComplete}
         inputMode={inputMode}
         aria-invalid={invalid}
