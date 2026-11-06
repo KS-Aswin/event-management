@@ -76,13 +76,31 @@ export async function checkOfferingMinimum(
   if (!target) return null;
   let pkgItems = items.rows;
   if (change.kind === "remove") {
-    // Deleted, or switched off when enquiries refer to it; packages that
-    // contained it become incomplete either way.
+    // Mirrors removeOffering (lib/db.ts): an offering that enquiries or offer
+    // lines refer to is switched off, and every package holding it becomes
+    // incomplete (DB trigger). Otherwise it is deleted: its package_items rows
+    // go, and a package is incomplete only if no items are left or a
+    // remaining item is off.
+    const used = await pool.query(
+      `SELECT 1 FROM quote_request_services WHERE service_id = $1
+       UNION ALL SELECT 1 FROM quote_offer_lines WHERE service_id = $1 LIMIT 1`,
+      [change.id]
+    );
     target.active = false;
-    for (const pi of pkgItems) {
-      if (pi.item_id === change.id) {
-        const p = byId.get(pi.package_id);
+    const touched = new Set(pkgItems.filter((pi) => pi.item_id === change.id).map((pi) => pi.package_id));
+    if (used.rowCount) {
+      for (const pid of touched) {
+        const p = byId.get(pid);
         if (p) p.incomplete = true;
+      }
+    } else {
+      byId.delete(change.id);
+      pkgItems = pkgItems.filter((pi) => pi.item_id !== change.id && pi.package_id !== change.id);
+      for (const pid of touched) {
+        const p = byId.get(pid);
+        if (!p) continue;
+        const left = pkgItems.filter((pi) => pi.package_id === pid);
+        p.incomplete = left.length === 0 || left.some((pi) => byId.get(pi.item_id)?.active === false);
       }
     }
   } else {
