@@ -34,6 +34,17 @@ export default function NotificationBell() {
   const load = useCallback(async () => {
     try {
       const res = await fetch("/api/notifications?limit=15", { cache: "no-store" });
+      if (res.status === 403) {
+        // Suspended while signed in (QA-056): the session is gone now; show
+        // the sign-in page with the admin's reason instead of a dead bell.
+        const body = (await res.json().catch(() => null)) as { code?: string } | null;
+        if (body?.code === "SUSPENDED") {
+          // A full load on purpose: the whole signed-in shell must go.
+          // eslint-disable-next-line @next/next/no-location-assign-relative-destination
+          window.location.assign("/login?suspended=1");
+          return;
+        }
+      }
       if (!res.ok) throw new Error();
       const data = (await res.json()) as { items: InAppNotification[]; unread: number };
       setItems(data.items);

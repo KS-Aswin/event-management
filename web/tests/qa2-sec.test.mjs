@@ -205,7 +205,7 @@ test("QA-056: the reason survives the first /login?suspended=1 request clearing 
   const n = notice(first.setCookies);
   assert.ok(n, "note cookie set");
   assert.match(n, /HttpOnly/i);
-  assert.match(n, /Path=\/login/i);
+  assert.match(n, /Path=\/(;|$)/i); // qa3: path "/" so guarded pages can redirect to the notice
   const noteCookie = n.split(";")[0];
 
   // The browser's next request (prefetch, meta refresh, reload) has no

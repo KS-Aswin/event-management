@@ -168,10 +168,13 @@ test("QA-003: POST /api/auth/link-enquiry for a signed-in customer", async () =>
 test("QA-005: per-account login lockout holds across rotating client IPs, in the shared store", async () => {
   const target = email();
   let last = null;
+  // qa3 (QA-082): once soft locked, an IP that already tried twice is refused
+  // (a fresh device still gets to try: tests/qa3-auth.test.mjs). Five IPs x 2.
+  const ips = Array.from({ length: 5 }, () => rotatingIp());
   for (let i = 0; i < 11; i++) {
     last = await fetch(`${process.env.BASE_URL ?? "http://localhost:3000"}/api/auth/login`, {
       method: "POST",
-      headers: { "Content-Type": "application/json", "X-Forwarded-For": rotatingIp() },
+      headers: { "Content-Type": "application/json", "X-Forwarded-For": ips[i % 5] },
       body: JSON.stringify({ email: target, password: "wrong-password" }),
     });
     await last.text();
@@ -423,11 +426,13 @@ test("QA-001: /vendors/<id> is a real 404 unless public (owner and admin still p
 
 test("QA-005 (review): a parallel burst of wrong passwords can't slip past the per-account lockout", async () => {
   const target = email();
+  // Two IPs, 8 each: 5 per (account, IP) pass, 3 each are refused (qa3, QA-082).
+  const ips = [rotatingIp(), rotatingIp()];
   const res = await Promise.all(
-    Array.from({ length: 16 }, async () => {
+    Array.from({ length: 16 }, async (_, i) => {
       const r = await fetch(`${process.env.BASE_URL ?? "http://localhost:3000"}/api/auth/login`, {
         method: "POST",
-        headers: { "Content-Type": "application/json", "X-Forwarded-For": rotatingIp() },
+        headers: { "Content-Type": "application/json", "X-Forwarded-For": ips[i % 2] },
         body: JSON.stringify({ email: target, password: "wrong-password" }),
       });
       await r.text();

@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { findUserByEmail } from "@/lib/db";
 import { verifyPassword } from "@/lib/password";
 import { createSessionCookie } from "@/lib/session";
-import { clientIp, rateLimitHit, rateLimitReset } from "@/lib/rate-limit";
+import { clientIp, rateLimitHit, rateLimitPeek, rateLimitReset } from "@/lib/rate-limit";
 import { MAX_LOGIN_PASSWORD_LENGTH, recordSignIn, rejectCrossSite, tooManyRequests } from "../_guard";
 import { landingFor, sessionVersionOf } from "../../_lib/auth";
 import { safeNext } from "@/app/login/safe-next";
@@ -14,9 +14,25 @@ import { suspensionMessage } from "@/lib/suspension";
 const DUMMY_HASH = "$2b$10$5tZ8xlHVJct4ThZaoo0S.OuNhbH/Q2sjjxGiD6fGUSzDpK/gTmwvq";
 
 const WINDOW_MS = 15 * 60 * 1000;
-// Failed passwords per ACCOUNT per 15 min, from any IP (QA-005): rotating
-// IPs can't be used to keep guessing one account's password.
-const PER_EMAIL_MAX = 10;
+// Sign-in limits (QA-005, reworked for QA-082 so a griefer who knows an
+// email can't keep its owner out):
+// - per client IP, any email: PER_IP_MAX per 15 min.
+// - per (email, IP): PER_PAIR_MAX failed attempts per 15 min. One IP can't
+//   guess one account more than that, and its lock is its own.
+// - per email, from any IP: after PER_EMAIL_SOFT attempts in 15 min the
+//   account is "soft locked": an IP that already made SOFT_LOCK_TRIES_PER_IP
+//   attempts on it in this window is refused, but a device that hasn't
+//   (normally the owner's) still gets to try (and to fix one typo), so the
+//   right password still signs in. A distributed guesser then gets two
+//   tries per fresh IP...
+// - ...and at most PER_EMAIL_HARD failures per hour in total, after which
+//   the account is hard locked for everyone (which takes ~45 distinct IPs
+//   in an hour to trigger, not one script).
+const PER_PAIR_MAX = 5;
+const PER_EMAIL_SOFT = 10;
+const SOFT_LOCK_TRIES_PER_IP = 2;
+const HARD_WINDOW_MS = 60 * 60 * 1000;
+const PER_EMAIL_HARD = 100;
 // Attempts per client IP per 15 min (any email).
 const PER_IP_MAX = process.env.NODE_ENV === "production" ? 50 : 500;
 
@@ -40,14 +56,25 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Incorrect email or password." }, { status: 401 });
   }
 
-  const emailKey = `login:fail:${email.trim().toLowerCase()}`;
-  const ipHit = await rateLimitHit(`login:ip:${clientIp(request.headers)}`, PER_IP_MAX, WINDOW_MS);
+  const ip = clientIp(request.headers);
+  const normalisedEmail = email.trim().toLowerCase();
+  const emailKey = `login:fail:${normalisedEmail}`;
+  const pairKey = `login:pair:${normalisedEmail}:${ip}`;
+  const hardKey = `login:hard:${normalisedEmail}`;
+  const ipHit = await rateLimitHit(`login:ip:${ip}`, PER_IP_MAX, WINDOW_MS);
   if (!ipHit.ok) return tooManyRequests(ipHit.retryAfter);
-  // Charge the attempt BEFORE checking the password (an atomic increment), so
+  // Charge the attempt BEFORE checking the password (atomic increments), so
   // a burst of parallel guesses can't all pass a read-only check first. A
-  // successful sign-in clears the count again below.
-  const lock = await rateLimitHit(emailKey, PER_EMAIL_MAX, WINDOW_MS);
-  if (!lock.ok) return tooManyRequests(lock.retryAfter);
+  // successful sign-in clears the 15-minute counts again below.
+  const pair = await rateLimitHit(pairKey, PER_PAIR_MAX, WINDOW_MS);
+  if (!pair.ok) return tooManyRequests(pair.retryAfter);
+  const hard = await rateLimitPeek(hardKey, PER_EMAIL_HARD, HARD_WINDOW_MS);
+  if (!hard.ok) return tooManyRequests(hard.retryAfter);
+  const account = await rateLimitHit(emailKey, PER_EMAIL_SOFT, WINDOW_MS);
+  // Soft lock: only an IP that has barely tried this account in the window.
+  if (!account.ok && (pair.hits ?? PER_PAIR_MAX) > SOFT_LOCK_TRIES_PER_IP) {
+    return tooManyRequests(account.retryAfter);
+  }
 
   const user = await findUserByEmail(email);
   // Deliberately generic error for both "no such user" and "wrong password" —
@@ -55,7 +82,10 @@ export async function POST(request: Request) {
   const genericError = () => NextResponse.json({ error: "Incorrect email or password." }, { status: 401 });
 
   const valid = user ? await verifyPassword(password, user.password_hash) : await verifyPassword(password, DUMMY_HASH);
-  if (!user || !valid) return genericError();
+  if (!user || !valid) {
+    await rateLimitHit(hardKey, PER_EMAIL_HARD, HARD_WINDOW_MS);
+    return genericError();
+  }
 
   // users.status arrives with migration 004; absent before it.
   const live = user as { status?: string | null; suspended_reason?: string | null };
@@ -69,7 +99,7 @@ export async function POST(request: Request) {
   }
   if (live.status === "deleted") return genericError();
 
-  await rateLimitReset(emailKey);
+  await Promise.all([rateLimitReset(emailKey), rateLimitReset(pairKey)]);
   await createSessionCookie({
     userId: user.id,
     name: user.name,

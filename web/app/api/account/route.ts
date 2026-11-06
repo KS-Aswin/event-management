@@ -1,7 +1,8 @@
 import { NextResponse } from "next/server";
 import { createSessionCookie, destroySessionCookie } from "@/lib/session";
 import { updateUser, findUserByEmail, findUserById } from "@/lib/db";
-import { getLiveSession } from "../_lib/auth";
+import { getLiveSession, sessionVersionOf } from "../_lib/auth";
+import { requireCurrentPassword } from "./_security";
 import { isValidEmail, LIMITS } from "../_lib/validation";
 
 function fieldError(field: string, error: string) {
@@ -21,7 +22,7 @@ export async function PATCH(request: Request) {
     return NextResponse.json({ error: "Invalid request body." }, { status: 400 });
   }
 
-  const { name, email, emailNotifications, smsNotifications } = (body ?? {}) as Record<
+  const { name, email, emailNotifications, smsNotifications, currentPassword } = (body ?? {}) as Record<
     string,
     unknown
   >;
@@ -62,6 +63,13 @@ export async function PATCH(request: Request) {
   }
 
   const before = await findUserById(session.userId);
+  // Changing the sign-in email needs the current password (QA-080): reset
+  // links go to that address, so a borrowed or forged session must not be
+  // able to move it.
+  if (cleanEmail !== undefined && cleanEmail !== before?.email.toLowerCase()) {
+    const checked = await requireCurrentPassword(session.userId, currentPassword);
+    if (checked instanceof Response) return checked;
+  }
   let updated;
   try {
     updated = await updateUser(session.userId, {
@@ -87,7 +95,12 @@ export async function PATCH(request: Request) {
 
   // Refresh the session cookie only when the name (shown in the header) changed.
   if (!before || before.name !== updated.name) {
-    await createSessionCookie({ userId: updated.id, name: updated.name, role: updated.role });
+    await createSessionCookie({
+      userId: updated.id,
+      name: updated.name,
+      role: updated.role,
+      sessionVersion: sessionVersionOf(updated),
+    });
   }
 
   return NextResponse.json({

@@ -1,8 +1,10 @@
 import { cache } from "react";
 import { NextResponse } from "next/server";
-import { headers } from "next/headers";
+import { cookies, headers } from "next/headers";
 import { notFound, redirect } from "next/navigation";
-import { getSession, destroySessionCookie, type SessionPayload } from "@/lib/session";
+import { getSessionWithToken, destroySessionCookie, type SessionPayload } from "@/lib/session";
+import { isSessionRevoked } from "@/lib/session-revocation";
+import { NOTICE_COOKIE, NOTICE_COOKIE_OPTIONS, signSuspensionNotice } from "@/lib/suspension-notice";
 import { findUserById, findVendorByOwner, type UserRecord, type UserRole } from "@/lib/db";
 import { homeFor, isNextAllowed, VENDOR_HOME, VENDOR_ONBOARDING } from "@/app/_nav/routes";
 
@@ -25,6 +27,23 @@ async function clearCookie() {
 }
 
 /**
+ * QA-056: a suspended user's session is being cleared here (an API call such
+ * as the notification bell's poll, or a route handler), so leave the signed
+ * note that lets /login?suspended=1 show them the admin's reason. Server
+ * components can't set cookies; there the session survives until proxy.ts
+ * clears it on /login, which sets the same note.
+ */
+async function clearSuspendedCookie(userId: number) {
+  try {
+    const note = await signSuspensionNotice(userId);
+    await destroySessionCookie();
+    if (note) (await cookies()).set(NOTICE_COOKIE, note, NOTICE_COOKIE_OPTIONS);
+  } catch {
+    // Rendering a server component: see clearCookie().
+  }
+}
+
+/**
  * Reads the cookie and reloads the user from the DB: a deleted user, a
  * suspended or deleted account (users.status) and a cookie issued before
  * the last session_version bump ("force logout") are all signed out.
@@ -35,16 +54,23 @@ async function clearCookie() {
 export const resolveLiveSession = cache(resolveLiveSessionUncached);
 
 async function resolveLiveSessionUncached(): Promise<LiveSessionResult> {
-  const session = await getSession();
-  if (!session) return { state: "anonymous" };
-  const user = (await findUserById(session.userId)) as LiveUser | null;
-  if (!user) {
+  const current = await getSessionWithToken();
+  if (!current) return { state: "anonymous" };
+  const { session, token } = current;
+  const [found, revoked] = await Promise.all([findUserById(session.userId), isSessionRevoked(token)]);
+  const user = found as LiveUser | null;
+  if (!user || revoked) {
+    // Gone, or this token was signed out on the server (QA-081).
     await clearCookie();
     return { state: "anonymous" };
   }
-  if (user.status === "suspended" || user.status === "deleted") {
+  if (user.status === "suspended") {
+    await clearSuspendedCookie(user.id);
+    return { state: "suspended" };
+  }
+  if (user.status === "deleted") {
     await clearCookie();
-    return { state: user.status === "suspended" ? "suspended" : "anonymous" };
+    return { state: "anonymous" };
   }
   if (typeof user.session_version === "number" && (session.sessionVersion ?? 0) !== user.session_version) {
     await clearCookie();
@@ -100,7 +126,9 @@ export async function requireRole(
   const r = await resolveLiveSession();
   if (r.state !== "ok") {
     return NextResponse.json(
-      { error: r.state === "suspended" ? "This account is suspended." : "Please sign in." },
+      r.state === "suspended"
+        ? { error: "This account is suspended.", code: "SUSPENDED" }
+        : { error: "Please sign in." },
       { status: r.state === "suspended" ? 403 : 401, headers: NO_STORE }
     );
   }

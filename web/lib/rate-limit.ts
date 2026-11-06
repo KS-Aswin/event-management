@@ -66,6 +66,8 @@ export interface RateLimitResult {
   ok: boolean;
   /** Seconds until the window resets (for Retry-After). */
   retryAfter: number;
+  /** Attempts counted in the current window, including this one for rateLimitHit (best effort on the memory fallback). */
+  hits?: number;
 }
 
 /**
@@ -85,10 +87,11 @@ export async function rateLimitHit(key: string, max: number, windowMs: number): 
     );
     sweep();
     const r = rows[0];
-    return { ok: r.hits <= max, retryAfter: Math.max(1, r.retry) };
+    return { ok: r.hits <= max, retryAfter: Math.max(1, r.retry), hits: r.hits };
   } catch (err) {
     console.error("rateLimitHit: shared store unavailable, using memory", err);
-    return { ok: checkRateLimit(key, max, windowMs), retryAfter: Math.ceil(windowMs / 1000) };
+    const ok = checkRateLimit(key, max, windowMs);
+    return { ok, retryAfter: Math.ceil(windowMs / 1000), hits: ok ? memoryCount(key, windowMs) : max + 1 };
   }
 }
 
@@ -105,8 +108,8 @@ export async function rateLimitPeek(key: string, max: number, windowMs: number):
       [dbKey(key)]
     );
     const r = rows[0];
-    if (!r) return { ok: true, retryAfter: 0 };
-    return { ok: r.hits < max, retryAfter: Math.max(1, r.retry) };
+    if (!r) return { ok: true, retryAfter: 0, hits: 0 };
+    return { ok: r.hits < max, retryAfter: Math.max(1, r.retry), hits: r.hits };
   } catch (err) {
     console.error("rateLimitPeek: shared store unavailable, using memory", err);
     return { ok: memoryCount(key, windowMs) < max, retryAfter: Math.ceil(windowMs / 1000) };

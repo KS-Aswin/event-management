@@ -1,7 +1,15 @@
 import { NextResponse, type NextRequest } from "next/server";
-import { jwtVerify, SignJWT } from "jose";
+import { jwtVerify } from "jose";
 import { pool } from "@/lib/db";
 import { suspensionMessage } from "@/lib/suspension";
+import {
+  NOTICE_COOKIE,
+  NOTICE_COOKIE_OPTIONS,
+  signSuspensionNotice,
+  suspensionNoticeUserId,
+} from "@/lib/suspension-notice";
+import { apiCrossSiteBlock, MUTATING_METHODS } from "@/lib/csrf";
+import { isSessionRevoked } from "@/lib/session-revocation";
 import {
   legacyDashboardTarget,
   roleRedirect,
@@ -18,46 +26,8 @@ import {
 const COOKIE_NAME = "vela_session";
 /** Request header proxy.ts sets for /login when the cookie user is suspended. */
 const SUSPENSION_HEADER = "x-vela-suspension";
-/**
- * QA-056: short-lived signed note "user N was signed out here because they
- * are suspended", set when proxy.ts clears a suspended user's session on
- * /login. The session cookie is gone after the first /login request, but the
- * browser often asks for /login?suspended=1 more than once (prefetch, the
- * streamed redirect's meta refresh, a reload); this lets each of those still
- * look the reason up live from the DB. HttpOnly and signed, so it can't be
- * forged or read by scripts; it holds only the user id, never the reason.
- */
-const NOTICE_COOKIE = "vela_suspended";
-const NOTICE_AUDIENCE = "vela-suspension-notice";
-const NOTICE_TTL_S = 10 * 60;
-
-function sessionKey(): Uint8Array | null {
-  const secret = process.env.SESSION_SECRET;
-  return secret && secret.length >= 32 ? new TextEncoder().encode(secret) : null;
-}
-
-async function signNotice(userId: number): Promise<string | null> {
-  const key = sessionKey();
-  if (!key) return null;
-  return new SignJWT({ uid: userId })
-    .setProtectedHeader({ alg: "HS256" })
-    .setAudience(NOTICE_AUDIENCE)
-    .setIssuedAt()
-    .setExpirationTime(`${NOTICE_TTL_S}s`)
-    .sign(key);
-}
-
-async function noticeUserId(request: NextRequest): Promise<number | null> {
-  const token = request.cookies.get(NOTICE_COOKIE)?.value;
-  const key = sessionKey();
-  if (!token || !key) return null;
-  try {
-    const { payload } = await jwtVerify(token, key, { audience: NOTICE_AUDIENCE });
-    return Number.isInteger(payload.uid) ? (payload.uid as number) : null;
-  } catch {
-    return null;
-  }
-}
+// QA-056: the signed "suspended here" note (lib/suspension-notice.ts) lets
+// /login?suspended=1 show the live reason after the session cookie is gone.
 
 /** Live reason for a suspended user, or null if they aren't suspended (any more). */
 async function liveSuspension(userId: number): Promise<string | null> {
@@ -72,6 +42,7 @@ interface CookieSession {
   role: Role;
   userId: number;
   sessionVersion: number;
+  token: string;
 }
 
 async function cookieSession(request: NextRequest): Promise<CookieSession | null> {
@@ -86,6 +57,7 @@ async function cookieSession(request: NextRequest): Promise<CookieSession | null
       role,
       userId: Number(payload.userId),
       sessionVersion: typeof payload.sessionVersion === "number" ? payload.sessionVersion : 0,
+      token,
     };
   } catch {
     return null;
@@ -110,7 +82,7 @@ async function adminStillLive(s: CookieSession): Promise<boolean> {
     if (!u || u.role !== "admin") return false;
     if (u.status && u.status !== "active") return false;
     if (typeof u.session_version === "number" && u.session_version !== s.sessionVersion) return false;
-    return true;
+    return !(await isSessionRevoked(s.token)); // signed out on the server (QA-081)
   } catch {
     return false;
   }
@@ -270,7 +242,7 @@ async function authPageResponse(request: NextRequest, cookie: CookieSession | nu
   // Session already cleared by an earlier /login request (QA-056): the note
   // says whose it was; show their live reason on /login?suspended=1 only.
   if (!noticeFor && !requestHeaders.has(SUSPENSION_HEADER) && request.cookies.has(NOTICE_COOKIE)) {
-    const uid = await noticeUserId(request);
+    const uid = await suspensionNoticeUserId(request.cookies.get(NOTICE_COOKIE)?.value);
     if (uid === null) {
       dropNotice = true;
     } else if (request.nextUrl.pathname === "/login" && request.nextUrl.searchParams.get("suspended") === "1") {
@@ -294,17 +266,11 @@ async function authPageResponse(request: NextRequest, cookie: CookieSession | nu
   }
   const response = NextResponse.next({ request: { headers: requestHeaders } });
   if (clear) response.cookies.delete(COOKIE_NAME);
-  const notice = noticeFor !== null ? await signNotice(noticeFor) : null;
+  const notice = noticeFor !== null ? await signSuspensionNotice(noticeFor) : null;
   if (notice) {
-    response.cookies.set(NOTICE_COOKIE, notice, {
-      httpOnly: true,
-      sameSite: "lax",
-      secure: process.env.NODE_ENV === "production",
-      path: "/login",
-      maxAge: NOTICE_TTL_S,
-    });
+    response.cookies.set(NOTICE_COOKIE, notice, NOTICE_COOKIE_OPTIONS);
   } else if (dropNotice) {
-    response.cookies.set(NOTICE_COOKIE, "", { path: "/login", maxAge: 0 });
+    response.cookies.set(NOTICE_COOKIE, "", { path: "/", maxAge: 0 });
   }
   response.headers.set("Cache-Control", "private, no-store");
   return response;
@@ -343,6 +309,23 @@ function notFoundPage(request: NextRequest) {
 export async function proxy(request: NextRequest) {
   const { pathname, search } = request.nextUrl;
 
+  // QA-080: every mutating API call must come from this site. With a session
+  // cookie it must also not have a form-shaped body (text/plain or
+  // url-encoded), the only kind a cross-site HTML form can send without a
+  // preflight. Multipart uploads stay allowed (the Origin check covers them).
+  // /api/events is the anonymous view counter (sendBeacon): Origin only.
+  if (pathname.startsWith("/api/") && MUTATING_METHODS.has(request.method)) {
+    const blocked = apiCrossSiteBlock(request, {
+      checkBodyType: request.cookies.has(COOKIE_NAME) && pathname !== "/api/events",
+    });
+    if (blocked) {
+      blocked.headers.set("Cache-Control", "private, no-store");
+      return blocked;
+    }
+  }
+  const adminApi = pathname === "/api/admin" || pathname.startsWith("/api/admin/");
+  if (pathname.startsWith("/api/") && !adminApi) return NextResponse.next();
+
   if (/^\/(e|c|enquiry)\//.test(pathname)) {
     if (!(await publicRecordExists(pathname))) return notFoundPage(request);
     const response = NextResponse.next();
@@ -371,7 +354,7 @@ export async function proxy(request: NextRequest) {
     return NextResponse.next();
   }
 
-  if (pathname === "/api/admin" || pathname.startsWith("/api/admin/")) {
+  if (adminApi) {
     // Fast answers by cookie; the handler's requireAdmin() is the real check
     // (it reloads the user, so a stale admin cookie still gets 403 there).
     const noStore = { "Cache-Control": "private, no-store" };
@@ -390,6 +373,14 @@ export async function proxy(request: NextRequest) {
 
   if (!role) {
     if (pathname === "/admin" || pathname.startsWith("/admin/")) return notFoundPage(request);
+    // Session cleared by an API call because the account is suspended
+    // (QA-056): go to the notice that shows the reason, not a bare sign-in.
+    if (request.cookies.has(NOTICE_COOKIE)) {
+      const uid = await suspensionNoticeUserId(request.cookies.get(NOTICE_COOKIE)?.value);
+      if (uid !== null && (await liveSuspension(uid).catch(() => null))) {
+        return NextResponse.redirect(new URL("/login?suspended=1", request.url));
+      }
+    }
     const login = new URL("/login", request.url);
     login.searchParams.set("next", pathname + search);
     return NextResponse.redirect(login);
@@ -424,7 +415,7 @@ export const config = {
     "/my/:path*",
     "/admin/:path*",
     "/dashboard/:path*",
-    "/api/admin/:path*",
+    "/api/:path*",
     "/e/:path*",
     "/c/:path*",
     "/enquiry/:path*",
