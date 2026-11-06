@@ -53,6 +53,8 @@
   --color-danger-tint: #fdecea;
   --color-success-tint: #e6f2ee;
   --color-focus: #0f6d52;
+  /* Minimum header height; app/header.tsx overwrites it on <html> with the
+     real (measured) height so sticky offsets match the header (QA-062). */
   --header-h: 64px;
 }
 

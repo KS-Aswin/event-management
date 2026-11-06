@@ -163,7 +163,7 @@ export default async function MyHomePage() {
             ) : (
               <ul className="mt-2 flex flex-col gap-1">
                 {shortlistPreview.map((s) => (
-                  <li key={s.vendorId}>
+                  <li key={s.vendorId} className="min-w-0">
                     <VendorMiniCard
                       v={{
                         id: s.vendorId,
@@ -207,7 +207,7 @@ export default async function MyHomePage() {
               Browse all
             </Link>
           </div>
-          <ul className="card grid gap-x-6 gap-y-1 sm:grid-cols-2 lg:grid-cols-3">
+          <ul className="card grid grid-cols-1 gap-x-6 gap-y-1 sm:grid-cols-2 lg:grid-cols-3">
             {recommended.map((v) => (
               <li key={v.id} className="min-w-0">
                 <VendorMiniCard v={v} media={media.get(v.id)} />

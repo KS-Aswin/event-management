@@ -107,9 +107,11 @@ export default async function CategoryPage({ params }: Props) {
           Top {category.display_name.toLowerCase()} vendors
         </h2>
         {vendors.length > 0 ? (
-          <ul className="grid gap-x-6 gap-y-2 sm:grid-cols-2 lg:grid-cols-3">
+          // grid-cols-1 (minmax(0,1fr)) + min-w-0 on the items: a long vendor
+          // name truncates instead of widening the page on a phone (QA-061).
+          <ul className="grid grid-cols-1 gap-x-6 gap-y-2 sm:grid-cols-2 lg:grid-cols-3">
             {vendors.map((v) => (
-              <li key={v.id}>
+              <li key={v.id} className="min-w-0">
                 <VendorMiniCard v={v} media={media.get(v.id)} />
               </li>
             ))}

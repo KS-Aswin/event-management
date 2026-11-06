@@ -18,11 +18,11 @@ function client() {
   return new pg.Client({ connectionString: url });
 }
 
-// QA3-UI-1: /c/[slug] "Top <category> vendors" list overflows the page on a
+// QA3-UI-1 (QA-061, fixed): /c/[slug] "Top <category> vendors" list overflowed the page on a
 // phone when a vendor has an ordinary but long business name. The list is a CSS
 // grid whose items keep min-width:auto, so the row's `truncate` name never
 // shrinks and the whole page scrolls sideways (same pattern as QA-011 on /e).
-test.fail("QA3-UI-1 /c/[slug] top vendors list: a long vendor name makes the page scroll sideways at 390px", async ({ page }) => {
+test("QA3-UI-1 /c/[slug] top vendors list: a long vendor name makes the page scroll sideways at 390px", async ({ page }) => {
   test.skip((page.viewportSize()?.width ?? 1440) > 600, "phone-only layout bug");
   const rnd = Math.random().toString(36).slice(2, 8);
   const c = client();

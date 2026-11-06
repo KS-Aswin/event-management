@@ -59,7 +59,32 @@ export default function Header({
 
   // The admin area draws its own chrome (app/_nav/admin-shell.tsx): no
   // customer or vendor links there.
-  if (role === "admin" && under(pathname, ADMIN_HOME)) return null;
+  const hidden = role === "admin" && under(pathname, ADMIN_HOME);
+
+  // --header-h is what sticky sidebars, scroll-padding-top and pop-overs
+  // offset by. The header can be taller than its 64px minimum (sm padding,
+  // the /search box on its own row on phones, a notch), so publish the real
+  // height instead of trusting the constant (QA-062). The header's own
+  // min-height is a fixed 64px so this can't feed back into itself.
+  const headerRef = useRef<HTMLElement>(null);
+  useEffect(() => {
+    const root = document.documentElement;
+    const el = headerRef.current;
+    if (!el) {
+      root.style.removeProperty("--header-h");
+      return;
+    }
+    const publish = () => root.style.setProperty("--header-h", `${Math.ceil(el.getBoundingClientRect().height)}px`);
+    publish();
+    const ro = new ResizeObserver(publish);
+    ro.observe(el);
+    return () => {
+      ro.disconnect();
+      root.style.removeProperty("--header-h");
+    };
+  }, [hidden]);
+
+  if (hidden) return null;
 
   function goBack() {
     let sameOriginReferrer = false;
@@ -84,6 +109,7 @@ export default function Header({
 
   return (
     <header
+      ref={headerRef}
       data-role={role ?? "public"}
       className={`sticky top-0 z-20 safe-top bg-white/95 backdrop-blur supports-[backdrop-filter]:bg-white/85 ${
         isHome && !showLogo ? "" : "border-b border-line"
@@ -95,7 +121,7 @@ export default function Header({
       >
         Skip to content
       </a>
-      <div className="page flex flex-wrap items-center justify-between gap-x-3 gap-y-2 py-2.5 sm:py-3 min-h-[var(--header-h)]">
+      <div className="page flex flex-wrap items-center justify-between gap-x-3 gap-y-2 py-2.5 sm:py-3 min-h-16">
       <div className="flex items-center gap-1 min-w-[34px] shrink-0">
         {showBack && (
           <button
@@ -175,9 +201,10 @@ export default function Header({
         <CustomerNav name={session.name} pathname={pathname} />
       ) : (
         <nav aria-label="Main" className="flex items-center gap-0.5 sm:gap-1 text-sm whitespace-nowrap min-w-0">
+          {/* On /search itself the link gives its room to the search box until lg. */}
           <Link
             href="/search"
-            className="hidden md:inline-flex items-center min-h-11 px-3 rounded-md text-foreground hover:bg-surface-muted hover:text-accent transition-colors"
+            className={`hidden ${isSearch ? "lg:inline-flex" : "md:inline-flex"} items-center min-h-11 px-3 rounded-md text-foreground hover:bg-surface-muted hover:text-accent transition-colors`}
           >
             Browse vendors
           </Link>
@@ -284,7 +311,7 @@ function HeaderSearchBox() {
     <form
       role="search"
       onSubmit={submit}
-      className="order-last basis-full md:order-none md:basis-auto flex items-center gap-2.5 md:flex-1 max-w-full md:max-w-[520px] min-w-0 border border-line-strong bg-surface-muted rounded-full px-4 py-0 transition-colors focus-within:border-accent focus-within:bg-white focus-within:shadow-[0_0_0_3px_var(--color-accent-tint)]"
+      className="order-last basis-full md:order-none md:basis-0 flex items-center gap-2.5 md:flex-1 max-w-full md:max-w-[520px] min-w-0 border border-line-strong bg-surface-muted rounded-full px-4 py-0 transition-colors focus-within:border-accent focus-within:bg-white focus-within:shadow-[0_0_0_3px_var(--color-accent-tint)]"
     >
       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="text-ink-soft shrink-0" aria-hidden="true">
         <circle cx="11" cy="11" r="8" />
