@@ -16,6 +16,7 @@ import {
   type MenuLink,
 } from "./_nav/config";
 import { ADMIN_HOME, VENDOR_HOME, VENDOR_ONBOARDING } from "./_nav/routes";
+import NotificationBell from "./_nav/notification-bell";
 
 // Where the Back button goes when there is no in-app history to return to
 // (page opened from a shared link, bookmark or new tab).
@@ -154,6 +155,7 @@ export default function Header({
               </Link>
             </>
           )}
+          <NotificationBell />
           <AccountMenu name={session.name} links={VENDOR_MENU} />
         </div>
       ) : session && role === "admin" ? (
@@ -173,6 +175,7 @@ export default function Header({
               <HeaderLink key={l.label} href={l.href} label={l.label} active={pathname === l.href} />
             ))}
           </nav>
+          <NotificationBell />
           <AccountMenu name={session.name} links={CUSTOMER_MENU} />
         </div>
       ) : (

@@ -175,6 +175,8 @@ To run beside another suite, set `E2E_PORT` (default 3130) and `E2E_DIST_DIR` (d
 
 `npm run test:admin` runs `tests/admin-*.test.mjs` (Node's test runner, one file at a time) against a running dev server (`BASE_URL`, localhost only). `tests/admin-helpers.mjs` creates throw-away users (`admtest-<prefix>-<digits>@example.com`), promotes test admins directly in the local DB and deletes them again afterwards. Audit rows are never deleted (the table is append-only); a deleted test admin's audit rows keep their content with `actor_id` set to NULL (migration 005 makes every admin "actor" column `ON DELETE SET NULL`).
 
+`npm run test:customer` runs `tests/customer-*.test.mjs` (enquiry v2 and guest tracking, offers/thread/notifications, search v2 and browse) the same way against a running dev server (`BASE_URL`). Each file creates its own `custtest-<area>-<digits>@example.com` users and fixtures and deletes them afterwards.
+
 Type checking: `npm run typecheck`. Linting: `npm run lint`.
 
 

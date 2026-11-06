@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { getLiveSession } from "../../_lib/auth";
 import { parseId } from "../../_lib/validation";
 import { getOwnVendor, updateVendorLead, QUOTE_STATUSES, type QuoteStatus } from "@/lib/db";
+import { isTransitionError } from "@/lib/enquiry-status";
 
 // Legacy status endpoint, kept as a thin wrapper while old clients and tests
 // still call it. New code uses PATCH /api/vendor/leads/[id]. Both go through
@@ -40,9 +41,14 @@ export async function PATCH(
   // Not a vendor, no listing, or the quote went to someone else's listing:
   // the same 404, so it doesn't reveal which case it was.
   const vendor = session.role === "vendor" ? await getOwnVendor(session.userId) : null;
-  const updated = vendor
-    ? await updateVendorLead(vendor.id, quoteId, session.userId, { status: status as QuoteStatus })
-    : null;
+  let updated = null;
+  try {
+    updated = vendor ? await updateVendorLead(vendor.id, quoteId, session.userId, { status: status as QuoteStatus }) : null;
+  } catch (err) {
+    // Same status machine as /api/vendor/leads/[id] (P2-5).
+    if (isTransitionError(err)) return NextResponse.json({ error: err.message, code: err.code }, { status: 409 });
+    throw err;
+  }
   if (!updated) {
     return NextResponse.json(
       { error: "Quote request not found, or it wasn't sent to your listing." },

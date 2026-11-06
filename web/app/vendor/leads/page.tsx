@@ -3,22 +3,27 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { requirePageRole } from "@/app/api/_lib/auth";
 import { findDistricts, findLeadsByVendor, findOfferingsByVendor, getOwnVendor, type LeadFilters } from "@/lib/db";
+import { sweepExpired, vendorLeadExtras } from "@/lib/enquiry-thread";
 import { LeadRow } from "./lead-row";
 import { LEAD_STATUS_LABEL, daysFromToday, type QuoteStatusKey } from "./format";
 
 export const metadata: Metadata = { title: "Leads" };
 
-// Tabs follow the real lead statuses in the database (pending, responded,
-// booked, declined) plus "Follow-up due", the vendor's to-do list. The plan's
-// "Quoted/Accepted/Expired" tabs need quote offers, which arrive with P2-4.
-type TabKey = "all" | "followup" | QuoteStatusKey;
+// Tabs follow the lead statuses (P2-5 machine) plus two views: "Follow-up
+// due" (the vendor's to-do list) and "Quoted" (replied with an offer that is
+// still waiting for the customer), split out of "Replied".
+type TabKey = "all" | "followup" | "quoted" | QuoteStatusKey;
 const TABS: { key: TabKey; label: string }[] = [
   { key: "all", label: "All" },
   { key: "followup", label: "Follow-up due" },
   { key: "pending", label: LEAD_STATUS_LABEL.pending },
   { key: "responded", label: LEAD_STATUS_LABEL.responded },
+  { key: "quoted", label: "Quoted" },
+  { key: "accepted", label: "Accepted" },
   { key: "booked", label: LEAD_STATUS_LABEL.booked },
   { key: "declined", label: LEAD_STATUS_LABEL.declined },
+  { key: "withdrawn", label: LEAD_STATUS_LABEL.withdrawn },
+  { key: "expired", label: LEAD_STATUS_LABEL.expired },
 ];
 
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
@@ -49,11 +54,15 @@ export default async function VendorLeadsPage({
   if (districtId) filters.districtId = districtId;
   if (serviceId) filters.serviceId = serviceId;
 
-  const [leads, districts, offerings] = await Promise.all([
+  // Leads whose event date passed while still open become "expired" first.
+  await sweepExpired({ vendorId: vendor.id });
+  const [leads, districts, offerings, extras] = await Promise.all([
     findLeadsByVendor(vendor.id, filters),
     findDistricts(),
     findOfferingsByVendor(vendor.id, { includeInactive: true }),
+    vendorLeadExtras(vendor.id),
   ]);
+  const quoted = (l: (typeof leads)[number]) => l.status === "responded" && extras.get(l.id)?.offer?.status === "sent";
   const inTab = (key: TabKey) => (l: (typeof leads)[number]) => {
     if (key === "all") return true;
     if (key === "followup") {
@@ -61,6 +70,8 @@ export default async function VendorLeadsPage({
       const diff = daysFromToday(l.follow_up_at);
       return diff !== null && diff <= 0;
     }
+    if (key === "quoted") return quoted(l);
+    if (key === "responded") return l.status === "responded" && !quoted(l);
     return l.status === key;
   };
   const shown = leads.filter(inTab(active));
@@ -177,7 +188,7 @@ export default async function VendorLeadsPage({
         {shown.length === 0 ? (
           <EmptyState hasAny={leads.length > 0 || filtered} status={vendor.status} vendorId={vendor.id} />
         ) : (
-          shown.map((l) => <LeadRow key={l.id} lead={l} vendorName={vendor.name} />)
+          shown.map((l) => <LeadRow key={l.id} lead={l} vendorName={vendor.name} extras={extras.get(l.id)} />)
         )}
       </section>
       {leads.length >= 200 && (

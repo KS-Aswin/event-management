@@ -1,5 +1,5 @@
 import type { MetadataRoute } from "next";
-import { findVendors } from "@/lib/db";
+import { findTaxonomy, findVendors } from "@/lib/db";
 
 // Regenerate at most hourly so new vendors appear without a rebuild.
 export const revalidate = 3600;
@@ -20,6 +20,22 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     { url: `${base}/privacy`, changeFrequency: "yearly", priority: 0.2 },
   ];
 
+  // Browse pages (P2-8): one per active event type and category.
+  let browsePages: MetadataRoute.Sitemap = [];
+  try {
+    const taxonomy = await findTaxonomy();
+    browsePages = [
+      ...taxonomy.eventTypes
+        .filter((e) => e.slug !== "other")
+        .map((e) => ({ url: `${base}/e/${e.slug}`, changeFrequency: "weekly" as const, priority: 0.7 })),
+      ...taxonomy.categories
+        .filter((c) => c.active)
+        .map((c) => ({ url: `${base}/c/${c.slug}`, changeFrequency: "weekly" as const, priority: 0.7 })),
+    ];
+  } catch (err) {
+    console.error("sitemap: could not load taxonomy", err);
+  }
+
   let vendorPages: MetadataRoute.Sitemap = [];
   try {
     const vendors = await findVendors({});
@@ -36,5 +52,5 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     console.error("sitemap: could not load vendors", err);
   }
 
-  return [...staticPages, ...vendorPages];
+  return [...staticPages, ...browsePages, ...vendorPages];
 }

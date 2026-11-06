@@ -1,6 +1,8 @@
 import { NextResponse } from "next/server";
 import { requireRole } from "@/app/api/_lib/auth";
-import { findLeadsByVendor, getOwnVendor, VENDOR_LEAD_STATUSES, type LeadFilters } from "@/lib/db";
+import { findLeadsByVendor, getOwnVendor, type LeadFilters } from "@/lib/db";
+import { isEnquiryStatus } from "@/lib/enquiry-status";
+import { sweepExpired } from "@/lib/enquiry-thread";
 
 // The signed-in vendor's leads (PRODUCT_PLAN P0-14, section 6).
 // Filters: status, from, to (event date, YYYY-MM-DD), district, serviceId,
@@ -35,7 +37,7 @@ export async function GET(request: Request) {
   const f: LeadFilters = {};
   const status = sp.get("status");
   if (status && status !== "all") {
-    if (!(VENDOR_LEAD_STATUSES as readonly string[]).includes(status)) return bad("status", "Unknown status.");
+    if (!isEnquiryStatus(status)) return bad("status", "Unknown status.");
     f.status = status;
   }
   for (const key of ["from", "to"] as const) {
@@ -59,6 +61,7 @@ export async function GET(request: Request) {
     f.offset = Number(offset);
   }
 
+  await sweepExpired({ vendorId: vendor.id });
   const leads = await findLeadsByVendor(vendor.id, f);
   return NextResponse.json({ leads }, { headers: { "Cache-Control": "private, no-store" } });
 }

@@ -6,6 +6,7 @@ import { checkRateLimit, clientIp } from "@/lib/rate-limit";
 import { rejectCrossSite, tooManyRequests } from "../_guard";
 import { landingFor, sessionVersionOf } from "../../_lib/auth";
 import { safeNext } from "@/app/login/safe-next";
+import { linkGuestEnquiries } from "@/lib/enquiry-tracking";
 
 // Compared against when the email is unknown, so "no such user" takes as long
 // as "wrong password" and response timing doesn't reveal registered emails.
@@ -72,6 +73,9 @@ export async function POST(request: Request) {
     role: user.role,
     sessionVersion: sessionVersionOf(user),
   });
+
+  // P2-3: guest enquiries sent with this email now belong to the account.
+  await linkGuestEnquiries(user);
 
   // Role-based landing (PRODUCT_PLAN 2.6); a next into another role's area is ignored.
   const redirectTo = await landingFor(user, safeNext(next, ""));

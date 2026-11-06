@@ -1,4 +1,6 @@
 import { Pool, type PoolClient } from "pg";
+import { assertTransition, type EnquiryStatus } from "./enquiry-status";
+import { notifyStatusChange } from "./enquiry-notify";
 import {
   PRICE_UNITS,
   PRICE_UNIT_LABELS,
@@ -238,7 +240,7 @@ const CATEGORY_SYNONYMS: Record<string, string> = {
 };
 
 /** City names and old spellings that should also match the district they're in. */
-const PLACE_ALIASES: Record<string, string[]> = {
+export const PLACE_ALIASES: Record<string, string[]> = {
   kochi: ["kochi", "ernakulam"],
   cochin: ["kochi", "ernakulam"],
   ernakulam: ["ernakulam", "kochi"],
@@ -320,7 +322,7 @@ export function parseSearchQuery(raw: string): ParsedSearch {
   return out;
 }
 
-function buildVendorWhere(filters: VendorFilters): { where: string; values: unknown[] } {
+export function buildVendorWhere(filters: VendorFilters): { where: string; values: unknown[] } {
   const clauses: string[] = [PUBLIC_VENDOR];
   const values: unknown[] = [];
   const add = (v: unknown) => {
@@ -2785,7 +2787,13 @@ export async function updateVendorLead(
   vendorId: number,
   leadId: number,
   userId: number,
-  p: { status?: (typeof VENDOR_LEAD_STATUSES)[number]; vendorNotes?: string | null; followUpAt?: string | null }
+  p: {
+    status?: EnquiryStatus;
+    vendorNotes?: string | null;
+    followUpAt?: string | null;
+    /** Who changes the status (P2-5 machine); the customer's "mark booked" also comes through here. */
+    actor?: "vendor" | "customer";
+  }
 ): Promise<VendorLeadRecord | null> {
   const ok = await withTransaction(async (client) => {
     const cur = await client.query<{ status: string; event_date: string | null; slot: string | null }>(
@@ -2795,6 +2803,8 @@ export async function updateVendorLead(
     const old = cur.rows[0];
     if (!old) return false;
     const changed = p.status !== undefined && p.status !== old.status;
+    // Invalid transitions throw TransitionError (409) and roll back.
+    if (changed) assertTransition(old.status, p.status!, p.actor ?? "vendor");
     const sets: string[] = [];
     const values: unknown[] = [leadId];
     if (p.vendorNotes !== undefined) {
@@ -2818,6 +2828,7 @@ export async function updateVendorLead(
       p.status,
       userId,
     ]);
+    await notifyStatusChange(client, leadId, p.status!, p.actor ?? "vendor");
     if (!old.event_date) return true;
     const slot = old.slot ?? "full";
     if (p.status === "booked") {

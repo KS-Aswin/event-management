@@ -16,7 +16,7 @@ export default function SortSelect({ value }: { value: string }) {
         aria-busy={pending}
         onChange={(e) => {
           const params = new URLSearchParams(searchParams.toString());
-          if (e.target.value === "rating") params.delete("sort");
+          if (e.target.value === "recommended") params.delete("sort");
           else params.set("sort", e.target.value);
           params.delete("page");
           const qs = params.toString();
@@ -24,6 +24,7 @@ export default function SortSelect({ value }: { value: string }) {
         }}
         className={`field w-auto min-w-0 inline-block pr-8 text-foreground ${pending ? "opacity-60" : ""}`}
       >
+        <option value="recommended">Recommended</option>
         <option value="rating">Highest rated</option>
         <option value="reviews">Most reviewed</option>
         <option value="priceLow">Price: low to high</option>

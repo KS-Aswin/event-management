@@ -4,6 +4,7 @@
 
 import { pool } from "@/lib/db";
 import { normalisePhone } from "@/app/api/_lib/validation";
+import { toE164 } from "@/lib/phone";
 import { withTransaction, HttpError, type TxClient } from "./tx";
 import { audit } from "./audit";
 import { notify } from "./notify";
@@ -482,7 +483,8 @@ export function normaliseContact(raw: unknown): { value: string; kind: "phone" |
     const e = s.toLowerCase();
     return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(e) ? { value: e, kind: "email" } : null;
   }
-  const p = normalisePhone(s);
+  // International numbers (+971...) are kept in E.164 too, as enquiries store them (P2-2).
+  const p = normalisePhone(s) ?? toE164(s);
   return p ? { value: p, kind: "phone" } : null;
 }
 

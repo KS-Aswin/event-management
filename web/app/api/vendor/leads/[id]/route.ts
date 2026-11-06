@@ -1,11 +1,15 @@
 import { NextResponse } from "next/server";
 import { requireRole } from "@/app/api/_lib/auth";
 import { parseId } from "@/app/api/_lib/validation";
-import { findVendorLead, getOwnVendor, updateVendorLead, VENDOR_LEAD_STATUSES } from "@/lib/db";
+import { findVendorLead, getOwnVendor, updateVendorLead } from "@/lib/db";
+import { ENQUIRY_STATUSES, isEnquiryStatus, isTransitionError } from "@/lib/enquiry-status";
+import { sweepExpired } from "@/lib/enquiry-thread";
 
 // One lead of the signed-in vendor (PRODUCT_PLAN P0-14).
 // GET: detail. PATCH: {status?, vendorNotes?, followUpAt?}. Status changes
-// write quote_status_events; "booked" writes vendor_availability.
+// follow the P2-5 machine (lib/enquiry-status.ts: an invalid move is 409),
+// write quote_status_events and notify the customer; "booked" writes
+// vendor_availability. Thread: ./messages, offers: ./offers.
 // A lead that wasn't sent to this vendor's listing gets 403 (the same answer
 // whether or not the id exists, so ids can't be probed).
 
@@ -37,6 +41,7 @@ async function context(params: Promise<{ id: string }>) {
 export async function GET(_request: Request, { params }: { params: Promise<{ id: string }> }) {
   const ctx = await context(params);
   if (ctx instanceof Response) return ctx;
+  await sweepExpired({ quoteId: ctx.leadId });
   const lead = await findVendorLead(ctx.vendorId, ctx.leadId);
   if (!lead) return forbidden();
   return json(200, { lead });
@@ -57,14 +62,14 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
 
   const p: Parameters<typeof updateVendorLead>[3] = {};
   if (body.status !== undefined) {
-    if (typeof body.status !== "string" || !(VENDOR_LEAD_STATUSES as readonly string[]).includes(body.status)) {
+    if (!isEnquiryStatus(body.status)) {
       return json(400, {
-        error: `Status must be one of: ${VENDOR_LEAD_STATUSES.join(", ")}.`,
+        error: `Status must be one of: ${ENQUIRY_STATUSES.join(", ")}.`,
         code: "VALIDATION",
         field: "status",
       });
     }
-    p.status = body.status as (typeof VENDOR_LEAD_STATUSES)[number];
+    p.status = body.status;
   }
   if (body.vendorNotes !== undefined) {
     if (body.vendorNotes !== null && typeof body.vendorNotes !== "string") {
@@ -87,7 +92,14 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
     return json(400, { error: "Nothing to update.", code: "VALIDATION", field: "body" });
   }
 
-  const lead = await updateVendorLead(ctx.vendorId, ctx.leadId, ctx.userId, p);
+  let lead;
+  try {
+    if (p.status) await sweepExpired({ quoteId: ctx.leadId });
+    lead = await updateVendorLead(ctx.vendorId, ctx.leadId, ctx.userId, { ...p, actor: "vendor" });
+  } catch (err) {
+    if (isTransitionError(err)) return json(409, { error: err.message, code: err.code, from: err.from, to: err.to });
+    throw err;
+  }
   if (!lead) return forbidden();
   return json(200, { lead });
 }

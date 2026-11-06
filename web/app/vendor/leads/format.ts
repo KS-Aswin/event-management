@@ -2,34 +2,45 @@
 // the vendor leads inbox and the customer dashboard (requests they sent).
 import { formatOfferingPrice } from "@/lib/offering-validation";
 
-export type QuoteStatusKey = "pending" | "responded" | "booked" | "declined";
+export type QuoteStatusKey = "pending" | "responded" | "accepted" | "booked" | "declined" | "withdrawn" | "expired";
 
 // Vendor-facing labels (the vendor's own leads).
 export const LEAD_STATUS_LABEL: Record<QuoteStatusKey, string> = {
   pending: "New",
   responded: "Replied",
+  accepted: "Offer accepted",
   booked: "Booked",
   declined: "Not a fit",
+  withdrawn: "Withdrawn",
+  expired: "Expired",
 };
 
 // Customer-facing labels (requests the signed-in user sent).
 export const CUSTOMER_STATUS_LABEL: Record<QuoteStatusKey, string> = {
   pending: "Waiting for vendor",
   responded: "Vendor replied",
+  accepted: "You accepted",
   booked: "Booked",
   declined: "Vendor declined",
+  withdrawn: "Withdrawn",
+  expired: "Expired",
 };
 
 // Text pill styles: the label carries the meaning, colour only reinforces it.
 export const STATUS_PILL_CLASS: Record<QuoteStatusKey, string> = {
   pending: "bg-[#fbf3d9] text-gold-ink border-[#ecd98f]",
   responded: "bg-blue-50 text-blue-800 border-blue-200",
-  booked: "bg-accent-tint text-accent-hover border-accent/30",
+  accepted: "bg-accent-tint text-accent-hover border-accent/30",
+  booked: "bg-accent text-white border-accent",
   declined: "bg-surface-muted text-[#3c4043] border-line-strong",
+  withdrawn: "bg-surface-muted text-[#3c4043] border-line-strong",
+  expired: "bg-surface-muted text-ink-soft border-line",
 };
 
+const STATUS_KEYS: readonly QuoteStatusKey[] = ["pending", "responded", "accepted", "booked", "declined", "withdrawn", "expired"];
+
 export function asStatus(s: string): QuoteStatusKey {
-  return s === "responded" || s === "booked" || s === "declined" ? s : "pending";
+  return (STATUS_KEYS as readonly string[]).includes(s) ? (s as QuoteStatusKey) : "pending";
 }
 
 const dateFmt = new Intl.DateTimeFormat("en-IN", {

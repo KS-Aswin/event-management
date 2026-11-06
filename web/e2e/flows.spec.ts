@@ -101,7 +101,7 @@ test.describe("vendor and customer journey", () => {
     await dialog.getByLabel("Phone number").fill("9876543210");
     const d = new Date(Date.now() + 30 * 864e5).toISOString().slice(0, 10);
     await dialog.getByLabel("Event date").fill(d);
-    await dialog.getByLabel("Budget (₹)").fill("50000");
+    await dialog.getByLabel("Budget").selectOption({ label: "Under ₹50,000" });
     await dialog.getByLabel("Message").fill(`E2E run ${tag}: wedding in Kochi`);
     await checkScreen(page, diag, testInfo, "quote-dialog-filled");
     await dialog.getByRole("button", { name: "Send request" }).click();

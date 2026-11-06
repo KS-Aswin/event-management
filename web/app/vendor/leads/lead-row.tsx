@@ -1,5 +1,7 @@
 import Link from "next/link";
 import type { VendorLeadRecord } from "@/lib/db";
+import type { VendorLeadExtras } from "@/lib/enquiry-thread";
+import { formatPaise } from "@/lib/offer-math";
 import LeadStatusControl from "./lead-status-control";
 import { LeadContact, LeadMessage } from "./lead-contact";
 import {
@@ -61,7 +63,24 @@ export function UnitChips({ units }: { units: VendorLeadRecord["units"] }) {
 }
 
 // One enquiry in the inbox, as the vendor sees it.
-export function LeadRow({ lead: l, vendorName }: { lead: VendorLeadRecord; vendorName: string }) {
+const OFFER_STATE: Record<string, string> = {
+  sent: "waiting for the customer",
+  accepted: "accepted",
+  declined: "declined",
+  superseded: "replaced",
+  expired: "expired",
+};
+
+export function LeadRow({
+  lead: l,
+  vendorName,
+  extras,
+}: {
+  lead: VendorLeadRecord;
+  vendorName: string;
+  /** Unread customer messages and the latest offer (P2-4/P2-5). */
+  extras?: VendorLeadExtras;
+}) {
   const digits = phoneDigits(l.phone);
   const status = asStatus(l.status);
   const budget = formatBudgetRange(l.budget_min, l.budget_max, l.budget);
@@ -89,6 +108,12 @@ export function LeadRow({ lead: l, vendorName }: { lead: VendorLeadRecord; vendo
               </Link>
             </h3>
             <StatusPill status={l.status} audience="vendor" />
+            {extras && extras.unread > 0 && (
+              <span className="inline-flex items-center gap-1 text-[11.5px] font-semibold text-accent">
+                <span aria-hidden="true" className="size-2 rounded-full bg-accent" />
+                {extras.unread} new message{extras.unread === 1 ? "" : "s"}
+              </span>
+            )}
             {followDue && (
               <span className="inline-block text-[11.5px] font-medium px-2 py-0.5 rounded-full bg-danger-tint text-danger">
                 Follow up {followDiff === 0 ? "today" : `since ${formatShortDate(l.follow_up_at!)}`}
@@ -105,6 +130,11 @@ export function LeadRow({ lead: l, vendorName }: { lead: VendorLeadRecord; vendo
           {budget ? ` · budget ${budget}` : ""}
         </p>
         <UnitChips units={l.units} />
+        {extras?.offer && (
+          <p className="text-[13px] text-ink-soft mt-2">
+            Offer v{extras.offer.version} · {formatPaise(extras.offer.totalPaise)} · {OFFER_STATE[extras.offer.status] ?? extras.offer.status}
+          </p>
+        )}
         {l.message ? <LeadMessage message={l.message} /> : null}
         {digits ? (
           <LeadContact
@@ -118,7 +148,7 @@ export function LeadRow({ lead: l, vendorName }: { lead: VendorLeadRecord; vendo
           <div className="text-ink-soft text-xs mt-1">{l.phone}</div>
         )}
         <Link href={`/vendor/leads/${l.id}`} className="inline-flex items-center gap-1 min-h-11 sm:min-h-9 mt-1 text-[13px] font-medium text-accent hover:underline underline-offset-2">
-          Details, notes and follow-up
+          Conversation, offer and notes
           <span aria-hidden="true">→</span>
           <span className="sr-only"> for {l.name}</span>
         </Link>

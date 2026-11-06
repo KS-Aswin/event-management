@@ -103,6 +103,53 @@ async function vendorOwnsRecord(pathname: string, userId: number): Promise<boole
   return true;
 }
 
+/**
+ * /my/enquiries/<id> (customer thread, P2-5): the signed-in user's own
+ * enquiry only, as a real 404 otherwise (same streaming reason as above).
+ * A DB error falls through to the page, which checks again.
+ */
+async function ownsEnquiry(pathname: string, userId: number): Promise<boolean> {
+  const m = /^\/my\/enquiries\/([^/]+)\/?$/.exec(pathname);
+  if (!m) return true;
+  if (!/^[1-9]\d{0,9}$/.test(m[1]) || Number(m[1]) > 2147483647 || !Number.isInteger(userId)) return false;
+  try {
+    const { rowCount } = await pool.query("SELECT 1 FROM quote_requests WHERE id = $1 AND customer_id = $2", [Number(m[1]), userId]);
+    return (rowCount ?? 0) > 0;
+  } catch {
+    return true;
+  }
+}
+
+/**
+ * Public browse/tracking pages (P2-3, P2-8): an unknown slug or token is a
+ * real 404. The root loading.tsx starts streaming before the page's
+ * notFound() runs, so the status would otherwise be 200. Returns true when
+ * the record exists (or the path isn't one of these, or the DB failed: the
+ * page then checks again and still shows the not-found screen).
+ */
+async function publicRecordExists(pathname: string): Promise<boolean> {
+  const m = /^\/(e|c|enquiry)\/([^/]+)\/?$/.exec(pathname);
+  if (!m) return true;
+  const [, kind, key] = m;
+  if (kind === "enquiry") {
+    if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(key)) return false;
+  } else if (!/^[a-z0-9][a-z0-9-]{0,59}$/.test(key)) {
+    return false;
+  }
+  const sql =
+    kind === "e"
+      ? "SELECT 1 FROM event_types WHERE slug = $1 AND active"
+      : kind === "c"
+        ? "SELECT 1 FROM categories WHERE slug = $1 AND active"
+        : "SELECT 1 FROM quote_requests WHERE guest_token = $1::uuid";
+  try {
+    const { rowCount } = await pool.query(sql, [kind === "enquiry" ? key.toLowerCase() : key]);
+    return (rowCount ?? 0) > 0;
+  } catch {
+    return true;
+  }
+}
+
 function notFoundPage(request: NextRequest) {
   // A path with no route renders app/not-found.tsx with a real 404 status.
   return NextResponse.rewrite(new URL("/_vela/not-found", request.url));
@@ -110,6 +157,15 @@ function notFoundPage(request: NextRequest) {
 
 export async function proxy(request: NextRequest) {
   const { pathname, search } = request.nextUrl;
+
+  if (/^\/(e|c|enquiry)\//.test(pathname)) {
+    if (!(await publicRecordExists(pathname))) return notFoundPage(request);
+    const response = NextResponse.next();
+    // Tracking links carry a secret token: keep them out of shared caches.
+    if (pathname.startsWith("/enquiry/")) response.headers.set("Cache-Control", "private, no-store");
+    return response;
+  }
+
   const cookie = await cookieSession(request);
   const role = cookie?.role ?? null;
 
@@ -145,6 +201,9 @@ export async function proxy(request: NextRequest) {
   if (target === null && role === "vendor" && cookie && !(await vendorOwnsRecord(pathname, cookie.userId))) {
     return notFoundPage(request);
   }
+  if (target === null && (role === "customer" || role === "vendor") && cookie && !(await ownsEnquiry(pathname, cookie.userId))) {
+    return notFoundPage(request);
+  }
   if (target) return NextResponse.redirect(new URL(target, request.url));
 
   // Lets server guards build ?next= links (layouts don't get the pathname).
@@ -163,5 +222,8 @@ export const config = {
     "/admin/:path*",
     "/dashboard/:path*",
     "/api/admin/:path*",
+    "/e/:path*",
+    "/c/:path*",
+    "/enquiry/:path*",
   ],
 };

@@ -6,6 +6,7 @@ import { checkRateLimit, clientIp } from "@/lib/rate-limit";
 import { rejectCrossSite, tooManyRequests } from "../_guard";
 import { landingFor, sessionVersionOf } from "../../_lib/auth";
 import { safeNext } from "@/app/login/safe-next";
+import { linkGuestEnquiries } from "@/lib/enquiry-tracking";
 
 const WINDOW_MS = 60 * 60 * 1000;
 // Registrations per IP per hour. Also caps how cheaply the 409 "email already
@@ -66,6 +67,9 @@ export async function POST(request: Request) {
     role: user.role,
     sessionVersion: sessionVersionOf(user),
   });
+
+  // P2-3: guest enquiries sent with this email now belong to the account.
+  await linkGuestEnquiries(user);
 
   // New vendors have no listing yet, so this sends them to /vendor/onboarding.
   const redirectTo = await landingFor(user, safeNext(next, ""));

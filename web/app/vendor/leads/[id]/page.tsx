@@ -4,6 +4,12 @@ import { notFound, redirect } from "next/navigation";
 import { requirePageRole } from "@/app/api/_lib/auth";
 import { parseId } from "@/app/api/_lib/validation";
 import { findVendorLead, getOwnVendor } from "@/lib/db";
+import { getVendorThread, markThreadRead, offerBuilderContext } from "@/lib/enquiry-thread";
+import { canSendOffer } from "@/lib/enquiry-status";
+import { OfferCard } from "@/app/_components/enquiry-thread/offer-card";
+import { MessageList, StatusTimeline } from "@/app/_components/enquiry-thread/message-list";
+import Composer from "@/app/_components/enquiry-thread/composer";
+import OfferBuilder from "./offer-builder";
 import LeadStatusControl from "../lead-status-control";
 import LeadFollowupForm from "../lead-followup-form";
 import { LeadContact, LeadMessage } from "../lead-contact";
@@ -28,9 +34,10 @@ import {
 
 export const metadata: Metadata = { title: "Lead" };
 
-// One lead (PRODUCT_PLAN P0-14): the event context, the units the customer
-// asked for with quantity and the price at the time, contact actions, status,
-// private notes and a follow-up date. Only the vendor's own leads: any other
+// One lead (PRODUCT_PLAN P0-14, P2-4, P2-5): the event context, the units the
+// customer asked for with quantity and the price at the time, contact
+// actions, status, private notes and a follow-up date, plus the thread with
+// the customer, itemised offers (builder + versions) and the status history. Only the vendor's own leads: any other
 // id is a 404 here (the API answers 403).
 export default async function VendorLeadPage({ params }: { params: Promise<{ id: string }> }) {
   const { session } = await requirePageRole("vendor");
@@ -39,8 +46,23 @@ export default async function VendorLeadPage({ params }: { params: Promise<{ id:
   const { id } = await params;
   const leadId = parseId(id);
   if (leadId === null) notFound();
-  const l = await findVendorLead(vendor.id, leadId);
-  if (!l) notFound();
+  // The thread first: it also expires the lead if its event date has passed.
+  const thread = await getVendorThread(vendor.id, leadId);
+  if (!thread) notFound();
+  const [l, builder] = await Promise.all([findVendorLead(vendor.id, leadId), offerBuilderContext(vendor.id, leadId)]);
+  if (!l || !builder) notFound();
+  // Loaded first (so new messages still show as new), then marked read.
+  await markThreadRead(leadId, "vendor", session.userId);
+  const latestOffer = thread.offers[0] ?? null;
+  const liveOffer = thread.offers.find((o) => o.status === "sent" || o.status === "accepted") ?? null;
+  const olderOffers = thread.offers.filter((o) => o !== liveOffer);
+  const firstName = l.name.split(" ")[0] || l.name;
+  const closed =
+    l.status === "withdrawn"
+      ? `${firstName} withdrew this enquiry, so the conversation is closed.`
+      : l.status === "expired"
+        ? "This enquiry expired when the event date passed."
+        : null;
 
   const status = asStatus(l.status);
   const budget = formatBudgetRange(l.budget_min, l.budget_max, l.budget);
@@ -174,6 +196,76 @@ export default async function VendorLeadPage({ params }: { params: Promise<{ id:
               </ul>
             )}
           </section>
+
+          <section className="card" aria-labelledby="offer-h">
+            <h2 id="offer-h" className="text-title font-semibold mb-3">
+              Offer
+            </h2>
+            {liveOffer ? (
+              <OfferCard offer={liveOffer} title={`Your offer v${liveOffer.version}`} />
+            ) : (
+              <p className="text-body text-ink-soft mb-3">
+                {thread.offers.length
+                  ? "No open offer right now."
+                  : `Send ${firstName} an itemised offer: prices per item, travel, validity and advance. Customers compare offers side by side.`}
+              </p>
+            )}
+            {liveOffer?.status === "accepted" && status !== "booked" && (
+              <p className="alert-success mt-3">{firstName} accepted this offer. Mark the lead Booked once the advance is settled.</p>
+            )}
+            {canSendOffer(l.status) && (
+              <div className="mt-4">
+                <OfferBuilder
+                  leadId={l.id}
+                  units={l.units
+                    .filter((u) => u.kind !== "package" || u.price_from)
+                    .map((u) => ({
+                      serviceId: u.service_id,
+                      title: u.title,
+                      qty: u.qty === null ? null : Number(u.qty),
+                      priceFrom: u.price_mode === "on_request" ? null : u.price_from,
+                      priceUnit: u.price_unit,
+                      unitLabel: u.unit_label,
+                    }))}
+                  guestCount={l.guest_count}
+                  hasGstin={builder.hasGstin}
+                  travelFee={builder.travelFee}
+                  previous={latestOffer}
+                  version={(latestOffer?.version ?? 0) + 1}
+                />
+              </div>
+            )}
+            {olderOffers.length > 0 && (
+              <div className="mt-4">
+                <h3 className="eyebrow mb-2">Earlier offers</h3>
+                <div className="flex flex-col gap-3">
+                  {olderOffers.map((o) => (
+                    <OfferCard key={o.id} offer={o} compact />
+                  ))}
+                </div>
+              </div>
+            )}
+          </section>
+
+          <section className="card" aria-labelledby="thread-h">
+            <h2 id="thread-h" className="text-title font-semibold mb-3">
+              Conversation
+            </h2>
+            <MessageList
+              messages={thread.messages}
+              viewer="vendor"
+              otherName={firstName}
+              emptyText={`No messages yet. Reply here and ${firstName} sees it in their enquiries (and gets notified).`}
+            />
+            <div className="mt-4 border-t border-line pt-4">
+              <Composer
+                endpoint={`/api/vendor/leads/${l.id}/messages`}
+                label={`Reply to ${firstName}`}
+                placeholder="e.g. Thanks! The date is free. Shall I send an offer for 300 plates?"
+                closedReason={closed}
+              />
+            </div>
+          </section>
         </div>
 
         <aside className="flex flex-col gap-4 min-w-0">
@@ -191,6 +283,12 @@ export default async function VendorLeadPage({ params }: { params: Promise<{ id:
           {status !== "booked" && l.event_date && (
             <p className="hint -mt-1">Marking this lead Booked also marks {formatDate(l.event_date)} as booked on your calendar.</p>
           )}
+          <section className="card" aria-labelledby="timeline-h">
+            <h2 id="timeline-h" className="text-title font-semibold mb-3">
+              Status history
+            </h2>
+            <StatusTimeline createdAt={new Date(l.created_at).toISOString()} events={thread.events} viewer="vendor" />
+          </section>
         </aside>
       </div>
     </main>

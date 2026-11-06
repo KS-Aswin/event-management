@@ -1,7 +1,5 @@
 import { NextResponse } from "next/server";
 import {
-  findVendors,
-  countVendors,
   findVendorByOwner,
   createVendorListing,
   districtExists,
@@ -9,46 +7,52 @@ import {
   toPublicVendor,
 } from "@/lib/db";
 import { getLiveSession } from "../_lib/auth";
-import { parseId, validateListingFields } from "../_lib/validation";
+import { validateListingFields } from "../_lib/validation";
+import { DEFAULT_PAGE_SIZE, parseSearchParams, searchOfferings, searchVendors } from "@/lib/search";
 
+// Params that opt a request into the v2 default ranking (featured -> boost -> rating -> completeness).
+const V2_PARAMS = [
+  "view", "offering", "eventType", "district", "homeOnly", "date", "budgetMax", "priceUnit", "guests", "verified", "page",
+];
+
+/**
+ * Public search (P2-7). Legacy params (q, category, location, minRating,
+ * maxPrice, sort, limit, offset) keep their meaning; v2 adds view, offering,
+ * eventType, district (id or name; home or served district), homeOnly, date,
+ * budgetMax + priceUnit, guests, verified and page. An invalid value is a 400
+ * naming the field. Without page/limit the vendors view returns every match
+ * (legacy); the offerings view always pages (20 by default).
+ */
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
+  const parsed = await parseSearchParams(searchParams, { strict: true, defaultPageSize: null });
+  if (!parsed.ok) {
+    return NextResponse.json({ field: parsed.field, error: parsed.error }, { status: 400 });
+  }
+  const f = parsed.filters;
+  let { page, pageSize } = parsed;
+  // A legacy request without a sort keeps the old default (highest rated).
+  if (!searchParams.get("sort") && !V2_PARAMS.some((k) => searchParams.has(k))) f.sort = "rating";
 
-  // searchParams.get() takes the first value when a param is repeated.
-  const query = searchParams.get("q")?.trim().replace(/\s+/g, " ") || undefined;
-  const categories = searchParams.getAll("category").filter(Boolean);
-  const location = searchParams.get("location")?.trim() || undefined;
-  const minRatingRaw = parseFloat(searchParams.get("minRating") ?? "");
-  const minRating = Number.isFinite(minRatingRaw) && minRatingRaw > 0 && minRatingRaw <= 5 ? minRatingRaw : undefined;
-  const maxPriceRaw = parseInt(searchParams.get("maxPrice") ?? "", 10);
-  const maxPrice = Number.isFinite(maxPriceRaw) && maxPriceRaw > 0 ? maxPriceRaw : undefined;
-  const districtId = parseId(searchParams.get("district") ?? "") ?? undefined;
-  const sortRaw = searchParams.get("sort");
-  const sort =
-    sortRaw === "reviews" || sortRaw === "priceLow" || sortRaw === "priceHigh"
-      ? sortRaw
-      : "rating";
-  const limitRaw = parseInt(searchParams.get("limit") ?? "", 10);
-  const limit = Number.isFinite(limitRaw) && limitRaw > 0 ? Math.min(limitRaw, 100) : undefined;
-  const offsetRaw = parseInt(searchParams.get("offset") ?? "", 10);
-  const offset = limit && Number.isFinite(offsetRaw) && offsetRaw > 0 ? offsetRaw : undefined;
+  if (f.view === "offerings") {
+    if (f.limit === undefined) {
+      pageSize = DEFAULT_PAGE_SIZE;
+      page = 1;
+      f.limit = pageSize;
+      f.offset = 0;
+    }
+    const { offerings, total } = await searchOfferings(f);
+    return NextResponse.json({ view: "offerings", offerings, total, page, pageSize });
+  }
 
-  const filters = {
-    query,
-    categories: categories.length > 0 ? categories : undefined,
-    location,
-    minRating,
-    maxPrice,
-    districtId,
-    sort,
-  } as const;
-
-  const [vendors, total] = await Promise.all([
-    findVendors({ ...filters, limit, offset }),
-    countVendors(filters),
-  ]);
-
-  return NextResponse.json({ vendors: vendors.map(toPublicVendor), total });
+  const { vendors, total } = await searchVendors(f);
+  return NextResponse.json({
+    view: "vendors",
+    vendors: vendors.map((v) => ({ ...toPublicVendor(v), featured: v.featured })),
+    total,
+    page,
+    pageSize,
+  });
 }
 
 export async function POST(request: Request) {

@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { findVendors, type VendorRecord } from "@/lib/db";
+import type { Taxonomy } from "@/lib/db";
 import { getTaxonomy } from "@/lib/taxonomy";
 import { VendorTile } from "@/lib/vendorVisuals";
 import HomeSearch from "./home-search";
@@ -14,12 +15,11 @@ export const metadata: Metadata = {
 // Reads live vendor data on every request.
 export const dynamic = "force-dynamic";
 
-async function loadCategoryNames(): Promise<string[]> {
+async function loadTaxonomy(): Promise<Taxonomy | null> {
   try {
-    const taxonomy = await getTaxonomy();
-    return taxonomy.categories.filter((c) => c.active).map((c) => c.name);
+    return await getTaxonomy();
   } catch {
-    return [];
+    return null;
   }
 }
 
@@ -33,16 +33,21 @@ async function loadVendors(): Promise<VendorRecord[]> {
   }
 }
 
-function countBy(vendors: VendorRecord[], key: "category" | "location") {
+function countBy(keys: string[]) {
   const counts = new Map<string, number>();
-  for (const v of vendors) counts.set(v[key], (counts.get(v[key]) ?? 0) + 1);
+  for (const k of keys) counts.set(k, (counts.get(k) ?? 0) + 1);
   return counts;
 }
 
 export default async function Home() {
-  const [vendors, taxonomyNames] = await Promise.all([loadVendors(), loadCategoryNames()]);
-  const categoryCounts = countBy(vendors, "category");
-  const districtCounts = countBy(vendors, "location");
+  const [vendors, taxonomy] = await Promise.all([loadVendors(), loadTaxonomy()]);
+  const taxonomyNames = taxonomy?.categories.filter((c) => c.active).map((c) => c.name) ?? [];
+  const districtNames = taxonomy?.districts.map((d) => d.name) ?? [];
+  const eventTypes = taxonomy?.eventTypes.filter((e) => e.slug !== "other") ?? [];
+  const categoryCounts = countBy(vendors.map((v) => v.category));
+  // Home district (the town falls back when a vendor has no district yet).
+  const districtById = new Map(taxonomy?.districts.map((d) => [d.id, d.name]) ?? []);
+  const districtCounts = countBy(vendors.map((v) => (v.district_id && districtById.get(v.district_id)) || v.location));
 
   // DB taxonomy categories first (admin sort order), then any others found in
   // the data. Categories with no live vendor yet are hidden so the chips never
@@ -70,9 +75,28 @@ export default async function Home() {
           Find and compare wedding &amp; event vendors across Kerala
         </h1>
 
-        <HomeSearch />
+        <HomeSearch districts={districtNames} />
 
-        <nav aria-label="Browse by category" className="w-full max-w-[720px] mt-9 sm:mt-11">
+        {eventTypes.length > 0 && (
+          <nav aria-label="Plan by occasion" className="w-full max-w-[720px] mt-9 sm:mt-11">
+            <h2 className="eyebrow text-center mb-3">Plan by occasion</h2>
+            <ul className="flex gap-2 flex-nowrap overflow-x-auto overscroll-x-contain snap-x scroll-px-4 -mx-4 px-4 pb-1 [scrollbar-width:none] [mask-image:linear-gradient(to_right,#000_calc(100%-40px),transparent)] sm:[mask-image:none] sm:mx-0 sm:px-0 sm:pb-0 sm:flex-wrap sm:justify-center sm:overflow-visible">
+              {eventTypes.map((e) => (
+                <li key={e.slug} className="shrink-0 snap-start">
+                  <Link
+                    href={`/e/${e.slug}`}
+                    className="inline-flex items-center min-h-11 border border-accent/25 bg-accent-tint text-accent-hover rounded-full px-4 text-sm font-medium transition-colors hover:bg-accent hover:text-white whitespace-nowrap"
+                  >
+                    {e.name}
+                  </Link>
+                </li>
+              ))}
+            </ul>
+          </nav>
+        )}
+
+        <nav aria-label="Browse by category" className="w-full max-w-[720px] mt-6 sm:mt-7">
+          <h2 className="eyebrow text-center mb-3">Browse by category</h2>
           <ul className="flex gap-2 flex-nowrap overflow-x-auto overscroll-x-contain snap-x scroll-px-4 -mx-4 px-4 pb-1 [scrollbar-width:none] [mask-image:linear-gradient(to_right,#000_calc(100%-40px),transparent)] sm:[mask-image:none] sm:mx-0 sm:px-0 sm:pb-0 sm:flex-wrap sm:justify-center sm:overflow-visible">
             {categories.map((c) => (
               <li key={c.name} className="shrink-0 snap-start">

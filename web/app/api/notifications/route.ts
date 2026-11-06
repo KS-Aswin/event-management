@@ -2,9 +2,10 @@ import { NextResponse } from "next/server";
 import { requireRole } from "@/app/api/_lib/auth";
 import { listNotifications, markNotificationsRead } from "@/lib/notifications";
 
-// In-app notifications for the signed-in user (admin decisions for vendors
-// today; offers and messages for customers later, P2-13). Only the caller's
-// own rows are ever read or changed.
+// In-app notifications for the signed-in user (P2-13): admin decisions and
+// new leads for vendors, offers, messages and booking updates for customers.
+// The header bell reads and marks them here. Only the caller's own rows are
+// ever read or changed.
 
 const NO_STORE = { "Cache-Control": "private, no-store" };
 
@@ -43,3 +44,6 @@ export async function POST(request: Request) {
   const marked = await markNotificationsRead(auth.userId, ids);
   return NextResponse.json({ marked }, { headers: NO_STORE });
 }
+
+/** PATCH /api/notifications: same as POST (PRODUCT_PLAN section 6 lists GET/PATCH). */
+export const PATCH = POST;

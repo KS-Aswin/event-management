@@ -3,7 +3,16 @@ import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import Link from "next/link";
 import Image from "next/image";
-import { findVendorById, findReviewsByVendor, isFavorited, type VendorRecord } from "@/lib/db";
+import {
+  findVendorById,
+  findReviewsByVendor,
+  isFavorited,
+  findEventTypes,
+  findDistricts,
+  findUserById,
+  type VendorRecord,
+} from "@/lib/db";
+import { formatE164, toE164, whatsappLink } from "@/lib/phone";
 import { getSession, type SessionPayload } from "@/lib/session";
 import { VendorTile } from "@/lib/vendorVisuals";
 import FavoriteButton from "@/lib/favorite-button";
@@ -43,6 +52,18 @@ function canView(vendor: VendorRecord, session: SessionPayload | null) {
   if (isPublic(vendor)) return true;
   if (!session) return false;
   return vendor.owner_id === session.userId || session.role === "admin";
+}
+
+function siteUrl() {
+  return (process.env.NEXT_PUBLIC_SITE_URL || "http://localhost:3000").replace(/\/$/, "");
+}
+
+function WhatsappIcon({ className = "w-[18px] h-[18px]" }: { className?: string }) {
+  return (
+    <svg aria-hidden="true" viewBox="0 0 24 24" className={className} fill="currentColor">
+      <path d="M12 2a10 10 0 0 0-8.6 15.1L2 22l5-1.3A10 10 0 1 0 12 2Zm0 18.2a8.2 8.2 0 0 1-4.2-1.1l-.3-.2-3 .8.8-2.9-.2-.3A8.2 8.2 0 1 1 12 20.2Zm4.5-6.1c-.2-.1-1.5-.7-1.7-.8-.2-.1-.4-.1-.6.1l-.8 1c-.1.2-.3.2-.5.1a6.7 6.7 0 0 1-3.3-2.9c-.3-.4.2-.4.7-1.3.1-.2 0-.3 0-.4l-.8-1.8c-.2-.5-.4-.4-.6-.4h-.5a1 1 0 0 0-.7.3 3 3 0 0 0-.9 2.2 5.2 5.2 0 0 0 1.1 2.7 11.8 11.8 0 0 0 4.5 4c1.7.7 2.3.8 3.2.6.5-.1 1.5-.6 1.7-1.2.2-.6.2-1.1.2-1.2-.1-.1-.3-.2-.5-.3Z" />
+    </svg>
+  );
 }
 
 const loadVendor = cache(async (rawId: string) => {
@@ -91,10 +112,13 @@ export default async function VendorProfilePage({
   const isOwnListing = session ? vendor.owner_id === session.userId : false;
   // Owner (and admin) preview also sees media still under review, badged.
   const preview = isOwnListing || session?.role === "admin";
-  const [reviews, media, offerings] = await Promise.all([
+  const [reviews, media, offerings, eventTypes, districts, viewer] = await Promise.all([
     findReviewsByVendor(vendorId),
     loadProfileMedia(vendor, preview),
     loadProfileOfferings(vendorId),
+    findEventTypes(),
+    findDistricts(),
+    session ? findUserById(session.userId) : Promise.resolve(null),
   ]);
 
   const publicListing = isPublic(vendor);
@@ -111,13 +135,58 @@ export default async function VendorProfilePage({
     count: reviews.filter((r) => r.rating === star).length,
   }));
 
+  const viewerPhone = (viewer as { phone_e164?: string | null } | null)?.phone_e164 ?? "";
   const quoteProps = {
     vendorId: vendor.id,
     vendorName: vendor.name,
     services: quoteServices,
     defaultName: session?.name ?? "",
+    defaultPhone: viewerPhone,
+    defaultEmail: viewer?.email ?? "",
     loggedIn: !!session,
+    eventTypes: eventTypes.map((t) => ({ id: t.id, name: t.name })),
+    districts: districts.map((d) => ({ id: d.id, name: d.name })),
+    showFood: offerings.hasCatering || vendor.category === "Catering",
   };
+
+  // P2-12 contact: WhatsApp click-to-chat (E.164 digits, URL-encoded text;
+  // clicks are counted by VendorBeacon) and the phone for signed-in users.
+  const waHref = whatsappLink(
+    vendor.whatsapp || vendor.phone,
+    `Hi ${vendor.name}, I found you on Vela (${siteUrl()}/vendors/${vendor.id}) and would like to know more about your services for my event.`
+  );
+  const phoneE164 = toE164(vendor.phone ?? "");
+  const phoneText = phoneE164 ? formatE164(phoneE164) : vendor.phone?.trim() || null;
+  const contactBlock =
+    waHref || phoneText ? (
+      <div className="space-y-2.5">
+        {waHref ? (
+          <a href={waHref} target="_blank" rel="noopener noreferrer" className="btn btn-secondary btn-block">
+            <WhatsappIcon className="w-[18px] h-[18px] text-[#128c4b]" />
+            Chat on WhatsApp
+          </a>
+        ) : null}
+        {phoneText ? (
+          session ? (
+            <a
+              href={`tel:${phoneE164 ?? phoneText.replace(/[^\d+]/g, "")}`}
+              className="flex items-center justify-center gap-2 min-h-11 text-sm font-medium text-accent hover:underline underline-offset-2"
+            >
+              <svg aria-hidden="true" viewBox="0 0 20 20" className="w-4 h-4" fill="currentColor">
+                <path d="M2 3.5A1.5 1.5 0 0 1 3.5 2h1.6a1 1 0 0 1 1 .8l.7 3.1a1 1 0 0 1-.5 1.1l-1.4.8a11 11 0 0 0 5.3 5.3l.8-1.4a1 1 0 0 1 1.1-.5l3.1.7a1 1 0 0 1 .8 1v1.6a1.5 1.5 0 0 1-1.5 1.5h-1A13.5 13.5 0 0 1 2 4.5v-1Z" />
+              </svg>
+              Call {phoneText}
+            </a>
+          ) : (
+            <p className="text-center text-sm text-ink-soft">
+              <Link href={loginHref} className="inline-flex items-center min-h-11 font-medium text-accent hover:underline underline-offset-2">
+                Sign in to see the phone number
+              </Link>
+            </p>
+          )
+        ) : null}
+      </div>
+    ) : null;
 
   const jsonLd = publicListing
     ? {
@@ -177,7 +246,8 @@ export default async function VendorProfilePage({
   );
 
   return (
-    <main className="w-full pb-24 lg:pb-0">
+    // Bottom padding = the sticky mobile bar's height plus the safe-area inset, so it never covers content.
+    <main className="w-full pb-[calc(6rem+env(safe-area-inset-bottom))] lg:pb-0">
       {/* Analytics (P1-12): not for the owner's or an admin's preview; the server re-checks. */}
       {publicListing && !preview ? <VendorBeacon vendorId={vendor.id} /> : null}
       {jsonLd ? (
@@ -293,6 +363,7 @@ export default async function VendorProfilePage({
               </>
             )}
           </div>
+          {contactBlock ? <div className="lg:hidden mt-3 sm:max-w-[360px]">{contactBlock}</div> : null}
 
           {hasMedia ? (
             <section aria-labelledby="gallery-heading" className="mt-7">
@@ -459,22 +530,36 @@ export default async function VendorProfilePage({
                 {favorite}
               </div>
             )}
+            {contactBlock ? <div className="mt-3">{contactBlock}</div> : null}
           </div>
         </aside>
       </div>
 
       <div className="lg:hidden fixed bottom-0 inset-x-0 z-40 bg-white/95 backdrop-blur border-t border-line shadow-[0_-6px_20px_rgb(32_33_36/0.06)] safe-bottom">
-        <div className="page pt-3 flex items-center justify-between gap-3">
-          <div className="min-w-0">
-            <div className="text-[11px] text-ink-soft">Starting from</div>
-            <div className="text-accent font-semibold text-[15px] truncate">{vendor.price_label}</div>
-          </div>
+        <div className="page pt-3 flex items-center justify-between gap-2.5">
+          {waHref && !isOwnListing ? (
+            <a
+              href={waHref}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="btn btn-secondary shrink-0 px-4"
+              aria-label={`Chat with ${vendor.name} on WhatsApp`}
+            >
+              <WhatsappIcon className="w-5 h-5 text-[#128c4b]" />
+              WhatsApp
+            </a>
+          ) : (
+            <div className="min-w-0">
+              <div className="text-[11px] text-ink-soft">Starting from</div>
+              <div className="text-accent font-semibold text-[15px] truncate">{vendor.price_label}</div>
+            </div>
+          )}
           {isOwnListing ? (
             <Link href="/vendor/profile" className="btn btn-primary shrink-0 px-6">
               Edit listing
             </Link>
           ) : (
-            <QuoteButton {...quoteProps} triggerClassName="btn btn-primary shrink-0 px-6 sm:px-8" />
+            <QuoteButton {...quoteProps} label="Get quote" triggerClassName="btn btn-primary flex-1 sm:flex-none px-6 sm:px-8" />
           )}
         </div>
       </div>

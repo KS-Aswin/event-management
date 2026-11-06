@@ -196,11 +196,23 @@ export interface OfferingGroup {
   packageOnly: OfferingView[];
 }
 
+/** One offering in the quote dialog: qty input for per-unit prices, min-qty warning. */
+export interface QuoteableOffering {
+  id: number;
+  title: string;
+  kind: "unit" | "package";
+  priceUnit: string;
+  unitLabel: string | null;
+  minQty: number | null;
+}
+
 export interface ProfileOfferings {
   groups: OfferingGroup[];
   packages: OfferingView[];
   /** What the quote dialog may offer: separately bookable units and packages. */
-  quoteable: { id: number; title: string }[];
+  quoteable: QuoteableOffering[];
+  /** True when the vendor sells catering (the quote dialog asks for veg / non-veg). */
+  hasCatering: boolean;
   total: number;
 }
 
@@ -263,9 +275,23 @@ export async function loadProfileOfferings(vendorId: number): Promise<ProfileOff
   });
 
   const groupList = [...groups.values()].filter((g) => g.units.length || g.packageOnly.length);
+  const byId = new Map(rows.map((r) => [r.id, r]));
+  const q = (id: number, title: string, kind: "unit" | "package"): QuoteableOffering => {
+    const r = byId.get(id);
+    const min = r?.min_qty == null ? null : Number(r.min_qty);
+    return {
+      id,
+      title,
+      kind,
+      priceUnit: r?.price_unit ?? "event",
+      unitLabel: r?.unit_label ?? null,
+      minQty: min && Number.isFinite(min) ? min : null,
+    };
+  };
   const quoteable = [
-    ...groupList.flatMap((g) => g.units.map((u) => ({ id: u.id, title: u.title }))),
-    ...packages.map((p) => ({ id: p.id, title: `${p.title} (package)` })),
+    ...groupList.flatMap((g) => g.units.map((u) => q(u.id, u.title, "unit"))),
+    ...packages.map((p) => q(p.id, `${p.title} (package)`, "package")),
   ];
-  return { groups: groupList, packages, quoteable, total: units.size + packages.length };
+  const hasCatering = rows.some((r) => r.category_slug === "catering" || r.price_unit === "plate");
+  return { groups: groupList, packages, quoteable, hasCatering, total: units.size + packages.length };
 }

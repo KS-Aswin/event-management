@@ -15,7 +15,8 @@
     "test:admin": "node --env-file-if-exists=.env.local --test --test-concurrency=1 tests/admin-*.test.mjs",
     "test:e2e": "playwright test",
     "test:unit": "node --test tests/offering-validation.test.mjs tests/profile-validation.test.mjs",
-    "test:storage": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON tests/storage.test.mjs"
+    "test:storage": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON tests/storage.test.mjs",
+    "test:customer": "node --env-file-if-exists=.env.local --test --test-concurrency=1 tests/customer-*.test.mjs"
   },
   "dependencies": {
     "bcryptjs": "^3.0.3",

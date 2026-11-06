@@ -7,7 +7,10 @@
 // one with photos awaiting review; 1 changes requested), 3 "Kolkali" custom
 // offerings, open review and media reports, a re-review flag, and sample
 // enquiries including a spam burst (one phone to 11 vendors within 30 min).
-// Their enquiry messages start with "[seed]". No admin user is created: use
+// Their enquiry messages start with "[seed]". Search demo (P2-7): service
+// areas, guest capacities, a few verified businesses, availability blocks 14
+// and 21 days ahead, and a separately sellable candid photography unit on the
+// event company. No admin user is created: use
 // npm run admin:create.
 //
 // Media: placeholder photos are drawn by db/fixtures/make-media.mjs (our own
@@ -383,6 +386,57 @@ try {
        VALUES ($1, 'Best Price Deals', '+919800000999', '[seed] Cheapest package? Call now for bulk offers.',
                now() - make_interval(mins => $2::int))`,
       [vendorId, 30 - i * 3]
+    );
+  }
+
+  // ---- Search demo data (P2-7) ------------------------------------------
+  // The event company sells candid photography on its own as well as its
+  // package-only partner photography, so "Photography, Ernakulam" in the
+  // Services view shows the separate unit and never the package-only one.
+  const kcId = await idOf("Kerala Celebrations Co.");
+  const photoCat = need(cats, "Photography", "category");
+  const candid = need(templates, `${photoCat}:candid-photography`, "template (Photography)");
+  await client.query(
+    `INSERT INTO services (vendor_id, category_id, title, description, price_from, price_unit, sort_order, template_id, kind, sale_mode, inclusions)
+     VALUES ($1, $2, 'Candid photography', 'Two candid photographers for the wedding day, 500+ edited photos in an online gallery.',
+             45000, 'event', 20, $3, 'unit', 'separate', ARRAY['2 photographers', '500+ edited photos', 'Online gallery'])`,
+    [kcId, photoCat, candid.id]
+  );
+  offeringCount++;
+
+  // Guest capacity on venue spaces (the guests filter compares against these).
+  await client.query(
+    `UPDATE services s SET guest_max = x.max
+       FROM (VALUES ('Banquet hall (up to 1,200 guests)', 1200), ('Backwater lawn (up to 500 guests)', 500),
+                    ('Indoor hall and outdoor lawn', 1500)) AS x(title, max)
+      WHERE s.title = x.title`
+  );
+
+  // A few verified businesses (admin-verified documents in a real listing).
+  await client.query(
+    `UPDATE vendors SET verified_at = now() - interval '30 days'
+      WHERE name IN ('Backwater Grand Palace', 'Malabar Spice Caterers', 'Kerala Celebrations Co.', 'Studio Frames by Arun')`
+  );
+
+  // Availability (dates relative to today, so the demo never goes stale):
+  //   +14 days  Studio Frames fully blocked, Momentz booked morning and
+  //             evening (both hidden by a date filter); Backwater's morning
+  //             slot booked (still shown: the evening is free); Malabar Spice
+  //             at 1 of 2 events (shown as limited).
+  //   +21 days  Glow Bridal Studio blocked (family function).
+  const availability = [
+    ["Studio Frames by Arun", 14, "full", "blocked", 1, 0, "Out of station"],
+    ["Momentz Cinematics", 14, "morning", "booked", 1, 1, null],
+    ["Momentz Cinematics", 14, "evening", "booked", 1, 1, null],
+    ["Backwater Grand Palace", 14, "morning", "booked", 1, 1, null],
+    ["Malabar Spice Caterers", 14, "full", "limited", 2, 1, null],
+    ["Glow Bridal Studio", 21, "full", "blocked", 1, 0, "Family function"],
+  ];
+  for (const [name, days, slot, status, total, used, note] of availability) {
+    await client.query(
+      `INSERT INTO vendor_availability (vendor_id, date, slot, status, capacity_total, capacity_used, note)
+       VALUES ($1, current_date + $2::int, $3, $4, $5, $6, $7)`,
+      [await idOf(name), days, slot, status, total, used, note]
     );
   }
 

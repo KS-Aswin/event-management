@@ -38,10 +38,27 @@ interface Option {
   run: () => void;
 }
 
-export default function HomeSearch() {
+/** YYYY-MM-DD in India (events are local), for the date picker's minimum. */
+function todayInIndia() {
+  return new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Kolkata" }).format(new Date());
+}
+
+/**
+ * Hero search: What (free text with typeahead), Where (district) and When
+ * (optional date). Where and When ride along with every way of searching.
+ */
+export default function HomeSearch({ districts = [] }: { districts?: string[] }) {
   const router = useRouter();
   const listId = useId();
   const [value, setValue] = useState("");
+  // Uncontrolled, read on submit: a choice made before hydration still counts.
+  const whereId = useId();
+  const whenId = useId();
+  const today = useSyncExternalStore(
+    () => () => {},
+    todayInIndia,
+    () => ""
+  );
   const [focused, setFocused] = useState(false);
   const [open, setOpen] = useState(false);
   const [activeIndex, setActiveIndex] = useState(-1);
@@ -96,7 +113,11 @@ export default function HomeSearch() {
     const q = facets.q ? normalise(facets.q) : "";
     if (q) params.set("q", q);
     if (facets.category) params.set("category", facets.category);
-    if (facets.location) params.set("location", facets.location);
+    const where = (document.getElementById(whereId) as HTMLSelectElement | null)?.value ?? "";
+    const when = (document.getElementById(whenId) as HTMLInputElement | null)?.value ?? "";
+    const location = facets.location || where;
+    if (location) params.set("location", location);
+    if (when && (!today || when >= today)) params.set("date", when);
     setOpen(false);
     const qs = params.toString();
     router.push(qs ? `/search?${qs}` : "/search");
@@ -260,6 +281,42 @@ export default function HomeSearch() {
             </div>
           </div>
         )}
+      </div>
+
+      <div className="w-full grid grid-cols-2 gap-2.5 sm:gap-3 mt-3">
+        <label className="block rounded-card border border-line-strong bg-white px-4 pt-2 pb-1 transition-[box-shadow,border-color] focus-within:border-accent focus-within:shadow-[0_0_0_3px_var(--color-accent-tint)]">
+          <span className="eyebrow block">Where</span>
+          <select
+            aria-label="Where: district"
+            id={whereId}
+            defaultValue=""
+
+            className="w-full min-h-10 bg-transparent text-base sm:text-[15px] outline-none cursor-pointer -ml-1"
+            style={{ outline: "none" }}
+          >
+            <option value="">Anywhere in Kerala</option>
+            {districts.map((d) => (
+              <option key={d} value={d}>
+                {d}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label className="block rounded-card border border-line-strong bg-white px-4 pt-2 pb-1 transition-[box-shadow,border-color] focus-within:border-accent focus-within:shadow-[0_0_0_3px_var(--color-accent-tint)]">
+          <span className="eyebrow block">
+            When <span className="normal-case tracking-normal font-normal">(optional)</span>
+          </span>
+          <input
+            type="date"
+            aria-label="When: event date (optional)"
+            id={whenId}
+            defaultValue=""
+            min={today || undefined}
+
+            className="w-full min-h-10 bg-transparent text-base sm:text-[15px] outline-none"
+            style={{ outline: "none" }}
+          />
+        </label>
       </div>
 
       <button

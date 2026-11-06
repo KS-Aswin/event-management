@@ -39,6 +39,8 @@ function kindOf(el: Element): Kind | null {
   const marked = el.closest("[data-vela-track]");
   const tracked = marked?.getAttribute("data-vela-track");
   if (tracked === "whatsapp_click" || tracked === "phone_click") return tracked;
+  // e.g. the "Share on WhatsApp" link after an enquiry: not a click to the vendor.
+  if (tracked === "ignore") return null;
   const a = el.closest("a[href]");
   if (!a) return null;
   const href = (a.getAttribute("href") ?? "").toLowerCase();

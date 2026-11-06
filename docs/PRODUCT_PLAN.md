@@ -1191,27 +1191,27 @@ AC:
 - Customers with no data see an empty state with event-type chips.
 - No vendor CTAs appear.
 
-**P2-2 Enquiry form v2.** Event type, guests, district, venue type, budget band, slot, food preference, per-unit qty with min-qty warning, E.164 phones (+971 and others), preferred contact.
+[x] **P2-2 Enquiry form v2.** Event type, guests, district, venue type, budget band, slot, food preference, per-unit qty with min-qty warning, E.164 phones (+971 and others), preferred contact. _Status: done 2026-11-06. lib/enquiries-create.ts + lib/phone.ts behind POST /api/vendors/[id]/quotes: all v2 fields, phones stored as E.164 (Indian and +971/00971), 400 with `{code, field}` for a past date, bad phone, unknown event type/district, budget min > max, a foreign/inactive/package-only unit; below-minimum qty and busy dates come back as warnings; unit snapshots stored. The quote dialog preselects the clicked offering, asks qty for per-unit offerings, uses budget bands and prefills signed-in users. The vendor is notified by the 009 trigger._
 AC:
 - A +971 number is accepted and stored normalised.
 - A guest count below a caterer's min plates shows a warning but is allowed.
 - A past date gets 400.
 - Request snapshots are stored.
 
-**P2-3 Guest enquiry tracking.** `guest_token` link shown after submit (and in the WhatsApp share text). `/enquiry/[token]`. On signup or login with a matching email, guest enquiries are linked (phone matching waits for OTP).
+[x] **P2-3 Guest enquiry tracking.** `guest_token` link shown after submit (and in the WhatsApp share text). `/enquiry/[token]`. On signup or login with a matching email, guest enquiries are linked (phone matching waits for OTP). _Status: done 2026-11-06. GET /api/enquiries/track/[token] and `/enquiry/[token]` (noindex, no-referrer, no-store) show status, vendor, event details, units, offer versions and the thread read-only, never vendor notes or the phone; an unknown or malformed token is a real 404 (checked in proxy.ts). Register and login link guest enquiries with a matching contact email (customer accounts only). Guests can't accept offers or reply yet: the page asks them to sign up._
 AC:
 - The token page shows status and offers without login.
 - A wrong token gets 404.
 - After signing up with the same email, the enquiry appears in `/my/enquiries`.
 
-**P2-4 Itemised quote offers.** Vendor offer builder, versions, totals in paise, GST only when the vendor has a GSTIN, validity and advance %; customer accept or decline; an expired offer can't be accepted.
+[x] **P2-4 Itemised quote offers.** Vendor offer builder, versions, totals in paise, GST only when the vendor has a GSTIN, validity and advance %; customer accept or decline; an expired offer can't be accepted. _Status: lib/offer-math.ts (rupees -> paise, server recomputes lines/total), POST /api/vendor/leads/[id]/offers (vN supersedes, one live offer per enquiry via migration 009), builder on /vendor/leads/[id] prefilled from requested units and service-area travel fee; offer cards both sides; accept/decline via PATCH /api/my/enquiries/[id]; expired offers 409._
 AC:
 - Sending v2 supersedes v1.
 - Line amounts must sum to the subtotal (400 otherwise).
 - Accepting sets the enquiry to `accepted` and notifies the vendor.
 - A vendor without a GSTIN cannot add GST.
 
-**P2-5 Enquiry thread and status machine.** Messages both ways; customer withdraw; vendor or customer mark booked; transitions validated server-side (e.g. no `booked` after `withdrawn`).
+[x] **P2-5 Enquiry thread and status machine.** Messages both ways; customer withdraw; vendor or customer mark booked; transitions validated server-side (e.g. no `booked` after `withdrawn`). _Status: lib/enquiry-status.ts (per-actor transitions, 409 otherwise, also enforced in updateVendorLead and the legacy /api/quotes route), lazy expiry of open enquiries past the event date, messages via /api/my/enquiries/[id]/messages and /api/vendor/leads/[id]/messages (read marks), /my/enquiries list + thread pages, vendor lead thread and Quoted/Accepted/Withdrawn/Expired tabs; contact masking with BILLING_ENABLED=true._
 AC:
 - Every invalid transition gets 409.
 - Every valid one writes `quote_status_events`.
@@ -1223,20 +1223,20 @@ AC:
 - Capacity 2 with 1 booked shows "limited".
 - Marking a lead booked increments `capacity_used`.
 
-**P2-7 Search v2.** Offering-level results, served-district matching, budget per unit, date filter, event-type filter, verified filter, ranking order.
+[x] **P2-7 Search v2.** Offering-level results, served-district matching, budget per unit, date filter, event-type filter, verified filter, ranking order. _Status: done 2026-11-06 (lib/search.ts, migration 010 adds `vendors.featured_until` and `rank_boost`). `GET /api/vendors` takes view, offering, eventType, district (id or name; home or served, `homeOnly=1` for home only), date, budgetMax + priceUnit (unit defaults to the offering's or single category's), guests, verified, page/limit; bad values are 400 with the field. Legacy params unchanged. `/search` has a mobile filter sheet, Vendors/Services toggle, offering cards and nearby-district suggestions on an empty result._
 AC:
 - "Photography, Ernakulam" returns an event company's separately-sellable photography unit and never its package-only units.
 - A Thrissur vendor serving Ernakulam appears.
 - The budget filter compares like units (per-plate versus per-event tested).
 - Results are stable and paginated.
 
-**P2-8 Event-type browse.** Home chips and `/e/[slug]` pages with the category bundle and top vendors per category. `/c/[slug]` category landing pages.
+[x] **P2-8 Event-type browse.** Home chips and `/e/[slug]` pages with the category bundle and top vendors per category. `/c/[slug]` category landing pages. _Status: done 2026-11-06. Home has What/Where/When and a "Plan by occasion" chip row; `/e/[slug]` and `/c/[slug]` have unique titles and descriptions and are in the sitemap. Unknown slugs are a real 404: proxy.ts checks the slug against active `event_types` / `categories` before the page streams._
 AC:
 - `/e/nikah` lists the bundle categories from `event_type_categories`.
 - The pages have unique titles and meta descriptions.
 - An unknown slug gets 404.
 
-**P2-9 Shortlist and multi-vendor enquiry.** Shortlist with notes, guest localStorage merged on login, "send to selected" up to 5, maximum 15 per day per phone, per-vendor results.
+**P2-9 Shortlist and multi-vendor enquiry.** Shortlist with notes, guest localStorage merged on login, "send to selected" up to 5, maximum 15 per day per phone, per-vendor results. _Status (partial, 2026-11-06): the API is done: POST /api/enquiries/multi (1-5 vendors, 6 is 400 on `vendorIds`; one batch_id; per-vendor results with partial success; 409 when no vendor is available; 429 `DAILY_LIMIT` past 15 per phone per rolling 24 h under a per-phone lock; 6 sends per 10 min per user/IP). Missing: the shortlist UI with notes, guest localStorage merge on login and the "send to selected" screen. The 15/day cap applies to multi sends only; the single route keeps its per-IP/user limit (tests/api.test.mjs leaves untagged enquiries on fixed phones)._
 AC:
 - 6 selected vendors get 400.
 - The 16th enquiry in a day gets 429.
@@ -1252,13 +1252,13 @@ AC:
 - One reply per review.
 - The reply appears publicly.
 
-**P2-12 Profile contact and mobile bar.** WhatsApp click-to-chat with prefilled text (logged as a `vendor_events` row and an optional `whatsapp_click` lead); phone shown to logged-in users; sticky mobile bar.
+[x] **P2-12 Profile contact and mobile bar.** WhatsApp click-to-chat with prefilled text (logged as a `vendor_events` row and an optional `whatsapp_click` lead); phone shown to logged-in users; sticky mobile bar. _Status: done 2026-11-06. `wa.me/<E.164 digits>?text=` with a URL-encoded message, counted by the vendor beacon (`whatsapp_click` vendor_events row, e2e-checked); phone only for signed-in users; sticky mobile bar with WhatsApp + "Get quote" and safe-area bottom padding. The optional `whatsapp_click` lead row is not built._
 AC:
 - The `wa.me` link is generated with the E.164 number and a URL-encoded message.
 - The click is counted.
 - The bar does not cover content (has a safe-area inset).
 
-**P2-13 In-app notifications.** Bell for vendors (new lead, admin decision) and customers (offer, message).
+[x] **P2-13 In-app notifications.** Bell for vendors (new lead, admin decision) and customers (offer, message). _Status: header bell (app/_nav/notification-bell.tsx) for vendors and customers with unread count and mark-all-read; new-lead notification by DB trigger (migration 009), thread/offer/accept/booked/withdraw notifications written in the same transaction (lib/enquiry-notify.ts)._
 AC:
 - Unread count accurate.
 - Mark-all-read.

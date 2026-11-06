@@ -1,46 +1,68 @@
 import { NextResponse } from "next/server";
-import { findVendorById, createQuoteRequest, resolveEnquiryServices, addLeadUnits } from "@/lib/db";
-import { checkRateLimit } from "@/lib/rate-limit";
+import { checkRateLimit, clientIp } from "@/lib/rate-limit";
 import { isEnquiryBlocked } from "@/lib/admin/ops";
+import { findUserById } from "@/lib/db";
+import {
+  createEnquiry,
+  findEnquiryVendors,
+  parseEnquiryFields,
+  parseUnitRequest,
+  resolveUnits,
+  type EnquiryError,
+} from "@/lib/enquiries-create";
 import { getLiveSession } from "../../../_lib/auth";
-import { LIMITS, normalisePhone, parseEventDate, parseId } from "../../../_lib/validation";
+import { parseId } from "../../../_lib/validation";
 
-function clientIp(request: Request): string {
-  return (
-    request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ||
-    request.headers.get("x-real-ip") ||
-    "local"
-  );
+// POST /api/vendors/[id]/quotes: enquiry form v2 (P2-2).
+//
+// Body (JSON; only name and phone are required):
+//   name, phone (Indian 10-digit or +<country code>; stored as E.164),
+//   eventDate / eventEndDate (YYYY-MM-DD, not in the past), eventTypeId,
+//   guestCount, districtId, venueType, venueText, budgetMin / budgetMax
+//   (rupees; legacy free-text `budget` still accepted), slot
+//   (full|morning|evening), foodPref (veg|non_veg|both), preferredContact
+//   (whatsapp|call|email), contactEmail, message,
+//   serviceIds: number[] and/or units: [{serviceId, qty?}].
+// 201 { quote: {id}, enquiry: {id, status, guestToken, trackingPath}, warnings: [...] }
+// A guest (signed out) gets a guestToken: /enquiry/<token> tracks the enquiry.
+// Errors: {error, code, field?} with 400 (validation, PAST_DATE,
+// INVALID_SERVICE, PACKAGE_ONLY), 403 (blocked contact, own listing),
+// 404 (vendor not taking enquiries), 429 (rate limit).
+
+const NO_STORE = { "Cache-Control": "private, no-store" };
+
+function errorResponse(e: EnquiryError) {
+  const { ok: _ok, status, ...body } = e;
+  void _ok;
+  return NextResponse.json(body, { status, headers: NO_STORE });
 }
 
-function fieldError(field: string, error: string) {
-  return NextResponse.json({ field, error }, { status: 400 });
-}
-
-export async function POST(
-  request: Request,
-  { params }: { params: Promise<{ id: string }> }
-) {
+export async function POST(request: Request, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
   const vendorId = parseId(id);
   if (vendorId === null) {
-    return NextResponse.json({ error: "Invalid vendor id." }, { status: 400 });
+    return NextResponse.json({ error: "Invalid vendor id.", code: "VALIDATION" }, { status: 400 });
   }
 
   const session = await getLiveSession();
 
-  // Only publicly listed vendors take enquiries (the owner can still see a
-  // pending listing, but can't send it quotes either).
-  const vendor = await findVendorById(vendorId, { publicOnly: true });
+  // Only approved, published vendors take enquiries.
+  const vendor = (await findEnquiryVendors([vendorId])).get(vendorId);
   if (!vendor) {
-    return NextResponse.json({ error: "Vendor not found." }, { status: 404 });
+    return NextResponse.json({ error: "Vendor not found.", code: "NOT_FOUND" }, { status: 404 });
+  }
+  if (session && vendor.owner_id === session.userId) {
+    return NextResponse.json(
+      { error: "You can't send an enquiry to your own listing.", code: "OWN_LISTING" },
+      { status: 403 }
+    );
   }
 
   // 10 enquiries per 10 minutes per signed-in user or IP.
-  const who = session ? `u:${session.userId}` : `ip:${clientIp(request)}`;
+  const who = session ? `u:${session.userId}` : `ip:${clientIp(request.headers)}`;
   if (!checkRateLimit(`quote:${who}`, 10, 10 * 60_000)) {
     return NextResponse.json(
-      { error: "Too many requests. Please wait a few minutes and try again." },
+      { error: "Too many requests. Please wait a few minutes and try again.", code: "RATE_LIMIT" },
       { status: 429 }
     );
   }
@@ -49,141 +71,42 @@ export async function POST(
   try {
     body = await request.json();
   } catch {
-    return NextResponse.json({ error: "Invalid request body." }, { status: 400 });
+    return NextResponse.json({ error: "Invalid request body.", code: "VALIDATION" }, { status: 400 });
   }
+  if (!body || typeof body !== "object" || Array.isArray(body)) {
+    return NextResponse.json({ error: "Invalid request body.", code: "VALIDATION" }, { status: 400 });
+  }
+  const raw = body as Record<string, unknown>;
 
-  const { name, phone, eventDate, budget, message, serviceIds } = (body ?? {}) as Record<
-    string,
-    unknown
-  >;
+  const account = session ? await findUserById(session.userId) : null;
+  const parsed = await parseEnquiryFields(raw, { accountEmail: account?.email ?? null });
+  if (!parsed.ok) return errorResponse(parsed);
+  const fields = parsed.fields;
 
-  if (typeof name !== "string" || name.trim().length < 2) {
-    return fieldError("name", "Please enter your name.");
-  }
-  if (name.trim().length > LIMITS.name) {
-    return fieldError("name", `Name must be ${LIMITS.name} characters or fewer.`);
-  }
-  const cleanPhone = normalisePhone(phone);
-  if (!cleanPhone) {
-    return fieldError("phone", "Please enter a valid 10-digit mobile number.");
-  }
-
-  // Blocked contacts (P1-13): a phone or account an admin blocked gets a
-  // generic 403 that doesn't say why.
-  const { contactEmail } = (body ?? {}) as Record<string, unknown>;
-  if (
-    await isEnquiryBlocked({
-      phone: cleanPhone,
-      email: typeof contactEmail === "string" ? contactEmail : null,
-      userId: session?.userId ?? null,
-    })
-  ) {
+  // Blocked contacts (P1-13): a generic 403 that doesn't say why.
+  if (await isEnquiryBlocked({ phone: fields.phone, email: fields.contactEmail, userId: session?.userId ?? null })) {
     return NextResponse.json(
-      { error: "We couldn't send this enquiry. Please contact support if you think this is a mistake." },
+      { error: "We couldn't send this enquiry. Please contact support if you think this is a mistake.", code: "FORBIDDEN" },
       { status: 403 }
     );
   }
 
-  let cleanDate: string | null = null;
-  if (eventDate !== undefined && eventDate !== null && eventDate !== "") {
-    cleanDate = parseEventDate(eventDate);
-    if (!cleanDate) {
-      return fieldError("eventDate", "Please choose an event date from today up to three years ahead.");
-    }
+  const unitReq = parseUnitRequest(raw.serviceIds, raw.units);
+  if (!unitReq) {
+    return NextResponse.json({ error: "Invalid service selection.", code: "VALIDATION" }, { status: 400 });
   }
+  const units = await resolveUnits(vendorId, unitReq, fields.guestCount);
+  if (!units.ok) return errorResponse(units);
 
-  let cleanBudget: string | null = null;
-  if (budget !== undefined && budget !== null && budget !== "") {
-    if (typeof budget !== "string" || budget.trim().length > LIMITS.budget) {
-      return fieldError("budget", `Budget must be ${LIMITS.budget} characters or fewer.`);
-    }
-    cleanBudget = budget.trim() || null;
-  }
-
-  let cleanMessage: string | null = null;
-  if (message !== undefined && message !== null && message !== "") {
-    if (typeof message !== "string" || message.trim().length > LIMITS.message) {
-      return fieldError("message", `Message must be ${LIMITS.message} characters or fewer.`);
-    }
-    cleanMessage = message.trim() || null;
-  }
-
-  // Optional: which of this vendor's offerings the customer wants, either as
-  // serviceIds: number[] or units: [{serviceId, qty?}]. Every id must be an
-  // active, public offering of this vendor. A package-only unit can only be
-  // asked for together with a package that includes it (PRODUCT_PLAN 3.2):
-  // asking for package-only units alone is 400 PACKAGE_ONLY.
-  const qtyById = new Map<number, number | null>();
-  const pushId = (n: unknown, qty: unknown = null): boolean => {
-    if (!Number.isInteger(n) || (n as number) <= 0 || (n as number) > 2147483647) return false;
-    let q: number | null = null;
-    if (qty !== null && qty !== undefined && qty !== "") {
-      const v = Number(qty);
-      if (!Number.isFinite(v) || v <= 0 || v > 100000) return false;
-      q = Math.round(v * 100) / 100;
-    }
-    qtyById.set(n as number, q ?? qtyById.get(n as number) ?? null);
-    return true;
-  };
-  const { units } = (body ?? {}) as Record<string, unknown>;
-  if (serviceIds !== undefined && serviceIds !== null) {
-    if (!Array.isArray(serviceIds) || serviceIds.length > 20 || !serviceIds.every((n) => pushId(n))) {
-      return NextResponse.json({ error: "Invalid service selection.", code: "VALIDATION" }, { status: 400 });
-    }
-  }
-  if (units !== undefined && units !== null) {
-    if (
-      !Array.isArray(units) ||
-      units.length > 20 ||
-      !units.every((u) => u && typeof u === "object" && pushId((u as Record<string, unknown>).serviceId, (u as Record<string, unknown>).qty))
-    ) {
-      return NextResponse.json({ error: "Invalid service selection.", code: "VALIDATION" }, { status: 400 });
-    }
-  }
-  let requestedServiceIds: number[] = [];
-  if (qtyById.size > 0) {
-    if (qtyById.size > 20) {
-      return NextResponse.json({ error: "Invalid service selection.", code: "VALIDATION" }, { status: 400 });
-    }
-    const resolved = await resolveEnquiryServices(vendorId, [...qtyById.keys()]);
-    if (!resolved.ok) {
-      return resolved.code === "PACKAGE_ONLY"
-        ? NextResponse.json(
-            {
-              error: "That service is only available as part of a package. Choose a package that includes it.",
-              code: "PACKAGE_ONLY",
-            },
-            { status: 400 }
-          )
-        : NextResponse.json(
-            { error: "One or more selected services don't belong to this vendor.", code: "INVALID_SERVICE" },
-            { status: 400 }
-          );
-    }
-    requestedServiceIds = resolved.serviceIds;
-  }
-
-  const quote = await createQuoteRequest({
-    vendorId,
+  const { enquiry, warnings } = await createEnquiry({
+    vendor,
+    fields,
     customerId: session?.userId ?? null,
-    name: name.trim().replace(/\s+/g, " "),
-    phone: cleanPhone,
-    eventDate: cleanDate,
-    budget: cleanBudget,
-    message: cleanMessage,
-    serviceIds: requestedServiceIds,
+    units: units.units,
   });
 
-  // Quantities (qty per unit) are stored on the same lead rows the vendor's
-  // leads inbox reads (quote_request_services).
-  const withQty = requestedServiceIds.filter((sid) => qtyById.get(sid) != null);
-  if (withQty.length > 0) {
-    await addLeadUnits(
-      quote.id,
-      vendorId,
-      withQty.map((sid) => ({ serviceId: sid, qty: qtyById.get(sid) ?? null }))
-    );
-  }
-
-  return NextResponse.json({ quote }, { status: 201 });
+  return NextResponse.json(
+    { quote: { id: enquiry.id }, enquiry, warnings: [...units.warnings, ...warnings] },
+    { status: 201, headers: NO_STORE }
+  );
 }

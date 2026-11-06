@@ -68,7 +68,7 @@ export const VENDOR_MENU: MenuLink[] = [
 /** Customer links. /my/* (P2) will replace the old dashboard links. */
 export const CUSTOMER_LINKS: MenuLink[] = [
   { href: "/search", label: "Find vendors" },
-  { href: CUSTOMER_DASHBOARD, label: "My enquiries" },
+  { href: "/my/enquiries", label: "My enquiries" },
 ];
 
 export const CUSTOMER_MENU: MenuLink[] = [
