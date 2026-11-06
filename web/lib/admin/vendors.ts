@@ -9,6 +9,7 @@ import { assetUrls } from "@/lib/media/repo";
 import { audit } from "./audit";
 import { hasVerifiedDocument } from "./documents";
 import { notify } from "./notify";
+import { reasonBeforeSuspension } from "./suspension";
 import { HttpError, withTransaction, type TxClient } from "./tx";
 
 // ---------------------------------------------------------------------------
@@ -519,6 +520,7 @@ export async function decideVendor(input: DecisionInput) {
     let to: VendorStatus = from;
     let extraSet = "";
     let approvedMedia = 0;
+    let restoredReason: string | null = null;
     switch (action) {
       case "approve":
         to = "approved";
@@ -545,7 +547,9 @@ export async function decideVendor(input: DecisionInput) {
         );
         const p = prev.rows[0]?.from_status as VendorStatus | undefined;
         to = p && p !== "suspended" ? p : "approved";
-        extraSet = ", status_reason = NULL";
+        // QA-085: bring back the admin's note that went with the restored status.
+        restoredReason = await reasonBeforeSuspension(client, vendorId, to);
+        extraSet = ", status_reason = $3";
         break;
       }
       case "clear_rereview":
@@ -555,7 +559,7 @@ export async function decideVendor(input: DecisionInput) {
 
     // Optimistic: only if the status is still what we locked.
     const params: unknown[] = [vendorId, from];
-    if (extraSet.includes("$3")) params.push(reason);
+    if (extraSet.includes("$3")) params.push(action === "unsuspend" ? restoredReason : reason);
     params.push(actorId);
     const actorParam = `$${params.length}`;
     const upd = await client.query<VendorRow>(

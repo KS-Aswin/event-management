@@ -8,6 +8,7 @@ import { toE164 } from "@/lib/phone";
 import { withTransaction, HttpError, type TxClient } from "./tx";
 import { audit } from "./audit";
 import { notify } from "./notify";
+import { reasonBeforeSuspension } from "./suspension";
 
 export const PAGE_SIZE = 25;
 
@@ -523,9 +524,10 @@ export async function applyUserAction(params: {
         );
         const c = cur.rows[0];
         if (c && c.status === "suspended" && Number(c.last_event) === prev.eventId) {
+          // QA-085: restore the admin's note that went with that status.
           await client.query(
-            "UPDATE vendors SET status = $2, status_reason = NULL, updated_at = now() WHERE id = $1",
-            [prev.id, prev.from]
+            "UPDATE vendors SET status = $2, status_reason = $3, updated_at = now() WHERE id = $1",
+            [prev.id, prev.from, await reasonBeforeSuspension(client, prev.id, prev.from)]
           );
           const ev = await client.query<{ id: number }>(
             `INSERT INTO vendor_status_events (vendor_id, from_status, to_status, reason, changed_by)
