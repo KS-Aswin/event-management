@@ -230,6 +230,8 @@ async function authPageResponse(request: NextRequest, cookie: CookieSession | nu
         }
       } else if (typeof u.session_version === "number" && u.session_version !== cookie.sessionVersion) {
         clear = true;
+      } else if (await isSessionRevoked(cookie.token)) {
+        clear = true; // signed out on the server (QA-081, QA-091)
       } else {
         dropNotice = request.cookies.has(NOTICE_COOKIE); // signed in and active again
       }

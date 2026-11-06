@@ -10,7 +10,7 @@ import { test, expect, signUp, runTag } from "./helpers";
 // customer tab bar / vendor workspace nav) on public pages, and with a
 // logged-out token (revoked_sessions) even on /login itself; the cookie is
 // never cleared there.
-test.fail("QA4-SEC-1: a session ended on another device doesn't keep the signed-in header", async ({ browser, page }, testInfo) => {
+test("QA4-SEC-1: a session ended on another device doesn't keep the signed-in header", async ({ browser, page }, testInfo) => {
   const tag = runTag(testInfo);
   const creds = { name: "E2E QA4 Stale", email: `e2e-qa4-stale-${tag}-${Math.random().toString(36).slice(2, 7)}@example.com`, password: "e2e-qa4-password-1" };
   await signUp(page, "customer", creds);
@@ -38,7 +38,7 @@ test.fail("QA4-SEC-1: a session ended on another device doesn't keep the signed-
 // requests a second: 409 "already in use" vs 400 "Enter your current
 // password". /api/auth/register gives the same answer but is limited to 10
 // per 15 minutes per IP.
-test.fail("QA4-SEC-2: email change doesn't reveal registered emails without the password", async ({ page, browser }, testInfo) => {
+test("QA4-SEC-2: email change doesn't reveal registered emails without the password", async ({ page, browser }, testInfo) => {
   const tag = runTag(testInfo);
   const victim = { name: "E2E QA4 Victim", email: `e2e-qa4-victim-${tag}-${Math.random().toString(36).slice(2, 7)}@example.com`, password: "e2e-qa4-password-1" };
   const v = await browser.newContext();

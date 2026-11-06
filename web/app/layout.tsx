@@ -1,6 +1,6 @@
 import type { Metadata, Viewport } from "next";
 import "./globals.css";
-import { getSession } from "@/lib/session";
+import { getLiveSession } from "@/app/api/_lib/auth";
 import Header from "./header";
 import Footer from "./footer";
 import CustomerTabBar from "./_nav/customer-tab-bar";
@@ -75,7 +75,13 @@ export default async function RootLayout({
 }: Readonly<{
   children: React.ReactNode;
 }>) {
-  const session = await getSession();
+  // Live check (QA-091): the user row, status, session_version and the
+  // revoked-token list, like the API guards. A session that ended elsewhere
+  // (password change, "sign out of other devices", logout) renders signed
+  // out. Cached per request, so pages that guard with the same check reuse
+  // the answer. Render can't delete cookies; proxy.ts clears the dead one on
+  // /login, where every guarded page sends it.
+  const session = await getLiveSession();
 
   return (
     <html lang="en" className="h-full antialiased">

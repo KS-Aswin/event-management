@@ -4,6 +4,13 @@ import { updateUser, findUserByEmail, findUserById } from "@/lib/db";
 import { getLiveSession, sessionVersionOf } from "../_lib/auth";
 import { requireCurrentPassword } from "./_security";
 import { isValidEmail, LIMITS } from "../_lib/validation";
+import { rateLimitHit } from "@/lib/rate-limit";
+import { tooManyRequests } from "../auth/_guard";
+
+// Email-change attempts per account per 15 min (QA-092), the same budget
+// as sign-up per IP (app/api/auth/register).
+const EMAIL_CHANGE_MAX = 10;
+const EMAIL_CHANGE_WINDOW_MS = 15 * 60 * 1000;
 
 function fieldError(field: string, error: string) {
   return NextResponse.json({ field, error }, { status: 400 });
@@ -46,13 +53,6 @@ export async function PATCH(request: Request) {
       return fieldError("email", "Please enter a valid email address.");
     }
     cleanEmail = email.trim().toLowerCase();
-    const existing = await findUserByEmail(cleanEmail);
-    if (existing && existing.id !== session.userId) {
-      return NextResponse.json(
-        { field: "email", error: "That email is already in use by another account." },
-        { status: 409 }
-      );
-    }
   }
 
   if (emailNotifications !== undefined && typeof emailNotifications !== "boolean") {
@@ -66,9 +66,22 @@ export async function PATCH(request: Request) {
   // Changing the sign-in email needs the current password (QA-080): reset
   // links go to that address, so a borrowed or forged session must not be
   // able to move it.
+  //
+  // QA-092: the password comes BEFORE the "already in use" check, and email
+  // changes are rate-limited per account like sign-up is per IP, so this
+  // route can't be used to test which emails have a Vela account.
   if (cleanEmail !== undefined && cleanEmail !== before?.email.toLowerCase()) {
+    const limit = await rateLimitHit(`account:email-change:${session.userId}`, EMAIL_CHANGE_MAX, EMAIL_CHANGE_WINDOW_MS);
+    if (!limit.ok) return tooManyRequests(limit.retryAfter);
     const checked = await requireCurrentPassword(session.userId, currentPassword);
     if (checked instanceof Response) return checked;
+    const existing = await findUserByEmail(cleanEmail);
+    if (existing && existing.id !== session.userId) {
+      return NextResponse.json(
+        { field: "email", error: "That email is already in use by another account." },
+        { status: 409 }
+      );
+    }
   }
   let updated;
   try {
