@@ -98,7 +98,7 @@ npm run build
 npm run start            # serves the build on http://localhost:3000 (add -- -p <port> to change it)
 ```
 
-`npm run lint` and `npm run typecheck` should both pass (lint currently reports one warning, no errors). `next start` refuses the local storage driver unless you add `STORAGE_ALLOW_LOCAL=1` (for a production-mode check on your PC). In production (`NODE_ENV=production`) the session cookie is marked `Secure` and an HSTS header is sent, so serve the site over HTTPS.
+`npm run lint` and `npm run typecheck` should both pass (no errors or warnings). `next start` refuses the local storage driver unless you add `STORAGE_ALLOW_LOCAL=1` (for a production-mode check on your PC). In production (`NODE_ENV=production`) the session cookie is marked `Secure` and an HSTS header is sent, so serve the site over HTTPS. A production build ignores `X-Forwarded-For` unless `TRUST_PROXY` says how many proxies sit in front (docs/DEPLOY.md), so the API test suites, which send a per-run `X-Forwarded-For`, share the rate limits of `127.0.0.1` against `npm run start`; start it with `TRUST_PROXY=1` for test runs.
 
 ## What's built so far
 

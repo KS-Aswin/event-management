@@ -201,21 +201,23 @@ test("QA-005: clientIp only trusts the first X-Forwarded-For hop when allowed", 
     delete process.env.VERCEL;
     process.env.NODE_ENV = "production";
     delete process.env.TRUST_PROXY;
-    // Spoofed first hop is ignored; the hop the nearest proxy added is used.
-    assert.equal(clientIp(h({ "x-forwarded-for": "1.1.1.1, 9.9.9.9" })), "9.9.9.9");
-    assert.equal(clientIp(h({ "x-real-ip": "8.8.8.8" })), "8.8.8.8");
-    assert.equal(clientIp(h({})), "unknown");
+    // No trusted proxy: X-Forwarded-For / X-Real-IP are client-typed and
+    // ignored (qa2 QA-005: the socket peer is used; see qa2-sec.test.mjs).
+    assert.match(clientIp(h({ "x-forwarded-for": "1.1.1.1, 9.9.9.9" })), /^anon:/);
+    assert.match(clientIp(h({ "x-real-ip": "8.8.8.8" })), /^anon:/);
+    assert.match(clientIp(h({})), /^anon:/);
     process.env.VERCEL = "1";
     assert.equal(clientIp(h({ "x-forwarded-for": "1.1.1.1", "x-real-ip": "7.7.7.7" })), "7.7.7.7");
     assert.equal(clientIp(h({ "x-forwarded-for": "1.1.1.1", "x-vercel-forwarded-for": "6.6.6.6" })), "6.6.6.6");
     delete process.env.VERCEL;
     process.env.TRUST_PROXY = "1";
-    assert.equal(clientIp(h({ "x-forwarded-for": "1.1.1.1, 9.9.9.9" })), "1.1.1.1");
+    // One proxy: the hop it appended (right-most); the rest is client-typed.
+    assert.equal(clientIp(h({ "x-forwarded-for": "1.1.1.1, 9.9.9.9" })), "9.9.9.9");
     delete process.env.TRUST_PROXY;
     process.env.NODE_ENV = "development";
     assert.equal(clientIp(h({ "x-forwarded-for": "1.1.1.1, 9.9.9.9" })), "1.1.1.1", "dev/test runs keep their per-run IP");
     process.env.TRUST_PROXY = "0";
-    assert.equal(clientIp(h({ "x-forwarded-for": "1.1.1.1, 9.9.9.9" })), "9.9.9.9");
+    assert.match(clientIp(h({ "x-forwarded-for": "1.1.1.1, 9.9.9.9" })), /^anon:/);
   } finally {
     for (const [k, v] of Object.entries(saved)) {
       if (v === undefined) delete process.env[k];

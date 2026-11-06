@@ -1,3 +1,4 @@
+import { cache } from "react";
 import { NextResponse } from "next/server";
 import { headers } from "next/headers";
 import { notFound, redirect } from "next/navigation";
@@ -28,7 +29,12 @@ async function clearCookie() {
  * suspended or deleted account (users.status) and a cookie issued before
  * the last session_version bump ("force logout") are all signed out.
  */
-export async function resolveLiveSession(): Promise<LiveSessionResult> {
+// One DB lookup per request (QA-021): the layout guard, the page and its
+// helpers all ask; React's cache() shares the answer within a render (and is
+// a plain call in route handlers).
+export const resolveLiveSession = cache(resolveLiveSessionUncached);
+
+async function resolveLiveSessionUncached(): Promise<LiveSessionResult> {
   const session = await getSession();
   if (!session) return { state: "anonymous" };
   const user = (await findUserById(session.userId)) as LiveUser | null;

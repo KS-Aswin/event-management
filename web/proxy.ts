@@ -1,5 +1,5 @@
 import { NextResponse, type NextRequest } from "next/server";
-import { jwtVerify } from "jose";
+import { jwtVerify, SignJWT } from "jose";
 import { pool } from "@/lib/db";
 import { suspensionMessage } from "@/lib/suspension";
 import {
@@ -18,6 +18,55 @@ import {
 const COOKIE_NAME = "vela_session";
 /** Request header proxy.ts sets for /login when the cookie user is suspended. */
 const SUSPENSION_HEADER = "x-vela-suspension";
+/**
+ * QA-056: short-lived signed note "user N was signed out here because they
+ * are suspended", set when proxy.ts clears a suspended user's session on
+ * /login. The session cookie is gone after the first /login request, but the
+ * browser often asks for /login?suspended=1 more than once (prefetch, the
+ * streamed redirect's meta refresh, a reload); this lets each of those still
+ * look the reason up live from the DB. HttpOnly and signed, so it can't be
+ * forged or read by scripts; it holds only the user id, never the reason.
+ */
+const NOTICE_COOKIE = "vela_suspended";
+const NOTICE_AUDIENCE = "vela-suspension-notice";
+const NOTICE_TTL_S = 10 * 60;
+
+function sessionKey(): Uint8Array | null {
+  const secret = process.env.SESSION_SECRET;
+  return secret && secret.length >= 32 ? new TextEncoder().encode(secret) : null;
+}
+
+async function signNotice(userId: number): Promise<string | null> {
+  const key = sessionKey();
+  if (!key) return null;
+  return new SignJWT({ uid: userId })
+    .setProtectedHeader({ alg: "HS256" })
+    .setAudience(NOTICE_AUDIENCE)
+    .setIssuedAt()
+    .setExpirationTime(`${NOTICE_TTL_S}s`)
+    .sign(key);
+}
+
+async function noticeUserId(request: NextRequest): Promise<number | null> {
+  const token = request.cookies.get(NOTICE_COOKIE)?.value;
+  const key = sessionKey();
+  if (!token || !key) return null;
+  try {
+    const { payload } = await jwtVerify(token, key, { audience: NOTICE_AUDIENCE });
+    return Number.isInteger(payload.uid) ? (payload.uid as number) : null;
+  } catch {
+    return null;
+  }
+}
+
+/** Live reason for a suspended user, or null if they aren't suspended (any more). */
+async function liveSuspension(userId: number): Promise<string | null> {
+  const { rows } = await pool.query<{ status: string | null; suspended_reason: string | null }>(
+    "SELECT status, suspended_reason FROM users WHERE id = $1",
+    [userId]
+  );
+  return rows[0]?.status === "suspended" ? suspensionMessage(rows[0].suspended_reason) : null;
+}
 
 interface CookieSession {
   role: Role;
@@ -192,6 +241,8 @@ async function authPageResponse(request: NextRequest, cookie: CookieSession | nu
   const requestHeaders = new Headers(request.headers);
   requestHeaders.delete(SUSPENSION_HEADER); // never trust a client-sent copy
   let clear = false;
+  let noticeFor: number | null = null; // set the QA-056 note for this user
+  let dropNotice = false;
   if (cookie) {
     try {
       const { rows } = await pool.query<{ status: string | null; session_version: number | null; suspended_reason: string | null }>(
@@ -201,15 +252,36 @@ async function authPageResponse(request: NextRequest, cookie: CookieSession | nu
       const u = rows[0];
       if (!u || (u.status && u.status !== "active")) {
         clear = true;
-        if (u?.status === "suspended") requestHeaders.set(SUSPENSION_HEADER, encodeURIComponent(suspensionMessage(u.suspended_reason)));
+        if (u?.status === "suspended") {
+          requestHeaders.set(SUSPENSION_HEADER, encodeURIComponent(suspensionMessage(u.suspended_reason)));
+          noticeFor = cookie.userId;
+        }
       } else if (typeof u.session_version === "number" && u.session_version !== cookie.sessionVersion) {
         clear = true;
+      } else {
+        dropNotice = request.cookies.has(NOTICE_COOKIE); // signed in and active again
       }
     } catch {
       // DB down: leave the cookie; the page's live check still shows the form.
     }
   } else if (request.cookies.has(COOKIE_NAME)) {
     clear = true; // expired or tampered token
+  }
+  // Session already cleared by an earlier /login request (QA-056): the note
+  // says whose it was; show their live reason on /login?suspended=1 only.
+  if (!noticeFor && !requestHeaders.has(SUSPENSION_HEADER) && request.cookies.has(NOTICE_COOKIE)) {
+    const uid = await noticeUserId(request);
+    if (uid === null) {
+      dropNotice = true;
+    } else if (request.nextUrl.pathname === "/login" && request.nextUrl.searchParams.get("suspended") === "1") {
+      try {
+        const message = await liveSuspension(uid);
+        if (message) requestHeaders.set(SUSPENSION_HEADER, encodeURIComponent(message));
+        else dropNotice = true; // reinstated meanwhile
+      } catch {
+        // DB down: the page shows the generic notice.
+      }
+    }
   }
   if (clear) {
     const rest = request.cookies
@@ -222,6 +294,43 @@ async function authPageResponse(request: NextRequest, cookie: CookieSession | nu
   }
   const response = NextResponse.next({ request: { headers: requestHeaders } });
   if (clear) response.cookies.delete(COOKIE_NAME);
+  const notice = noticeFor !== null ? await signNotice(noticeFor) : null;
+  if (notice) {
+    response.cookies.set(NOTICE_COOKIE, notice, {
+      httpOnly: true,
+      sameSite: "lax",
+      secure: process.env.NODE_ENV === "production",
+      path: "/login",
+      maxAge: NOTICE_TTL_S,
+    });
+  } else if (dropNotice) {
+    response.cookies.set(NOTICE_COOKIE, "", { path: "/login", maxAge: 0 });
+  }
+  response.headers.set("Cache-Control", "private, no-store");
+  return response;
+}
+
+/**
+ * /admin/vendors/<id> and /admin/users/<id> (QA-052): a missing or malformed
+ * id is a real 404 (the page's notFound() runs after the root loading.tsx
+ * has streamed a 200). A DB error falls through to the page.
+ */
+async function adminRecordExists(pathname: string): Promise<boolean> {
+  const m = /^\/admin\/(vendors|users)\/([^/]+)\/?$/.exec(pathname);
+  if (!m) return true;
+  if (!/^[1-9]\d{0,9}$/.test(m[2]) || Number(m[2]) > 2147483647) return false;
+  try {
+    const sql = m[1] === "vendors" ? "SELECT 1 FROM vendors WHERE id = $1" : "SELECT 1 FROM users WHERE id = $1";
+    const { rowCount } = await pool.query(sql, [Number(m[2])]);
+    return (rowCount ?? 0) > 0;
+  } catch {
+    return true;
+  }
+}
+
+/** The same admin URL with a 404 status: the page's notFound() renders app/admin/not-found.tsx inside the admin shell. */
+function adminNotFoundPage(request: NextRequest) {
+  const response = NextResponse.rewrite(request.nextUrl, { status: 404 });
   response.headers.set("Cache-Control", "private, no-store");
   return response;
 }

@@ -1,5 +1,5 @@
 import type { TxClient } from "./tx";
-import { clientIp as requestClientIp } from "@/lib/client-ip";
+import { requestIp as requestClientIp } from "@/lib/client-ip";
 
 /**
  * Audit action names: "<entity>.<verb>", e.g. vendor.approve,
@@ -63,6 +63,5 @@ export async function audit(client: TxClient, entry: AuditEntry): Promise<number
  * trusted in production, so the audit log can't be given a forged IP.
  */
 export function clientIp(req: Request): string | null {
-  const ip = requestClientIp(req.headers);
-  return ip === "unknown" ? null : ip;
+  return requestClientIp(req.headers);
 }

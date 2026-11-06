@@ -8,5 +8,8 @@ export async function register() {
     assertServerEnv();
     const { assertStorageConfigured } = await import("./lib/storage");
     assertStorageConfigured();
+    // Unspoofable client IP for rate limits on self-hosted servers (QA-005).
+    const { installPeerIp } = await import("./lib/peer-ip");
+    installPeerIp();
   }
 }

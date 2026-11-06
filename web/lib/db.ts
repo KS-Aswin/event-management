@@ -18,7 +18,6 @@ import {
 // modules on every request in dev mode without this guard, which would
 // otherwise leak a new connection pool per request).
 declare global {
-  // eslint-disable-next-line no-var
   var _velaPgPool: Pool | undefined;
 }
 
@@ -40,11 +39,10 @@ function createPool() {
   return p;
 }
 
-export const pool = global._velaPgPool ?? createPool();
-
-if (process.env.NODE_ENV !== "production") {
-  global._velaPgPool = pool;
-}
+// Also in production (QA-021/QA-055): proxy.ts and the app routes are
+// separate bundles, and each would otherwise open its own pool, paying the
+// TLS + auth handshake to the DB pooler twice per cold instance.
+export const pool = (global._velaPgPool ??= createPool());
 
 export type UserRole = "customer" | "vendor" | "admin";
 

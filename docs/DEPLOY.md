@@ -112,8 +112,11 @@ Vercel → Project → **Settings → Domains** → add your domain and follow t
 | `DB_POOL_MAX` | no | Connections per instance; default 3 on Vercel, 10 elsewhere. |
 | `MEDIA_VIDEO_UPLOADS` | no | `true` to allow MP4 uploads in production (off by default; links to YouTube/Vimeo always work). |
 | `STORAGE_ALLOW_LOCAL` | no | `1` only when self-hosting on a server with a persistent disk. |
+| `TRUST_PROXY` | self-hosting | Not needed on Vercel. Number of reverse proxies in front of `next start` that add the client to `X-Forwarded-For` (`1` for one nginx/Caddy with `proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for` or `$remote_addr`). Unset or `0`: the header is ignored (a client can type it) and the TCP peer address is used, so behind a proxy every visitor would share the proxy's sign-in/sign-up limits; the server log warns once if that happens. |
 | `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` | no | Reserved for a browser client. |
 | `VERCEL_PROJECT`, `VERCEL_SCOPE`, `VERCEL_TOKEN` | deploy only | Project name (default `vela`), team slug, CI token. |
+
+Security headers (`next.config.ts`): a Content-Security-Policy (scripts, styles and fetches from the site itself; images, media and uploads also from the storage host in `SUPABASE_URL` / `S3_ENDPOINT` / `S3_PUBLIC_URL`, read at **build** time, so rebuild after changing them), HSTS, `X-Frame-Options: DENY`, no `X-Powered-By`.
 
 If a variable is missing, the server refuses to start and the Vercel function log lists every missing one at once (`instrumentation.ts` → `lib/env.ts`).
 

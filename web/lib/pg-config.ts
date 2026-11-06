@@ -65,7 +65,11 @@ export function pgSettings(
     connectionString: url.toString(),
     ssl,
     max,
-    idleTimeoutMillis: serverless ? 10_000 : 30_000,
+    // Serverless instances are reused between requests (Vercel Fluid): keep
+    // idle connections a minute so a short pause doesn't cost a new TLS +
+    // auth handshake to the pooler on the next request (QA-055). Instances
+    // that go quiet still exit (allowExitOnIdle).
+    idleTimeoutMillis: serverless ? 60_000 : 30_000,
     // Remote poolers can take a moment on a cold start.
     connectionTimeoutMillis: local ? 5_000 : 10_000,
     allowExitOnIdle: serverless,

@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { clientIp, rateLimitHit, rateLimitReset } from "@/lib/rate-limit";
+import { requestIp } from "@/lib/client-ip";
 import { consumeResetToken, isResetToken } from "@/lib/password-reset";
 import { byteLength, MAX_PASSWORD_BYTES, rejectCrossSite, tooManyRequests } from "../_guard";
 
@@ -42,7 +43,7 @@ export async function POST(request: Request) {
       { status: 400, headers: NO_STORE }
     );
   }
-  const done = await consumeResetToken(token, password, ip === "unknown" ? null : ip);
+  const done = await consumeResetToken(token, password, requestIp(request.headers));
   if (!done) return invalidLink;
   // A fresh start for sign-in on that account.
   await rateLimitReset(`login:fail:${done.email.trim().toLowerCase()}`);
