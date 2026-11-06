@@ -85,7 +85,7 @@ export default async function VendorHomePage() {
           <Upcoming stats={stats} />
         </div>
         <div className="flex flex-col gap-4 min-w-0">
-          <NotificationsList initialItems={notes.items} initialUnread={notes.unread} />
+          <NotificationsList initialItems={notes.items} initialUnread={notes.unread} total={notes.total} />
           <Strength percent={strength.percent} done={strength.done} total={strength.total} items={strength.items} />
           <WeekStats stats={stats} />
           <QuickActions previewHref={previewHref} />

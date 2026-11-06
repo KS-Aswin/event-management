@@ -9,12 +9,19 @@ import { listNotifications, markNotificationsRead } from "@/lib/notifications";
 
 const NO_STORE = { "Cache-Control": "private, no-store" };
 
-/** GET /api/notifications?limit=10 -> { items, unread } */
+/**
+ * GET /api/notifications?limit=10&offset=0&unread=1 -> { items, unread, total }
+ * `offset` pages through older notifications (QA-095); `unread=1` lists
+ * unread ones only. `total` counts what the filter matches.
+ */
 export async function GET(request: Request) {
   const auth = await requireRole(["vendor", "customer", "admin"]);
   if (auth instanceof Response) return auth;
-  const limit = Number(new URL(request.url).searchParams.get("limit") ?? 10);
-  const data = await listNotifications(auth.userId, limit);
+  const q = new URL(request.url).searchParams;
+  const limit = Number(q.get("limit") ?? 10);
+  const offset = Number(q.get("offset") ?? 0);
+  const unreadOnly = q.get("unread") === "1" || q.get("unread") === "true";
+  const data = await listNotifications(auth.userId, limit, { offset, unreadOnly });
   return NextResponse.json(data, { headers: NO_STORE });
 }
 

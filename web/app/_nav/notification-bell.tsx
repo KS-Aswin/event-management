@@ -8,7 +8,8 @@ import type { InAppNotification } from "@/lib/notifications";
 // Header bell (PRODUCT_PLAN P2-13): vendors (new lead, customer messages and
 // offer replies, admin decisions) and customers (offers, messages, booking
 // updates). Reads /api/notifications; the count refreshes on navigation,
-// when the tab regains focus and once a minute while visible.
+// when the tab regains focus and once a minute while visible. It lists the
+// newest 15; "See all notifications" opens /notifications (QA-095).
 
 function when(iso: string): string {
   const mins = Math.round((Date.now() - new Date(iso).getTime()) / 60_000);
@@ -26,6 +27,7 @@ export default function NotificationBell() {
   const [open, setOpen] = useState(false);
   const [items, setItems] = useState<InAppNotification[] | null>(null);
   const [unread, setUnread] = useState(0);
+  const [total, setTotal] = useState(0);
   const [error, setError] = useState(false);
   const [busy, setBusy] = useState(false);
   const wrapRef = useRef<HTMLDivElement>(null);
@@ -46,9 +48,10 @@ export default function NotificationBell() {
         }
       }
       if (!res.ok) throw new Error();
-      const data = (await res.json()) as { items: InAppNotification[]; unread: number };
+      const data = (await res.json()) as { items: InAppNotification[]; unread: number; total?: number };
       setItems(data.items);
       setUnread(data.unread);
+      setTotal(data.total ?? data.items.length);
       setError(false);
     } catch {
       setError(true);
@@ -217,6 +220,18 @@ export default function NotificationBell() {
               </ul>
             )}
           </div>
+          {items && items.length > 0 && (
+            <div className="border-t border-line">
+              <Link
+                href="/notifications"
+                data-testid="notifications-see-all"
+                className="flex items-center justify-center gap-1 min-h-11 px-4 text-[14px] font-medium text-accent hover:bg-surface-muted hover:underline rounded-b-card"
+              >
+                {total > items.length ? `See all ${total} notifications` : "See all notifications"}
+                <span aria-hidden="true">→</span>
+              </Link>
+            </div>
+          )}
         </div>
       )}
     </div>

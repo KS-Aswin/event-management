@@ -35,14 +35,19 @@ const serverClock = () => null;
 /**
  * Vendor home "Updates from Vela": admin decisions (approval, requested
  * changes, rejected photos, hidden reviews, custom offering outcomes) with
- * mark-as-read. Reads and writes go through /api/notifications.
+ * mark-as-read. Reads and writes go through /api/notifications. Shows the
+ * newest few; "See all" opens the full, paged list at /notifications
+ * (QA-095). Title links are 44 px tap targets (QA-096).
  */
 export default function NotificationsList({
   initialItems,
   initialUnread,
+  total,
 }: {
   initialItems: InAppNotification[];
   initialUnread: number;
+  /** All of the user's notifications (the card shows the newest few). */
+  total: number;
 }) {
   const router = useRouter();
   const now = useSyncExternalStore(subscribeClock, clockSnapshot, serverClock);
@@ -102,22 +107,45 @@ export default function NotificationsList({
       ) : (
         <ul className="mt-1">
           {items.map((n) => (
-            <li key={n.id} className="border-b border-line py-2.5 last:border-b-0" data-unread={n.readAt ? undefined : "1"}>
+            <li
+              key={n.id}
+              className={`border-b border-line last:border-b-0 ${n.link ? "pt-0.5 pb-2.5" : "py-2.5"}`}
+              data-unread={n.readAt ? undefined : "1"}
+            >
               <div className="flex items-start gap-2">
                 <span
                   aria-hidden="true"
-                  className={`mt-2 size-2 shrink-0 rounded-full ${n.readAt ? "bg-transparent" : "bg-accent"}`}
+                  className={`size-2 shrink-0 rounded-full ${n.link ? "mt-[18px]" : "mt-2"} ${n.readAt ? "bg-transparent" : "bg-accent"}`}
                 />
                 <div className="min-w-0 flex-1">
                   <p className={`text-body ${n.readAt ? "text-foreground/85" : "font-semibold"}`}>
                     {n.link ? (
-                      <Link href={n.link} className="hover:text-accent hover:underline">
-                        {n.title}
+                      <Link
+                        href={n.link}
+                        className="flex min-h-11 items-center py-1 hover:text-accent hover:underline"
+                        onClick={() => {
+                          // Opening it counts as reading it (like the bell).
+                          if (!n.readAt) {
+                            void fetch("/api/notifications", {
+                              method: "POST",
+                              headers: { "Content-Type": "application/json" },
+                              body: JSON.stringify({ ids: [n.id] }),
+                              keepalive: true,
+                            }).catch(() => {});
+                          }
+                        }}
+                      >
+                        <span>
+                          {n.title}
+                          {n.readAt ? null : <span className="sr-only"> (unread)</span>}
+                        </span>
                       </Link>
                     ) : (
-                      n.title
+                      <>
+                        {n.title}
+                        {n.readAt ? null : <span className="sr-only"> (unread)</span>}
+                      </>
                     )}
-                    {n.readAt ? null : <span className="sr-only"> (unread)</span>}
                   </p>
                   {n.body ? <p className="mt-0.5 whitespace-pre-line break-words text-caption text-ink-soft">{n.body}</p> : null}
                   <p className="mt-0.5 text-caption text-ink-soft">
@@ -142,6 +170,16 @@ export default function NotificationsList({
           ))}
         </ul>
       )}
+      {items.length > 0 ? (
+        <Link
+          href="/notifications"
+          data-testid="vendor-notifications-see-all"
+          className="-mx-2 -mb-1 mt-1 flex min-h-11 items-center justify-between gap-2 rounded-control px-2 text-body font-medium text-accent hover:bg-accent-tint"
+        >
+          {total > items.length ? `See all ${total} updates` : "See all updates"}
+          <span aria-hidden="true">→</span>
+        </Link>
+      ) : null}
     </section>
   );
 }
