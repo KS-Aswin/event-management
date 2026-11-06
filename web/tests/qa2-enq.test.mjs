@@ -25,6 +25,9 @@ import { request, signup, db, closeDb, createListing, RUN_ID, TEST_PASSWORD } fr
 const PATTERN = "^qa2fix-enq-[0-9]+@example\\.com$";
 let seq = 0;
 const email = () => `qa2fix-enq-${RUN_ID}${String(++seq).padStart(3, "0")}@example.com`;
+// A run-unique phone, so the 15-a-day per-phone enquiry cap is never hit by
+// earlier runs or other suites that share the old fixed number.
+const PHONE = `98${String(RUN_ID).padStart(8, "0").slice(-8)}`;
 const usedKeys = [];
 
 async function cleanup() {
@@ -87,14 +90,14 @@ function isoDay(offset) {
 const quote = (vendorId, body, opts = {}) =>
   request(`/api/vendors/${vendorId}/quotes`, {
     method: "POST",
-    body: { name: "Qa2fix Meera", phone: "9847012345", ...body },
+    body: { name: "Qa2fix Meera", phone: PHONE, ...body },
     ...opts,
   });
 
 const multi = (vendorIds, body, opts = {}) =>
   request("/api/enquiries/multi", {
     method: "POST",
-    body: { name: "Qa2fix Meera", phone: "9847012345", vendorIds, ...body },
+    body: { name: "Qa2fix Meera", phone: PHONE, vendorIds, ...body },
     ...opts,
   });
 
@@ -109,8 +112,8 @@ const review = (cookie, vendorId, body = {}) =>
 async function enquiry(vendorId, customerId, { status = "pending", eventDate = isoDay(30), guestCount = null } = {}) {
   const r = await db().query(
     `INSERT INTO quote_requests (vendor_id, customer_id, name, phone, event_date, status, guest_count)
-     VALUES ($1, $2, 'Qa2fix Meera', '+919847012345', $3, $4, $5) RETURNING id`,
-    [vendorId, customerId, eventDate, status, guestCount]
+     VALUES ($1, $2, 'Qa2fix Meera', $6, $3, $4, $5) RETURNING id`,
+    [vendorId, customerId, eventDate, status, guestCount, `+91${PHONE}`]
   );
   return r.rows[0].id;
 }

@@ -192,5 +192,5 @@ test("QA-096: notification title links and the areas Change link are 44 px tap t
     [v.userId]
   );
   const home = await request("/vendor", { cookie: v.cookie });
-  assert.match(home.text, /<a class="[^"]*min-h-11[^"]*" href="\/vendor\/profile"><span>qa4vh linked/);
+  assert.match(home.text, /<a class="[^"]*min-h-11[^"]*" href="\/vendor\/profile"><span[^>]*>qa4vh linked/);
 });
