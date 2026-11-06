@@ -249,11 +249,53 @@ async function duplicateResult(vendor: VendorRef, row: MediaAssetRow, dup: Media
   };
 }
 
+/**
+ * Deletes a logo/cover asset (row and files) that was made only for that
+ * role once nothing points at it any more (QA-068). Gallery photos used as
+ * the logo/cover are never touched: they stay in the portfolio.
+ */
+async function dropReplacedVendorImage(
+  vendor: VendorRef,
+  which: "logo" | "cover",
+  id: number | null,
+  keep: (number | null)[]
+): Promise<void> {
+  if (!id || keep.includes(id)) return;
+  const prev = await findAsset(vendor.id, id);
+  if (prev && prev.purpose === which) await discard(vendor, prev);
+}
+
 async function maybeSetVendorImage(vendor: VendorRef, row: MediaAssetRow): Promise<void> {
   if (row.purpose !== "logo" && row.purpose !== "cover") return;
+  await assignVendorImage(vendor, row.purpose, row);
+}
+
+/**
+ * Makes `row` the vendor's logo/cover (writing the URL cache) and deletes the
+ * image it replaces when that one was uploaded only for this role.
+ */
+export async function assignVendorImage(vendor: VendorRef, which: "logo" | "cover", row: MediaAssetRow): Promise<string | null> {
+  const before = await getVendorImageIds(vendor.id);
   const urls = assetUrls(row);
-  const url = row.purpose === "logo" ? urls.card ?? urls.full ?? null : urls.full ?? null;
-  await setVendorImage(vendor.id, row.purpose, row.id, url);
+  const url = which === "logo" ? urls.card ?? urls.full ?? null : urls.full ?? null;
+  await setVendorImage(vendor.id, which, row.id, url);
+  const previousId = which === "logo" ? before.logo_media_id : before.cover_media_id;
+  const otherId = which === "logo" ? before.cover_media_id : before.logo_media_id;
+  await dropReplacedVendorImage(vendor, which, previousId, [row.id, otherId]);
+  return url;
+}
+
+/**
+ * Removes the vendor's logo or cover (PUT .../logo|cover with mediaId null).
+ * An image uploaded just for that role is deleted with its files, so it is
+ * no longer served; a portfolio photo that was used as the cover stays.
+ */
+export async function clearVendorImage(vendor: VendorRef, which: "logo" | "cover"): Promise<void> {
+  const before = await getVendorImageIds(vendor.id);
+  const id = which === "logo" ? before.logo_media_id : before.cover_media_id;
+  const otherId = which === "logo" ? before.cover_media_id : before.logo_media_id;
+  await setVendorImage(vendor.id, which, null, null);
+  await dropReplacedVendorImage(vendor, which, id, [otherId]);
 }
 
 export async function complete(

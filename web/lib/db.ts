@@ -2375,7 +2375,7 @@ export async function countMediaByVendor(
   vendorId: number
 ): Promise<{ images: number; videoFiles: number; videoLinks: number; albums: number }> {
   const r = await pool.query<{ images: number; video_files: number; video_links: number; albums: number }>(
-    `SELECT COUNT(*) FILTER (WHERE kind = 'image' AND purpose <> 'poster')::int AS images,
+    `SELECT COUNT(*) FILTER (WHERE kind = 'image' AND purpose = 'gallery' AND status IN ('approved','pending_review'))::int AS images,
             COUNT(*) FILTER (WHERE kind = 'video_file')::int AS video_files,
             COUNT(*) FILTER (WHERE kind = 'video_link')::int AS video_links,
             (SELECT COUNT(*)::int FROM media_albums WHERE vendor_id = $1) AS albums

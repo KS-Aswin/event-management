@@ -1,7 +1,8 @@
 import { NextResponse } from "next/server";
 import { requireVendor, readJson, apiError, optionalId } from "./http";
 import { guardListingMinimum } from "./listing-minimum";
-import { assetUrls, findAsset, setVendorImage } from "./repo";
+import { findAsset } from "./repo";
+import { clearVendorImage, assignVendorImage } from "./pipeline";
 
 /** Shared handler for PUT /api/vendor/media/logo and /api/vendor/media/cover. */
 export async function setVendorImageRoute(request: Request, which: "logo" | "cover") {
@@ -16,7 +17,7 @@ export async function setVendorImageRoute(request: Request, which: "logo" | "cov
   if (mediaId === null) {
     const blocked = await guardListingMinimum(ctx.vendor, { kind: "clear_role", role: which });
     if (blocked) return blocked;
-    await setVendorImage(ctx.vendor.id, which, null, null);
+    await clearVendorImage(ctx.vendor, which);
     return NextResponse.json({ ok: true, mediaId: null, url: null });
   }
   const row = await findAsset(ctx.vendor.id, mediaId);
@@ -24,8 +25,6 @@ export async function setVendorImageRoute(request: Request, which: "logo" | "cov
     return apiError(404, "Not found.", "NOT_FOUND");
   }
   if (row.status === "rejected") return apiError(400, "A rejected photo can't be used here.", "VALIDATION");
-  const urls = assetUrls(row);
-  const url = which === "logo" ? urls.card ?? urls.full ?? null : urls.full ?? null;
-  await setVendorImage(ctx.vendor.id, which, row.id, url);
+  const url = await assignVendorImage(ctx.vendor, which, row);
   return NextResponse.json({ ok: true, mediaId: row.id, url });
 }
