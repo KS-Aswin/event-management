@@ -67,6 +67,8 @@ Vendor photos and videos are stored through a `StorageAdapter` (`lib/storage/`).
 
 Image processing uses `sharp` (a regular dependency, MIT; prebuilt binaries for Windows, Linux and Vercel install with `npm install`). Each photo is checked by magic bytes (JPEG/PNG/WebP/HEIC, max 15 MB; MP4 max 50 MB), de-duplicated by sha256 and stored as `thumb`, `card` and `full` WebP variants without EXIF under `uploads/vendors/<vendorId>/<uuid>/`.
 
+Logo and cover uploads also keep an uncropped `source` copy. The media manager's crop dialog posts to `POST /api/vendor/media/crop` (`{which, mediaId, crop: {x, y, width, height}}`, with the crop given as fractions of the photo), and sharp makes the square or 16:9 variants from that copy.
+
 Who can see a file under `/media`: approved media is public and cached for a year. Media that is still pending review, rejected or hidden, and every raw `upload.bin`, is served only to the owning vendor and admins (`Cache-Control: private, no-store`); everyone else gets 404. Paths with `..` get 400 and anything under `private/` is never served.
 
 To use another uploads folder, set `UPLOADS_DIR` in `.env.local`. Deleting `uploads/` loses the files but not the database rows; run `npm run db:seed -- --force` to rebuild the sample media.

@@ -10,7 +10,6 @@ import {
   toPublicVendor,
 } from "@/lib/db";
 import { getSession } from "@/lib/session";
-import { CATEGORIES } from "@/lib/vendorVisuals";
 import { getLiveSession } from "../../_lib/auth";
 import { parseId, validateListingFields } from "../../_lib/validation";
 
@@ -72,7 +71,7 @@ export async function PATCH(
   // 400 instead of being silently ignored.
   const parsed = validateListingFields(body, {
     partial: true,
-    categories: [...new Set<string>([...CATEGORIES, ...(await findCategories())])],
+    categories: await findCategories(),
   });
   if (!parsed.ok) {
     return NextResponse.json({ field: parsed.field, error: parsed.error }, { status: 400 });

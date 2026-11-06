@@ -1,7 +1,8 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { findVendors, type VendorRecord } from "@/lib/db";
-import { CATEGORIES, VendorTile } from "@/lib/vendorVisuals";
+import { getTaxonomy } from "@/lib/taxonomy";
+import { VendorTile } from "@/lib/vendorVisuals";
 import HomeSearch from "./home-search";
 
 export const metadata: Metadata = {
@@ -12,6 +13,15 @@ export const metadata: Metadata = {
 
 // Reads live vendor data on every request.
 export const dynamic = "force-dynamic";
+
+async function loadCategoryNames(): Promise<string[]> {
+  try {
+    const taxonomy = await getTaxonomy();
+    return taxonomy.categories.filter((c) => c.active).map((c) => c.name);
+  } catch {
+    return [];
+  }
+}
 
 async function loadVendors(): Promise<VendorRecord[]> {
   try {
@@ -30,14 +40,18 @@ function countBy(vendors: VendorRecord[], key: "category" | "location") {
 }
 
 export default async function Home() {
-  const vendors = await loadVendors();
+  const [vendors, taxonomyNames] = await Promise.all([loadVendors(), loadCategoryNames()]);
   const categoryCounts = countBy(vendors, "category");
   const districtCounts = countBy(vendors, "location");
 
-  // Known categories first (stable order), then any others found in the data.
-  const known: readonly string[] = CATEGORIES;
+  // DB taxonomy categories first (admin sort order), then any others found in
+  // the data. Categories with no live vendor yet are hidden so the chips never
+  // lead to an empty search.
+  const known: readonly string[] = taxonomyNames;
   const categories = [
-    ...CATEGORIES.map((c) => ({ name: c as string, count: categoryCounts.get(c) ?? 0 })),
+    ...taxonomyNames
+      .map((c) => ({ name: c, count: categoryCounts.get(c) ?? 0 }))
+      .filter((c) => c.count > 0),
     ...[...categoryCounts.entries()]
       .filter(([c]) => !known.includes(c))
       .map(([name, count]) => ({ name, count })),

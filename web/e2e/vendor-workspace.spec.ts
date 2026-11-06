@@ -351,3 +351,79 @@ test.describe("vendor navigation", () => {
     await checkScreen(page, diag, testInfo, "vendor-profile-form");
   });
 });
+
+test.describe("logo/cover crop and in-page confirms", () => {
+  test("crop a gallery photo into the logo; delete asks in the page, not window.confirm", async ({ page, diag }, testInfo) => {
+    const tag = runTag(testInfo);
+    await signUp(page, "vendor", { name: `Cara Crop ${tag}`, email: `e2e-vendor-crop-${tag}@example.com`, password: "e2e-pass-12345" });
+    const tax = await (await page.request.get("/api/meta/taxonomy")).json();
+    const rental = tax.categories.find((c: { slug: string }) => c.slug === "rental");
+    const created = await page.request.post("/api/vendor/listing", {
+      data: {
+        name: `E2E Crop Rentals ${tag}`,
+        vendorType: "company",
+        primaryCategoryId: rental.id,
+        districtId: tax.districts.find((d: { name: string }) => d.name === "Thrissur").id,
+        phone: "9847033333",
+      },
+    });
+    expect(created.status()).toBe(201);
+    // Any browser dialog would mean window.confirm/alert is still in use.
+    page.on("dialog", (d) => {
+      throw new Error(`Unexpected browser dialog: ${d.message()}`);
+    });
+
+    await page.goto("/vendor/media");
+    await page.getByLabel(/I have my clients.? permission/).check();
+    await page.getByTestId("media-input-gallery").setInputFiles([GALLERY[0]]);
+    const tiles = page.getByTestId("media-tile");
+    await expect(tiles).toHaveCount(1, { timeout: 120_000 });
+
+    await tiles.first().getByRole("button", { name: /^Edit / }).click();
+    await page.getByRole("dialog").getByRole("button", { name: "Use as logo" }).click();
+    const crop = page.getByRole("dialog", { name: "Crop your logo" });
+    await expect(crop).toBeVisible();
+    const frame = crop.getByTestId("crop-frame");
+    await expect(frame.locator("img")).toBeVisible();
+    await crop.getByRole("button", { name: "Zoom in" }).click();
+    await frame.focus();
+    await page.keyboard.press("ArrowRight");
+    await page.keyboard.press("ArrowDown");
+    // Drag works too (mouse/touch).
+    const box = (await frame.boundingBox())!;
+    await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+    await page.mouse.down();
+    await page.mouse.move(box.x + box.width / 2 - 30, box.y + box.height / 2 - 10, { steps: 4 });
+    await page.mouse.up();
+    await checkScreen(page, diag, testInfo, "crop-dialog");
+    await crop.getByRole("button", { name: "Use as logo" }).click();
+    await expect(crop).toBeHidden({ timeout: 30_000 });
+    await expect(page.getByRole("img", { name: "Your logo" })).toBeVisible({ timeout: 30_000 });
+    const lib = await (await page.request.get("/api/vendor/media")).json();
+    const logo = lib.assets.find((a: { id: number }) => a.id === lib.logoMediaId);
+    expect(logo?.purpose).toBe("logo");
+    expect(logo?.width).toBe(logo?.height);
+    // The gallery photo is untouched and the crop can be adjusted again.
+    await expect(tiles).toHaveCount(1);
+    await expect(page.getByRole("button", { name: "Adjust crop" })).toBeVisible();
+
+    // In-page confirm on the offerings list: Cancel keeps it, Delete removes it.
+    const tpl = tax.templates.find((t: { category_id: number; code: string }) => t.category_id === rental.id && t.code === "chairs");
+    const off = await page.request.post("/api/vendor/offerings", {
+      data: { templateId: tpl.id, priceMode: "from", priceFrom: 20, priceUnit: tpl.default_price_unit, saleMode: "separate" },
+    });
+    expect(off.status()).toBe(201);
+    await page.goto("/vendor/offerings");
+    const del = page.getByRole("button", { name: "Delete", exact: true }).first();
+    await del.click();
+    const ask = page.getByRole("alertdialog");
+    await expect(ask).toBeVisible();
+    await expect(ask).toContainText("can't be undone");
+    await ask.getByRole("button", { name: "Cancel" }).click();
+    await expect(ask).toBeHidden();
+    await expect(del).toBeVisible();
+    await del.click();
+    await page.getByRole("alertdialog").getByRole("button", { name: "Delete", exact: true }).click();
+    await expect(page.locator(".alert-success").filter({ hasText: /was deleted|turned off instead/ })).toBeVisible();
+  });
+});

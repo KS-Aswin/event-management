@@ -947,7 +947,7 @@ Infra: `app/media/[...key]/route.ts` (public file serving, local driver) and `np
 - **Offerings:** list grouped by category with chips (Separate / Package only / Add-on / Custom: under review / Incomplete package). The editor's attribute form is rendered from the schema (int, bool, enum, multi, text). The package composer has a unit picker, qty, inclusions, guest range and price.
 - **Media:** grid with status pills (Under review / Hidden: over plan limit / Rejected: reason), drag-to-reorder (with an up/down button fallback for accessibility), album management, logo and cover croppers (client-side canvas crop), and a usage meter ("32 of 50 photos").
 - **Leads:**
-  - Inbox with status tabs (New, Quoted, Accepted, Booked, Declined, Expired) and filters.
+  - Inbox with status tabs (New, Quoted, Accepted, Booked, Declined, Expired) and filters. (P0 ships the tabs for the statuses that exist today, plus "Follow-up due". Quoted/Accepted/Expired are added with quote offers in P2-4.)
   - Lead detail shows the event context and the requested units with quantities and price snapshots.
   - Actions:
     - P0: mark responded / booked / declined, notes and follow-up, WhatsApp click-to-chat with a prefilled message.
@@ -976,7 +976,7 @@ Every item ends with **acceptance criteria (AC)** that can be checked by API tes
 
 ### P0: Vendor workspace
 
-> **Status (2026-10-31, local commits on `ui-fixes-aswin`):** P0-1 to P0-16 built. Wave 1 (f13472f): migration 004, taxonomy, storage and media API, role guards, vendor nav. Wave 2: onboarding wizard (P0-10), offerings and packages (P0-11), vendor home (P0-12), profile and service areas (P0-13), leads inbox at `/vendor/leads` (P0-14), public gallery/lightbox/offerings and search-card covers (P0-15), seed archetypes with generated media in `db/fixtures/media` plus API and e2e tests (P0-16). Open follow-ups: cover/logo crop, multi-thumbnail search cards, "Report photo", offering-detail media, search by offering/district, `media:cleanup`, switching the remaining `CATEGORIES` users to `getTaxonomy()`, the plan's 6 lead tabs (DB has 4 statuses), and a "Small team" business type. Final review: 14 of 16 items ticked below; P0-7 (crop) and P0-8 (legacy CATEGORIES users) stay open. /media now hides unapproved media from everyone except the owning vendor and admins.
+> **Status (2026-10-31, local commits on `ui-fixes-aswin`):** P0-1 to P0-16 built. Wave 1 (f13472f): migration 004, taxonomy, storage and media API, role guards, vendor nav. Wave 2: onboarding wizard (P0-10), offerings and packages (P0-11), vendor home (P0-12), profile and service areas (P0-13), leads inbox at `/vendor/leads` (P0-14), public gallery/lightbox/offerings and search-card covers (P0-15), seed archetypes with generated media in `db/fixtures/media` plus API and e2e tests (P0-16). Open follow-ups: cover/logo crop, multi-thumbnail search cards, "Report photo", offering-detail media, search by offering/district, `media:cleanup`, switching the remaining `CATEGORIES` users to `getTaxonomy()`, the plan's 6 lead tabs (DB has 4 statuses), and a "Small team" business type. Final review: 14 of 16 items ticked below; P0-7 (crop) and P0-8 (legacy CATEGORIES users) stayed open and were finished on 2026-11-06 together with the lead-tab, in-page confirm and 404 follow-ups, so all 16 are now ticked. /media now hides unapproved media from everyone except the owning vendor and admins.
 
 [x] **P0-1 Migration 004 and seeds.** Write `004_vendor_workspace.sql` per section 5, with seeds for 19 categories, offering templates (all of 3.4), 15 event types and their bundles. _Status: Migration 004 applied locally (fresh + rerun no-op), seeds for categories, templates and event types; portfolio_items copied to media_assets._
 AC:
@@ -1032,14 +1032,14 @@ AC:
 - MP4 plays and seeks on the profile.
 - With the flag off, the upload UI is hidden and the API returns 403.
 
-[ ] **P0-7 Media manager UI** (`/vendor/media`). Grid, albums, logo and cover crop, captions, featured, reorder, delete, consent checkbox, usage meter, per-file progress and retry. _Status: Grid, albums, captions, cover/logo, reorder, delete and per-file retry work at 390px. Missing: cover/logo crop._
+[x] **P0-7 Media manager UI** (`/vendor/media`). Grid, albums, logo and cover crop, captions, featured, reorder, delete, consent checkbox, usage meter, per-file progress and retry. _Status: Grid, albums, captions, cover/logo, reorder, delete and per-file retry work at 390px. Crop (2026-11-06): "Use as logo/cover" and "Adjust crop" open a square / 16:9 crop dialog (drag, zoom slider and buttons, arrow and +/- keys). `POST /api/vendor/media/crop` cuts the region with sharp into a new logo/cover asset, keeps an uncropped `source` copy so the crop can be redone, refuses crops under 200×200 (logo) or 800×450 (cover), keeps an approved photo approved, and removes the replaced dedicated logo/cover asset. Gallery photos are never changed._
 AC (e2e):
 - Upload 3 images, create an album, set the cover, reorder, delete one.
 - The public profile (owner preview) reflects every change.
 - A failed upload shows Retry without blocking the others.
 - It works at 360 px width.
 
-[ ] **P0-8 Taxonomy API as single source of truth.** `/api/meta/taxonomy`. Remove the hard-coded category merging in `lib/vendorVisuals.tsx` and `api/vendors/route.ts` (keep visuals keyed by slug only). _Status: /api/meta/taxonomy feeds the wizard, offerings and filters. Missing: home page, search filters, /api/suggest and the legacy /api/vendors/[id] still read the hard-coded CATEGORIES list._
+[x] **P0-8 Taxonomy API as single source of truth.** `/api/meta/taxonomy`. Remove the hard-coded category merging in `lib/vendorVisuals.tsx` and `api/vendors/route.ts` (keep visuals keyed by slug only). _Status: /api/meta/taxonomy feeds the wizard, offerings and filters. Done 2026-11-06: the home page chips (DB order, only categories with live vendors), the search filters, `/api/suggest` (active categories plus matching offering templates, shown as an "Offerings" group in the home search) and the legacy `PATCH /api/vendors/[id]` all read the DB taxonomy. The hard-coded `CATEGORIES` list is deleted; `CATEGORY_VISUALS` (keyed by slug) is kept only for artwork, with a neutral fallback._
 AC:
 - Every category list in the UI (home chips, search filter, wizard) comes from the API.
 - Adding a category row in the DB shows it everywhere without a code change.
@@ -1082,7 +1082,7 @@ AC:
 - Served districts are saved and shown on the profile with travel notes.
 - An approved vendor renaming appears in the admin "re-review" list (verified once P1-3 lands; the flag column is asserted now).
 
-[x] **P0-14 Leads inbox move and cleanup** (`/vendor/leads`, `/vendor/leads/[id]`). Port the existing leads UI. Show requested units with quantity and snapshot, notes, follow-up date, WhatsApp click-to-chat. Marking booked writes `vendor_availability`. Remove the vendor branches from `/dashboard` and the legacy routes. _Status: /vendor/leads with event context, unit snapshot, notes, follow-up, wa.me; booked writes availability; own leads only; /dashboard is redirects only. Follow-ups: the plan's 6 lead tabs (DB has 4 statuses), in-page confirm instead of window.confirm, 404 status (not 200) on another vendor's lead/package page._
+[x] **P0-14 Leads inbox move and cleanup** (`/vendor/leads`, `/vendor/leads/[id]`). Port the existing leads UI. Show requested units with quantity and snapshot, notes, follow-up date, WhatsApp click-to-chat. Marking booked writes `vendor_availability`. Remove the vendor branches from `/dashboard` and the legacy routes. _Status: /vendor/leads with event context, unit snapshot, notes, follow-up, wa.me; booked writes availability; own leads only; /dashboard is redirects only. Follow-ups done 2026-11-06: lead tabs match the real DB statuses (All, Follow-up due, New, Replied, Booked, Not a fit). Quoted/Accepted/Expired wait for quote offers (P2-4), so no migration was needed. Every `window.confirm` is now the shared in-page `useConfirm()` dialog (`app/_components/confirm-dialog.tsx`). The proxy returns a real 404 status for another vendor's lead, offering or package page, or a malformed id._
 AC:
 - A lead shows event type, guests, district and units when provided.
 - Status changes still write `quote_status_events`.

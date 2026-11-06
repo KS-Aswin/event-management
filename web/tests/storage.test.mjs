@@ -28,6 +28,8 @@ registerHooks({
         if (existsSync(cand)) return next(pathToFileURL(cand).href, context);
       }
     }
+    // Bare "next/server" etc. (no "exports" map in next): add the .js file.
+    if (/^next\/[a-z-]+$/.test(specifier)) return next(`${specifier}.js`, context);
     return next(specifier, context);
   },
 });
@@ -35,6 +37,9 @@ registerHooks({
 const ROOT = mkdtempSync(path.join(tmpdir(), "vela-storage-test-"));
 process.env.UPLOADS_DIR = ROOT;
 delete process.env.STORAGE_DRIVER;
+// The /media route imports lib/db (via the session helpers); give it a URL so
+// the import works. Nothing here reaches the database.
+process.env.DATABASE_URL ??= "postgresql://storage-test@127.0.0.1:1/none";
 
 const storageMod = await import(pathToFileURL(path.join(WEB, "lib/storage/index.ts")).href);
 const { getStorage, LocalDiskAdapter, assertSafeKey, isPrivateKey, parseStorageDriver } = storageMod;
@@ -262,12 +267,22 @@ if (sharp) {
     assert.equal(out.variants[2].height, 1200); // not enlarged past the original
     assert.match(out.placeholderColor, /^#[0-9a-f]{6}$/);
   });
+  await test("extractRegion cuts the crop rectangle out of the photo", async () => {
+    const { extractRegion } = await import(pathToFileURL(path.join(WEB, "lib/media/image.ts")).href);
+    const input = await sharp({ create: { width: 1000, height: 500, channels: 3, background: "#ffffff" } }).png().toBuffer();
+    const r = await extractRegion(input, { x: 0.25, y: 0.1, width: 0.5, height: 0.8 });
+    assert.deepEqual([r.width, r.height, r.sourceWidth, r.sourceHeight], [500, 400, 1000, 500]);
+    const meta = await sharp(r.body).metadata();
+    assert.deepEqual([meta.width, meta.height], [500, 400]);
+  });
+
   await test("logo is cropped square, cover to 16:9", async () => {
     const input = await sharp({ create: { width: 1600, height: 1000, channels: 3, background: "#123456" } }).png().toBuffer();
     const logo = await processImage(input, "logo");
-    assert.deepEqual(logo.variants.map((v) => [v.width, v.height]), [[96, 96], [256, 256], [512, 512]]);
+    assert.deepEqual(logo.variants.map((v) => [v.width, v.height]), [[96, 96], [256, 256], [512, 512], [1600, 1000]]);
+    assert.equal(logo.variants.at(-1).name, "source", "an uncropped source copy is kept for re-cropping");
     const cover = await processImage(input, "cover");
-    assert.deepEqual(cover.variants.map((v) => [v.width, v.height]), [[320, 180], [800, 450], [1920, 1080]]);
+    assert.deepEqual(cover.variants.map((v) => [v.width, v.height]), [[320, 180], [800, 450], [1920, 1080], [1600, 1000]]);
   });
 }
 

@@ -450,7 +450,7 @@ export interface ClientAsset {
   placeholderColor: string | null;
   posterMediaId: number | null;
   /** thumb/card/full for images; video for MP4. Missing sizes fall back to full. */
-  urls: { thumb?: string; card?: string; full?: string; video?: string };
+  urls: { thumb?: string; card?: string; full?: string; video?: string; source?: string };
   provider: "youtube" | "instagram" | "vimeo" | null;
   externalUrl: string | null;
   externalId: string | null;
@@ -474,7 +474,7 @@ export function assetUrls(row: Pick<MediaAssetRow, "storage_driver" | "storage_k
     return urls;
   }
   const variants = row.variants ?? {};
-  for (const name of ["thumb", "card", "full", "video"] as const) {
+  for (const name of ["thumb", "card", "full", "video", "source"] as const) {
     const v = variants[name];
     if (v?.key && isSafeKey(v.key)) urls[name] = storage.publicUrl(v.key);
   }

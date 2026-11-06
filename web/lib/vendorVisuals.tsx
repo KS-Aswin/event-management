@@ -3,23 +3,6 @@
 // getTaxonomy() in lib/taxonomy.ts), so a category added in the DB shows up
 // everywhere; one without artwork here gets the neutral fallback.
 
-/**
- * @deprecated Hard-coded category list kept only so pages not yet moved to the
- * taxonomy API still compile. Use getTaxonomy() / GET /api/meta/taxonomy.
- */
-export const CATEGORIES = [
-  "Venue",
-  "Photography",
-  "Catering",
-  "Decoration",
-  "DJ & Music",
-  "Makeup",
-  "Mehendi",
-] as const;
-
-/** @deprecated See CATEGORIES. */
-export type Category = (typeof CATEGORIES)[number];
-
 interface CategoryVisual {
   gradient: string;
   icon: React.ReactNode;

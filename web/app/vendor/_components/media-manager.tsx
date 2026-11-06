@@ -11,6 +11,7 @@ import { useCallback, useEffect, useId, useMemo, useRef, useState } from "react"
 import Image from "next/image";
 import Link from "next/link";
 import MediaUploader, { type ClientAsset } from "./media-uploader";
+import CropDialog from "./crop-dialog";
 
 interface Album {
   id: number;
@@ -161,6 +162,7 @@ function EditSheet({
   onSaved,
   onDeleted,
   onSetRole,
+  onCrop,
 }: {
   asset: ClientAsset;
   albums: Album[];
@@ -171,6 +173,7 @@ function EditSheet({
   onSaved: (a: ClientAsset) => void;
   onDeleted: (id: number) => void;
   onSetRole: (which: "logo" | "cover", id: number | null) => Promise<void>;
+  onCrop: (which: "logo" | "cover", asset: ClientAsset) => void;
 }) {
   const uid = useId();
   const ref = useRef<HTMLDialogElement>(null);
@@ -223,6 +226,12 @@ function EditSheet({
 
   async function role(which: "logo" | "cover", on: boolean) {
     setError(null);
+    if (on) {
+      // Pick the square / 16:9 framing first; the crop endpoint sets it.
+      onClose();
+      onCrop(which, asset);
+      return;
+    }
     try {
       await onSetRole(which, on ? asset.id : null);
     } catch (err) {
@@ -349,11 +358,13 @@ function BrandSlot({
   asset,
   onUploaded,
   onRemove,
+  onCrop,
 }: {
   which: "logo" | "cover";
   asset: ClientAsset | undefined;
   onUploaded: () => void;
   onRemove: () => void;
+  onCrop: () => void;
 }) {
   const src = asset ? (which === "logo" ? asset.urls.card ?? asset.urls.full : asset.urls.card ?? asset.urls.full) : null;
   const pill = asset ? STATUS_PILL[asset.status] : undefined;
@@ -388,6 +399,11 @@ function BrandSlot({
               label={asset ? "Replace" : which === "logo" ? "Upload logo" : "Upload cover"}
               onUploaded={onUploaded}
             />
+            {asset && asset.kind === "image" && asset.status !== "rejected" ? (
+              <button type="button" className="btn btn-secondary btn-sm" onClick={onCrop}>
+                Adjust crop
+              </button>
+            ) : null}
             {asset ? (
               <button type="button" className="btn btn-ghost btn-sm" onClick={onRemove}>
                 Remove
@@ -406,6 +422,7 @@ export default function MediaManager({ vendorId, vendorStatus }: { vendorId: num
   const [loadError, setLoadError] = useState<string | null>(null);
   const [filter, setFilter] = useState<Filter>("all");
   const [editing, setEditing] = useState<number | null>(null);
+  const [cropping, setCropping] = useState<{ which: "logo" | "cover"; asset: ClientAsset } | null>(null);
   const [notice, setNotice] = useState<{ tone: "ok" | "error"; text: string } | null>(null);
   const [newAlbum, setNewAlbum] = useState<string | null>(null);
   const [renaming, setRenaming] = useState<string | null>(null);
@@ -678,8 +695,8 @@ export default function MediaManager({ vendorId, vendorStatus }: { vendorId: num
           Logo &amp; cover
         </h2>
         <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
-          <BrandSlot which="cover" asset={cover} onUploaded={() => void load().then(() => say("Cover photo updated."))} onRemove={() => void setRole("cover", null).catch((e) => say(e.message, "error"))} />
-          <BrandSlot which="logo" asset={logo} onUploaded={() => void load().then(() => say("Logo updated."))} onRemove={() => void setRole("logo", null).catch((e) => say(e.message, "error"))} />
+          <BrandSlot which="cover" asset={cover} onCrop={() => cover && setCropping({ which: "cover", asset: cover })} onUploaded={() => void load().then(() => say("Cover photo updated."))} onRemove={() => void setRole("cover", null).catch((e) => say(e.message, "error"))} />
+          <BrandSlot which="logo" asset={logo} onCrop={() => logo && setCropping({ which: "logo", asset: logo })} onUploaded={() => void load().then(() => say("Logo updated."))} onRemove={() => void setRole("logo", null).catch((e) => say(e.message, "error"))} />
         </div>
       </section>
 
@@ -946,6 +963,19 @@ export default function MediaManager({ vendorId, vendorStatus }: { vendorId: num
             say("Deleted.");
           }}
           onSetRole={setRole}
+          onCrop={(which, asset) => setCropping({ which, asset })}
+        />
+      ) : null}
+      {cropping ? (
+        <CropDialog
+          key={`${cropping.which}-${cropping.asset.id}`}
+          which={cropping.which}
+          asset={cropping.asset}
+          onClose={() => setCropping(null)}
+          onCropped={() => {
+            const label = cropping.which === "logo" ? "Logo" : "Cover photo";
+            void load().then(() => say(`${label} updated.`));
+          }}
         />
       ) : null}
     </div>

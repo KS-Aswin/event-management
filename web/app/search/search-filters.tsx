@@ -2,7 +2,6 @@
 
 import { useRouter, useSearchParams } from "next/navigation";
 import { useState, useTransition, type ReactNode } from "react";
-import { CATEGORIES } from "@/lib/vendorVisuals";
 
 export default function SearchFilters({
   categories,
@@ -77,7 +76,7 @@ export default function SearchFilters({
       <fieldset>
         <legend className="eyebrow mb-2.5">Category</legend>
         <div className="grid grid-cols-2 md:grid-cols-1 gap-2 md:gap-1.5">
-        {(categories?.length ? categories : CATEGORIES).map((c) => {
+        {(categories ?? []).map((c) => {
           const checked = activeCategories.includes(c);
           return (
             <label

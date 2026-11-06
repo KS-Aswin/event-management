@@ -4,12 +4,17 @@ import { redirect } from "next/navigation";
 import { requirePageRole } from "@/app/api/_lib/auth";
 import { findDistricts, findLeadsByVendor, findOfferingsByVendor, getOwnVendor, type LeadFilters } from "@/lib/db";
 import { LeadRow } from "./lead-row";
-import { LEAD_STATUS_LABEL, type QuoteStatusKey } from "./format";
+import { LEAD_STATUS_LABEL, daysFromToday, type QuoteStatusKey } from "./format";
 
 export const metadata: Metadata = { title: "Leads" };
 
-const TABS: { key: "all" | QuoteStatusKey; label: string }[] = [
+// Tabs follow the real lead statuses in the database (pending, responded,
+// booked, declined) plus "Follow-up due", the vendor's to-do list. The plan's
+// "Quoted/Accepted/Expired" tabs need quote offers, which arrive with P2-4.
+type TabKey = "all" | "followup" | QuoteStatusKey;
+const TABS: { key: TabKey; label: string }[] = [
   { key: "all", label: "All" },
+  { key: "followup", label: "Follow-up due" },
   { key: "pending", label: LEAD_STATUS_LABEL.pending },
   { key: "responded", label: LEAD_STATUS_LABEL.responded },
   { key: "booked", label: LEAD_STATUS_LABEL.booked },
@@ -49,9 +54,17 @@ export default async function VendorLeadsPage({
     findDistricts(),
     findOfferingsByVendor(vendor.id, { includeInactive: true }),
   ]);
-  const shown = active === "all" ? leads : leads.filter((l) => l.status === active);
-  const countFor = (key: (typeof TABS)[number]["key"]) =>
-    key === "all" ? leads.length : leads.filter((l) => l.status === key).length;
+  const inTab = (key: TabKey) => (l: (typeof leads)[number]) => {
+    if (key === "all") return true;
+    if (key === "followup") {
+      if (!l.follow_up_at || (l.status !== "pending" && l.status !== "responded")) return false;
+      const diff = daysFromToday(l.follow_up_at);
+      return diff !== null && diff <= 0;
+    }
+    return l.status === key;
+  };
+  const shown = leads.filter(inTab(active));
+  const countFor = (key: TabKey) => leads.filter(inTab(key)).length;
   const filtered = !!(from || to || districtId || serviceId);
 
   const tabHref = (key: string) => {

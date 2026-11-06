@@ -5,7 +5,8 @@ import type { MediaPurpose } from "./config";
 // q80 variants. The original is not kept.
 
 export interface VariantSpec {
-  name: "thumb" | "card" | "full";
+  /** "source" = uncropped copy kept for logo/cover so the crop can be redone. */
+  name: "thumb" | "card" | "full" | "source";
   width: number;
   height?: number;
   /** Crop to exactly width x height (logo square, cover 16:9). */
@@ -29,11 +30,13 @@ export const VARIANT_SPECS: Record<MediaPurpose, VariantSpec[]> = {
     { name: "thumb", width: 96, height: 96, crop: true },
     { name: "card", width: 256, height: 256, crop: true },
     { name: "full", width: 512, height: 512, crop: true },
+    { name: "source", width: 1920, longEdge: true },
   ],
   cover: [
     { name: "thumb", width: 320, height: 180, crop: true },
     { name: "card", width: 800, height: 450, crop: true },
     { name: "full", width: 1920, height: 1080, crop: true },
+    { name: "source", width: 1920, longEdge: true },
   ],
 };
 
@@ -117,5 +120,39 @@ export async function processImage(input: Buffer, purpose: MediaPurpose): Promis
     return { width: size.width, height: size.height, placeholderColor, variants, fallback: false };
   } catch (err) {
     throw new ImageDecodeError(err instanceof Error ? err.message : "Image could not be processed.");
+  }
+}
+
+/** A crop rectangle as fractions (0..1) of the source image. */
+export interface CropRect {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+}
+
+/**
+ * Cuts `rect` out of an already-oriented image (stored variants carry no EXIF)
+ * and returns it as lossless PNG for processImage(). Throws ImageDecodeError
+ * when the input can't be read, and returns null when sharp is unavailable.
+ */
+export async function extractRegion(
+  input: Buffer,
+  rect: CropRect
+): Promise<{ body: Buffer; width: number; height: number; sourceWidth: number; sourceHeight: number } | null> {
+  const sharp = await loadSharp();
+  if (!sharp) return null;
+  try {
+    const meta = await sharp(input, { failOn: "error" }).metadata();
+    const W = meta.width ?? 0;
+    const H = meta.height ?? 0;
+    const left = Math.min(Math.max(0, Math.round(rect.x * W)), W - 1);
+    const top = Math.min(Math.max(0, Math.round(rect.y * H)), H - 1);
+    const width = Math.max(1, Math.min(W - left, Math.round(rect.width * W)));
+    const height = Math.max(1, Math.min(H - top, Math.round(rect.height * H)));
+    const body = await sharp(input, { failOn: "error" }).extract({ left, top, width, height }).png().toBuffer();
+    return { body, width, height, sourceWidth: W, sourceHeight: H };
+  } catch (err) {
+    throw new ImageDecodeError(err instanceof Error ? err.message : "Image could not be cropped.");
   }
 }

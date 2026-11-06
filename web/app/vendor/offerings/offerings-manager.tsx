@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useMemo, useRef, useState } from "react";
+import { useConfirm } from "@/app/_components/confirm-dialog";
 import { Chip, api, offeringChips, type Offering, type PackageItem } from "@/app/vendor/_components/offering-api";
 
 // /vendor/offerings list (P0-11): tabs for offerings, packages and add-ons,
@@ -28,6 +29,7 @@ export default function OfferingsManager({
   vendorId: number;
 }) {
   const [offerings, setOfferings] = useState(initialOfferings);
+  const [confirm, confirmDialog] = useConfirm();
   const [items, setItems] = useState(initialItems);
   const [tab, setTab] = useState<Tab>("units");
   const [busyId, setBusyId] = useState<number | null>(null);
@@ -60,7 +62,14 @@ export default function OfferingsManager({
     const turningOff = o.active;
     if (turningOff && o.kind !== "package") {
       const used = items.filter((i) => i.item_id === o.id).map((i) => offerings.find((p) => p.id === i.package_id)?.title);
-      if (used.length && !window.confirm(`“${o.title}” is in ${used.length === 1 ? "a package" : `${used.length} packages`} (${used.join(", ")}). Turning it off hides ${used.length === 1 ? "that package" : "those packages"} until you turn it back on. Continue?`)) {
+      if (
+        used.length &&
+        !(await confirm({
+          title: `Turn off “${o.title}”?`,
+          description: `It is in ${used.length === 1 ? "a package" : `${used.length} packages`} (${used.join(", ")}). Turning it off hides ${used.length === 1 ? "that package" : "those packages"} until you turn it back on.`,
+          confirmLabel: "Turn off",
+        }))
+      ) {
         return;
       }
     }
@@ -74,7 +83,15 @@ export default function OfferingsManager({
 
   async function remove(o: Offering) {
     setNotice(null);
-    if (!window.confirm(`Delete “${o.title}”? This can't be undone.`)) return;
+    if (
+      !(await confirm({
+        title: `Delete “${o.title}”?`,
+        description: "This can't be undone. If customers have enquired about it, it is turned off instead.",
+        confirmLabel: "Delete",
+        danger: true,
+      }))
+    )
+      return;
     setBusyId(o.id);
     const r = await api<{ mode: string }>(`/api/vendor/offerings/${o.id}`, "DELETE");
     setBusyId(null);
@@ -223,6 +240,7 @@ export default function OfferingsManager({
 
   return (
     <>
+      {confirmDialog}
       <header className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between mb-6">
         <div>
           <h1 className="font-display text-heading sm:text-display font-semibold tracking-tight">Offerings &amp; packages</h1>

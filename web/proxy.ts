@@ -64,6 +64,45 @@ async function adminStillLive(s: CookieSession): Promise<boolean> {
   }
 }
 
+// Vendor detail pages that show one record: /vendor/leads/<id>,
+// /vendor/offerings/<id> and /vendor/offerings/packages/<id>.
+const VENDOR_RECORD_PAGES: { re: RegExp; sql: string }[] = [
+  {
+    re: /^\/vendor\/leads\/([^/]+)\/?$/,
+    sql: `SELECT 1 FROM quote_requests q JOIN vendors v ON v.id = q.vendor_id WHERE q.id = $1 AND v.owner_id = $2`,
+  },
+  {
+    re: /^\/vendor\/offerings\/packages\/(?!new\/?$)([^/]+)\/?$/,
+    sql: `SELECT 1 FROM services s JOIN vendors v ON v.id = s.vendor_id WHERE s.id = $1 AND s.kind = 'package' AND v.owner_id = $2`,
+  },
+  {
+    re: /^\/vendor\/offerings\/(?!new\/?$|packages(?:\/|$))([^/]+)\/?$/,
+    sql: `SELECT 1 FROM services s JOIN vendors v ON v.id = s.vendor_id WHERE s.id = $1 AND v.owner_id = $2`,
+  },
+];
+
+/**
+ * Another vendor's lead/offering/package (or a missing or malformed id) must
+ * be a real 404. The page also calls notFound(), but by then the root
+ * loading.tsx has streamed a 200 (same reason as adminStillLive). Returns
+ * false only when the record is definitely not this vendor's; a DB error
+ * falls through to the page, whose own ownership check still hides the data.
+ */
+async function vendorOwnsRecord(pathname: string, userId: number): Promise<boolean> {
+  for (const { re, sql } of VENDOR_RECORD_PAGES) {
+    const m = re.exec(pathname);
+    if (!m) continue;
+    if (!/^[1-9]\d{0,9}$/.test(m[1]) || Number(m[1]) > 2147483647 || !Number.isInteger(userId)) return false;
+    try {
+      const { rowCount } = await pool.query(sql, [Number(m[1]), userId]);
+      return (rowCount ?? 0) > 0;
+    } catch {
+      return true;
+    }
+  }
+  return true;
+}
+
 function notFoundPage(request: NextRequest) {
   // A path with no route renders app/not-found.tsx with a real 404 status.
   return NextResponse.rewrite(new URL("/_vela/not-found", request.url));
@@ -103,6 +142,9 @@ export async function proxy(request: NextRequest) {
     if (!(await adminStillLive(cookie))) return notFoundPage(request);
   }
   if (target === "404") return notFoundPage(request);
+  if (target === null && role === "vendor" && cookie && !(await vendorOwnsRecord(pathname, cookie.userId))) {
+    return notFoundPage(request);
+  }
   if (target) return NextResponse.redirect(new URL(target, request.url));
 
   // Lets server guards build ?next= links (layouts don't get the pathname).

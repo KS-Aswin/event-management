@@ -599,6 +599,31 @@ async function main() {
     suggestCategory.data?.categories?.includes("Photography")
   );
 
+  // Categories and offerings come from the DB taxonomy (P0-8), not a hard-coded list.
+  const OLD_LIST = ["Venue", "Photography", "Catering", "Decoration", "DJ & Music", "Makeup", "Mehendi"];
+  const dbOnly = (await dbQuery("SELECT name FROM categories WHERE active AND NOT (name = ANY($1)) ORDER BY sort_order LIMIT 1", [OLD_LIST]))?.[0]?.name;
+  if (dbOnly) {
+    const r2 = await request(`/api/suggest?q=${encodeURIComponent(dbOnly.slice(0, 5))}`);
+    checkTrue(`suggest: a DB-only category is suggested (${dbOnly})`, !!r2.data?.categories?.includes(dbOnly));
+  }
+  const tpl = (await dbQuery(
+    `SELECT t.name, c.name AS category FROM offering_templates t JOIN categories c ON c.id = t.category_id
+      WHERE t.active AND c.active AND t.code <> 'other' AND length(t.name) >= 5 ORDER BY t.sort_order, t.id LIMIT 1`))?.[0];
+  if (tpl) {
+    const r3 = await request(`/api/suggest?q=${encodeURIComponent(tpl.name)}`);
+    checkTrue(`suggest: an offering template is suggested with its category (${tpl.name})`,
+      !!r3.data?.offerings?.some((o) => o.name === tpl.name && o.category === tpl.category));
+  }
+  const liveDbOnly = (await dbQuery(
+    `SELECT c.name FROM categories c JOIN vendors v ON v.category = c.name
+      WHERE c.active AND (v.status IS NULL OR v.status = 'approved') AND NOT (c.name = ANY($1)) LIMIT 1`, [OLD_LIST]))?.[0]?.name;
+  if (liveDbOnly) {
+    const home = await request("/");
+    const html = typeof home.text === "string" ? home.text : "";
+    checkTrue(`home: a DB-only category with live vendors gets a chip (${liveDbOnly})`,
+      html.includes(`category=${encodeURIComponent(liveDbOnly)}`));
+  }
+
   const suggestLocation = await request("/api/suggest?q=Koc");
   checkTrue(
     "suggest: partial location match found (Kochi)",
@@ -932,11 +957,49 @@ async function p0VendorWorkspace({ vendorCookie, legacyLeadId }) {
   const small = await request("/api/vendor/media/uploads", { method: "POST", cookie: wiz, body: { kind: "image", contentType: "image/jpeg", bytes: 1000 } });
   check("upload: a body bigger than the cap is refused (413)",
     (await rawRequest(small.data?.uploadUrl ?? "/api/vendor/media/uploads/0/file", { body: Buffer.alloc(16 * 1024 * 1024 + 1, 1), cookie: wiz })).status, 413);
-  for (const buf of photos.slice(1)) await uploadImage(wiz, buf);
+  const galleryAssets = [];
+  for (const buf of photos.slice(1)) galleryAssets.push((await uploadImage(wiz, buf)).data?.asset);
   const cover = await uploadImage(wiz, fixture("kerala-celebrations-co-cover.jpg"), { purpose: "cover" });
   check("upload: cover photo (201)", cover.status, 201);
   r = await request("/api/vendor/media/cover", { method: "PUT", cookie: wiz, body: { mediaId: cover.data?.asset?.id } });
   check("media: set as cover", [r.status, r.data?.mediaId], [200, cover.data?.asset?.id]);
+  checkTrue("upload: a cover keeps an uncropped source copy for re-cropping", typeof cover.data?.asset?.urls?.source === "string");
+
+  // ---- Logo / cover crop (P0-7) ----
+  const g = galleryAssets[0];
+  const coverCrop = (w, h) => (w / h > 16 / 9 ? { x: 0, y: 0, width: (16 / 9) / (w / h), height: 1 } : { x: 0, y: 0, width: 1, height: (w / h) / (16 / 9) });
+  const crop = (cookie, body) => request("/api/vendor/media/crop", { method: "POST", cookie, body });
+  const wizRow = async () => (await dbQuery(
+    "SELECT v.cover_media_id, v.logo_media_id FROM vendors v JOIN users u ON u.id = v.owner_id WHERE u.email = $1",
+    [`wiz-vendor-${RUN_ID}@example.com`]))?.[0];
+  r = await crop(wiz, { which: "cover", mediaId: g?.id, crop: coverCrop(g?.width ?? 1, g?.height ?? 1) });
+  check("crop: a gallery photo cropped to 16:9 becomes the cover (201)", [r.status, r.data?.asset?.purpose], [201, "cover"]);
+  const croppedCover = r.data?.asset;
+  checkTrue("crop: the cover crop is a new asset with its own source copy", !!croppedCover && croppedCover.id !== g?.id && typeof croppedCover.urls?.source === "string");
+  check("crop: vendors.cover_media_id points at the crop", (await wizRow())?.cover_media_id, croppedCover?.id);
+  check("crop: the replaced dedicated cover upload is removed", (await request(`/api/vendor/media/${cover.data?.asset?.id}`, { cookie: wiz })).status, 404);
+  check("crop: the gallery photo it came from is kept", (await request(`/api/vendor/media/${g?.id}`, { cookie: wiz })).status, 200);
+  if (croppedCover?.urls?.full) {
+    const img = await fetch(new URL(croppedCover.urls.full, BASE_URL), { headers: { Cookie: wiz } });
+    check("crop: the cropped cover is served as WebP", [img.status, img.headers.get("content-type")], [200, "image/webp"]);
+  }
+  const cw = coverCrop(g?.width ?? 1, g?.height ?? 1);
+  r = await crop(wiz, { which: "cover", mediaId: croppedCover?.id, crop: { x: 0.05, y: 0.02, width: cw.width * 0.85, height: cw.height * 0.85 } });
+  check("crop: re-cropping the cover from its kept source works (201)", [r.status, r.data?.asset?.purpose], [201, "cover"]);
+  check("crop: the previous crop is cleaned up", (await request(`/api/vendor/media/${croppedCover?.id}`, { cookie: wiz })).status, 404);
+  const ratio = (g?.width ?? 1) / (g?.height ?? 1);
+  const sq = ratio >= 1 ? { x: 0.1, y: 0, width: 1 / ratio, height: 1 } : { x: 0, y: 0.1, width: 1, height: ratio };
+  r = await crop(wiz, { which: "logo", mediaId: g?.id, crop: sq });
+  check("crop: a square crop becomes the logo (201)", [r.status, r.data?.asset?.purpose], [201, "logo"]);
+  check("crop: vendors.logo_media_id points at the crop", (await wizRow())?.logo_media_id, r.data?.asset?.id);
+  check("crop: a non-square logo crop is refused (400)",
+    (await crop(wiz, { which: "logo", mediaId: g?.id, crop: { x: 0, y: 0, width: 1, height: 1 } })).status, ratio === 1 ? 201 : 400);
+  check("crop: a crop too small for a sharp logo is refused (422)",
+    (await crop(wiz, { which: "logo", mediaId: g?.id, crop: { x: 0, y: 0, width: 0.1 / ratio, height: 0.1 } })).status, 422);
+  check("crop: a crop outside the photo is refused (400)",
+    (await crop(wiz, { which: "logo", mediaId: g?.id, crop: { x: 0.8, y: 0, width: 0.5, height: 0.5 * ratio } })).status, 400);
+  check("crop: an unknown slot is refused (400)", (await crop(wiz, { which: "banner", mediaId: g?.id, crop: sq })).status, 400);
+  check("crop: a customer can't crop (403)", (await crop(customer, { which: "logo", mediaId: g?.id, crop: sq })).status, 403);
 
   r = await request("/api/vendor/media/links", { method: "POST", cookie: wiz, body: { url: "https://youtu.be/aqz-KE-bpKQ" } });
   check("video link: YouTube link parsed (201)", [r.status, r.data?.asset?.provider ?? r.data?.asset?.externalProvider, r.data?.asset?.externalId], [201, "youtube", "aqz-KE-bpKQ"]);
@@ -958,6 +1021,8 @@ async function p0VendorWorkspace({ vendorCookie, legacyLeadId }) {
   check("ownership: other vendor can't set it as their cover (404)",
     (await request("/api/vendor/media/cover", { method: "PUT", cookie: other, body: { mediaId: firstAsset?.id } })).status, 404);
   check("ownership: other vendor's offering is 404", (await request(`/api/vendor/offerings/${dayOfId}`, { cookie: other })).status, 404);
+  check("ownership: other vendor can't crop this photo into their logo (404)",
+    (await request("/api/vendor/media/crop", { method: "POST", cookie: other, body: { which: "logo", mediaId: g?.id, crop: sq } })).status, 404);
 
   // Submit now that the minimum is there: pending, not public.
   r = await request("/api/vendor/listing/submit", { method: "POST", cookie: wiz });
@@ -1009,6 +1074,23 @@ async function p0VendorWorkspace({ vendorCookie, legacyLeadId }) {
   for (const p of ["/vendor", "/vendor/onboarding", "/vendor/offerings", "/vendor/media", "/vendor/leads", "/vendor/profile", "/vendor/areas", "/vendor/reviews", "/vendor/settings"]) {
     check(`page: ${p} renders for its vendor (200)`, (await request(p, { cookie: wiz })).status, 200);
   }
+  // Detail pages: a real 404 status (not a 200 page) for another vendor's record.
+  const pkgId = (await dbQuery(
+    `SELECT s.id FROM services s JOIN vendors v ON v.id = s.vendor_id JOIN users u ON u.id = v.owner_id
+      WHERE u.email = $1 AND s.kind = 'package' ORDER BY s.id LIMIT 1`, [`wiz-vendor-${RUN_ID}@example.com`]))?.[0]?.id;
+  check("page: own offering editor renders (200)", (await request(`/vendor/offerings/${dayOfId}`, { cookie: wiz })).status, 200);
+  check("page: another vendor's offering editor is 404", (await request(`/vendor/offerings/${dayOfId}`, { cookie: other })).status, 404);
+  check("page: own package editor renders (200)", (await request(`/vendor/offerings/packages/${pkgId}`, { cookie: wiz })).status, 200);
+  check("page: another vendor's package editor is 404", (await request(`/vendor/offerings/packages/${pkgId}`, { cookie: other })).status, 404);
+  check("page: /vendor/offerings/new still renders (200)", (await request("/vendor/offerings/new", { cookie: wiz })).status, 200);
+  check("page: /vendor/offerings/packages/new still renders (200)", (await request("/vendor/offerings/packages/new", { cookie: wiz })).status, 200);
+  check("page: a malformed lead id is 404", (await request("/vendor/leads/abc", { cookie: wiz })).status, 404);
+  check("page: the Follow-up due tab renders (200)", (await request("/vendor/leads?status=followup", { cookie: wiz })).status, 200);
+  if (legacyLeadId) {
+    check("page: the owner opens their lead (200)", (await request(`/vendor/leads/${legacyLeadId}`, { cookie: vendorCookie })).status, 200);
+    check("page: another vendor's lead page is 404", (await request(`/vendor/leads/${legacyLeadId}`, { cookie: other })).status, 404);
+  }
+
   r = await request("/vendor/media", { cookie: customer });
   checkTrue("page: customer on /vendor/media is redirected away", [307, 308].includes(r.status) && !isVendorPath(r.headers.location));
   r = await request("/vendor/media");

@@ -13,11 +13,12 @@ const EXAMPLES = [
 
 interface Suggestions {
   categories: string[];
+  offerings: { name: string; category: string }[];
   locations: string[];
   vendors: { id: number; name: string; category: string }[];
 }
 
-const EMPTY_SUGGESTIONS: Suggestions = { categories: [], locations: [], vendors: [] };
+const EMPTY_SUGGESTIONS: Suggestions = { categories: [], offerings: [], locations: [], vendors: [] };
 
 /** Trim and collapse inner whitespace so "Kochi " matches like "Kochi". */
 function normalise(q: string) {
@@ -32,7 +33,7 @@ interface Facets {
 
 interface Option {
   id: string;
-  group: "Categories" | "Locations" | "Vendors" | "all";
+  group: "Categories" | "Offerings" | "Locations" | "Vendors" | "all";
   label: React.ReactNode;
   run: () => void;
 }
@@ -108,6 +109,16 @@ export default function HomeSearch() {
       label: c,
       run: () => search({ category: c }),
     })),
+    ...(suggestions.offerings ?? []).map((o) => ({
+      id: `${listId}-o-${o.category}-${o.name}`,
+      group: "Offerings" as const,
+      label: (
+        <>
+          {o.name} <span className="text-ink-soft">· {o.category}</span>
+        </>
+      ),
+      run: () => search({ category: o.category }),
+    })),
     ...suggestions.locations.map((l) => ({
       id: `${listId}-l-${l}`,
       group: "Locations" as const,
@@ -162,7 +173,7 @@ export default function HomeSearch() {
     }
   }
 
-  const groups: Option["group"][] = ["Categories", "Locations", "Vendors"];
+  const groups: Option["group"][] = ["Categories", "Offerings", "Locations", "Vendors"];
 
   return (
     <div className="w-full max-w-[620px] flex flex-col items-center">

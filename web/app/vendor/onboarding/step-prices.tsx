@@ -4,6 +4,7 @@ import { useCallback, useRef, useState } from "react";
 import OfferingUnitForm, { type UnitFormHandle } from "@/app/vendor/_components/offering-unit-form";
 import OfferingPackageForm from "@/app/vendor/_components/offering-package-form";
 import { Chip, api, offeringChips, type Offering, type PackageItem } from "@/app/vendor/_components/offering-api";
+import { useConfirm } from "@/app/_components/confirm-dialog";
 import { StepActions } from "./step-actions";
 import type { StepProps } from "./types";
 
@@ -16,6 +17,7 @@ export default function StepPrices({ tax, data, setData, next, back }: StepProps
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [removing, setRemoving] = useState<number | null>(null);
+  const [confirm, confirmDialog] = useConfirm();
 
   const registerFor = useCallback(
     (id: number) => (h: UnitFormHandle | null) => {
@@ -30,7 +32,7 @@ export default function StepPrices({ tax, data, setData, next, back }: StepProps
   );
 
   async function remove(o: Offering) {
-    if (!window.confirm(`Remove “${o.title}”?`)) return;
+    if (!(await confirm({ title: `Remove “${o.title}”?`, confirmLabel: "Remove", danger: true }))) return;
     setRemoving(o.id);
     const r = await api(`/api/vendor/offerings/${o.id}`, "DELETE");
     setRemoving(null);
@@ -72,6 +74,7 @@ export default function StepPrices({ tax, data, setData, next, back }: StepProps
 
   return (
     <div className="flex flex-col gap-6">
+      {confirmDialog}
       <p className="text-lead text-ink-soft -mt-3">
         Give each offering a starting price. Customers see “Starting from ₹…”, and you send the exact quote later.
       </p>

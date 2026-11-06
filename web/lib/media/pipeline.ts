@@ -13,7 +13,7 @@ import {
   type MediaPurpose,
 } from "./config";
 import { sniffType, imageRejectMessage, ACCEPTED_IMAGE_TYPES } from "./magic";
-import { processImage, readImageSize, ImageDecodeError } from "./image";
+import { processImage, readImageSize, extractRegion, ImageDecodeError, type CropRect } from "./image";
 import { parseVideoLink } from "./video-link";
 import {
   albumBelongsTo,
@@ -28,6 +28,8 @@ import {
   insertVideoLink,
   reserveUpload,
   setVendorImage,
+  getVendorImageIds,
+  updateAssetFields,
   toClientAsset,
   assetUrls,
   type MediaAssetRow,
@@ -420,4 +422,171 @@ export async function removeAsset(vendor: VendorRef, id: number): Promise<Pipeli
   await discard(vendor, row);
   if (poster) await discard(vendor, poster);
   return { status: 200, body: { ok: true } };
+}
+
+// ---- logo / cover crop (P0-7) ---------------------------------------------
+
+/** Smallest crop (in source pixels) that still makes a sharp logo / cover. */
+export const CROP_MIN = { logo: { w: 200, h: 200 }, cover: { w: 800, h: 450 } } as const;
+const CROP_ASPECT = { logo: 1, cover: 16 / 9 } as const;
+
+function parseCrop(v: unknown): CropRect | null {
+  if (!v || typeof v !== "object") return null;
+  const o = v as Record<string, unknown>;
+  const n = (k: string) => (typeof o[k] === "number" && Number.isFinite(o[k]) ? (o[k] as number) : NaN);
+  const r = { x: n("x"), y: n("y"), width: n("width"), height: n("height") };
+  if ([r.x, r.y, r.width, r.height].some((x) => Number.isNaN(x))) return null;
+  const eps = 0.001;
+  if (r.x < -eps || r.y < -eps || r.width <= 0 || r.height <= 0) return null;
+  if (r.x + r.width > 1 + eps || r.y + r.height > 1 + eps) return null;
+  const x = Math.max(0, r.x);
+  const y = Math.max(0, r.y);
+  return { x, y, width: Math.min(r.width, 1 - x), height: Math.min(r.height, 1 - y) };
+}
+
+/** The uncropped image behind an asset: its kept "source" copy, else "full". */
+function sourceKey(row: MediaAssetRow): string | null {
+  const k = row.variants?.source?.key ?? row.variants?.full?.key ?? null;
+  return k && row.storage_key && k.startsWith(`${row.storage_key}/`) ? k : null;
+}
+
+/**
+ * Crops one of the vendor's photos into a new logo/cover asset (square or
+ * 16:9 variants made by sharp), keeps an uncropped "source" copy so the crop
+ * can be redone, and makes it the vendor's logo/cover. The previous
+ * logo/cover asset is removed when it was a dedicated logo/cover asset that
+ * nothing else uses (gallery photos are never touched).
+ */
+export async function cropVendorImage(
+  vendor: VendorRef,
+  which: "logo" | "cover",
+  input: Record<string, unknown>
+): Promise<PipelineResult> {
+  const mediaId = asId(input.mediaId);
+  if (mediaId === null || mediaId === "invalid") return fail(400, "mediaId is required.", "VALIDATION");
+  const crop = parseCrop(input.crop);
+  if (!crop) return fail(400, "crop must be {x, y, width, height} as fractions of the photo.", "VALIDATION");
+
+  const src = await findAsset(vendor.id, mediaId);
+  if (!src || src.kind !== "image" || src.status === "uploading" || src.status === "processing") {
+    return fail(404, "Not found.", "NOT_FOUND");
+  }
+  if (src.status === "rejected") return fail(400, "A rejected photo can't be used here.", "VALIDATION");
+  const key = src.storage_driver && src.storage_driver !== "url" ? sourceKey(src) : null;
+  if (!key) return fail(400, "This photo can't be cropped. Upload it again.", "VALIDATION");
+
+  const storage = getStorage(src.storage_driver!);
+  const obj = await storage.get(key);
+  if (!obj) return fail(400, "This photo's file is missing. Upload it again.", "VALIDATION");
+  const srcBuf = Buffer.isBuffer(obj.body) ? obj.body : await readCapped(obj.body, MAX_IMAGE_BYTES + 1);
+  if (!Buffer.isBuffer(srcBuf)) return tooLarge("image");
+
+  let region;
+  try {
+    region = await extractRegion(srcBuf, crop);
+  } catch (err) {
+    if (err instanceof ImageDecodeError) return fail(415, "This photo could not be read.", "UNSUPPORTED_TYPE");
+    throw err;
+  }
+  if (!region) return fail(503, "Cropping isn't available on this server right now.", "UNAVAILABLE");
+  const min = CROP_MIN[which];
+  if (region.width < min.w - 1 || region.height < min.h - 1) {
+    return fail(
+      422,
+      `That crop is too small for a sharp ${which}. Zoom out or use a larger photo (at least ${min.w} × ${min.h} px).`,
+      "VALIDATION",
+      { minWidth: min.w, minHeight: min.h }
+    );
+  }
+  const aspect = region.width / region.height;
+  if (Math.abs(aspect - CROP_ASPECT[which]) / CROP_ASPECT[which] > 0.03) {
+    return fail(400, which === "logo" ? "A logo crop must be square." : "A cover crop must be 16:9.", "VALIDATION");
+  }
+
+  const sha256 = createHash("sha256").update(`crop:${which}:`).update(region.body).digest("hex");
+  const before = await getVendorImageIds(vendor.id);
+  const previousId = which === "logo" ? before.logo_media_id : before.cover_media_id;
+  const otherId = which === "logo" ? before.cover_media_id : before.logo_media_id;
+
+  let done = await findAssetBySha(vendor.id, sha256);
+  if (!done || done.purpose !== which) {
+    let processed;
+    try {
+      processed = await processImage(region.body, which);
+    } catch (err) {
+      if (err instanceof ImageDecodeError) return fail(415, "This photo could not be read.", "UNSUPPORTED_TYPE");
+      throw err;
+    }
+    if (processed.fallback) return fail(503, "Cropping isn't available on this server right now.", "UNAVAILABLE");
+    const uuid = randomUUID();
+    const row = await reserveUpload({
+      vendorId: vendor.id,
+      uuid,
+      kind: "image",
+      purpose: which,
+      storageDriver: currentStorageDriver(),
+      storageKey: `vendors/${vendor.id}/${uuid}`,
+      mime: "image/webp",
+      bytes: region.body.byteLength,
+      albumId: null,
+      serviceId: null,
+      caption: "",
+      durationS: null,
+    });
+    const out = getStorage(row.storage_driver);
+    const variants: Record<string, VariantRef> = {};
+    const cache = "public, max-age=31536000, immutable";
+    for (const v of processed.variants) {
+      if (v.name === "source") continue;
+      const k = `${row.storage_key}/${v.name}.webp`;
+      await out.put(k, v.body, { contentType: "image/webp", cacheControl: cache });
+      variants[v.name] = { key: k, w: v.width, h: v.height };
+    }
+    // Keep the uncropped photo so the vendor can adjust the crop later.
+    const ext = key.endsWith(".png") ? "png" : key.endsWith(".jpg") ? "jpg" : "webp";
+    const sk = `${row.storage_key}/source.${ext}`;
+    const type = ext === "png" ? "image/png" : ext === "jpg" ? "image/jpeg" : "image/webp";
+    await out.put(sk, srcBuf, { contentType: type, cacheControl: cache });
+    variants.source = { key: sk, w: region.sourceWidth, h: region.sourceHeight };
+
+    // Cropping can't add new content: a crop of an approved photo stays approved.
+    const status = src.status === "approved" ? "approved" : initialStatusFor(vendor);
+    const saved = await finalizeAsset(vendor.id, row.id, {
+      variants,
+      mime: "image/webp",
+      bytes: region.body.byteLength,
+      width: processed.width,
+      height: processed.height,
+      sha256,
+      placeholderColor: processed.placeholderColor,
+      status,
+      posterMediaId: null,
+    });
+    if (!saved) {
+      await discard(vendor, row);
+      done = await findAssetBySha(vendor.id, sha256);
+      if (!done) return fail(409, "The crop could not be saved. Please try again.", "CONFLICT");
+    } else {
+      done = saved;
+      if (src.alt_text) done = (await updateAssetFields(vendor.id, done.id, { alt_text: src.alt_text })) ?? done;
+    }
+  }
+
+  if (!done) return fail(409, "The crop could not be saved. Please try again.", "CONFLICT");
+  await maybeSetVendorImage(vendor, done);
+
+  if (previousId && previousId !== done.id && previousId !== otherId) {
+    const prev = await findAsset(vendor.id, previousId);
+    if (prev && prev.purpose === which) await discard(vendor, prev);
+  }
+  const urls = assetUrls(done);
+  return {
+    status: 201,
+    body: {
+      ok: true,
+      mediaId: done.id,
+      url: which === "logo" ? urls.card ?? urls.full ?? null : urls.full ?? null,
+      asset: toClientAsset(done),
+    },
+  };
 }

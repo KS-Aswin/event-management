@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
+import { useConfirm } from "@/app/_components/confirm-dialog";
 import { LEAD_STATUS_LABEL, asStatus, type QuoteStatusKey } from "./format";
 
 const STATUS_OPTIONS: QuoteStatusKey[] = ["pending", "responded", "booked", "declined"];
@@ -52,6 +53,7 @@ export default function LeadStatusControl({
   const [error, setError] = useState<string | null>(null);
   const [undoFrom, setUndoFrom] = useState<QuoteStatusKey | null>(null);
   const undoTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [confirm, confirmDialog] = useConfirm();
 
   useEffect(() => () => {
     if (undoTimer.current) clearTimeout(undoTimer.current);
@@ -62,9 +64,13 @@ export default function LeadStatusControl({
     if (
       !isUndo &&
       (current === "booked" || current === "declined") &&
-      !window.confirm(
-        `This lead is marked "${LEAD_STATUS_LABEL[current]}". Change it to "${LEAD_STATUS_LABEL[newStatus]}"?`
-      )
+      !(await confirm({
+        title: `Change to "${LEAD_STATUS_LABEL[newStatus]}"?`,
+        description: `This lead is marked "${LEAD_STATUS_LABEL[current]}".${
+          current === "booked" ? " Its event date will be freed on your calendar." : ""
+        }`,
+        confirmLabel: `Change to ${LEAD_STATUS_LABEL[newStatus]}`,
+      }))
     ) {
       return;
     }
@@ -124,6 +130,7 @@ export default function LeadStatusControl({
           </span>
         ) : null}
       </div>
+      {confirmDialog}
     </div>
   );
 }
