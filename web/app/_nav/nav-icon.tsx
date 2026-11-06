@@ -105,6 +105,19 @@ const PATHS: Record<NavIconName, React.ReactNode> = {
       <path d="M8 12h8M8 16h5" />
     </>
   ),
+  calendar: (
+    <>
+      <rect x="3" y="4" width="18" height="18" rx="2" />
+      <path d="M16 2v4M8 2v4M3 10h18" />
+      <path d="M8 14h.01M12 14h.01M16 14h.01M8 18h.01M12 18h.01" />
+    </>
+  ),
+  insights: (
+    <>
+      <path d="M3 3v18h18" />
+      <path d="M8 17v-5M13 17V8M18 17v-9" />
+    </>
+  ),
   analytics: (
     <>
       <path d="M3 3v18h18" />

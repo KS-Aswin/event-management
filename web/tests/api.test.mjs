@@ -278,8 +278,11 @@ async function main() {
       (dashNoAuth.status === 200 && dashNoAuth.text.includes("NEXT_REDIRECT;replace;/login"))
   );
 
+  // The old customer dashboard moved to /my (P2-1).
   const dashAuth = await request("/dashboard", { cookie: customerCookie });
-  check("dashboard: accessible with valid session (200)", dashAuth.status, 200);
+  check("dashboard: customer is sent to /my", `${dashAuth.status} ${new URL(dashAuth.headers.location ?? "/", BASE_URL).pathname}`, "307 /my");
+  const myHome = await request("/my", { cookie: customerCookie });
+  check("customer home: /my renders for a customer (200)", myHome.status, 200);
 
   // ---------- Vendors: search/filter ----------
   // Counts are scoped to the 9 seeded vendors (by name), so listings created
@@ -415,9 +418,9 @@ async function main() {
   });
   check("quote: logged-in customer's quote accepted (201)", customerQuote.status, 201);
 
-  const customerDashAfterQuote = await request("/dashboard", { cookie: customerCookie });
+  const customerDashAfterQuote = await request("/my/enquiries", { cookie: customerCookie });
   checkTrue(
-    "customer dashboard: shows the vendor just requested a quote from",
+    "customer enquiries: shows the vendor just requested a quote from",
     customerDashAfterQuote.text.includes(`Automated Test Studio ${RUN_ID}`)
   );
 
@@ -572,9 +575,9 @@ async function main() {
   const favAddAgain = await request(`/api/vendors/1/favorite`, { method: "POST", cookie: customerCookie });
   check("favorite: adding the same vendor twice doesn't error (idempotent, 200)", favAddAgain.status, 200);
 
-  const dashWithFavorite = await request("/dashboard", { cookie: customerCookie });
+  const dashWithFavorite = await request("/my/shortlist", { cookie: customerCookie });
   checkTrue(
-    "customer dashboard: shows the favorited vendor",
+    "customer shortlist: shows the favorited vendor",
     dashWithFavorite.text.includes("Backwater Grand Palace")
   );
 
@@ -770,10 +773,10 @@ async function main() {
   check("logout: succeeds (200)", logout.status, 200);
 
   // ---------- Role-specific dashboard content ----------
-  const customerDashHtml = await request("/dashboard", { cookie: customerCookie });
+  const customerDashHtml = await request("/my", { cookie: customerCookie });
   checkTrue(
-    "customer dashboard: shows customer-specific content (quote requests section)",
-    customerDashHtml.text.includes("quote request")
+    "customer home: shows customer-specific content (My events)",
+    customerDashHtml.status === 200 && customerDashHtml.text.includes("My events")
   );
 
   const vendorDashHtml = await request("/dashboard", { cookie: vendorCookie });

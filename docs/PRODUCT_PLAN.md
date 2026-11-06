@@ -1185,7 +1185,7 @@ AC: linked from signup, the upload consent checkbox and the footer.
 
 ### P2: Customer journey
 
-**P2-1 Customer area shell and home** (`/my`). Customer login lands here.
+[x] **P2-1 Customer area shell and home** (`/my`). Customer login lands here. _Status: done 2026-11-06. `CUSTOMER_HOME` is `/my` (login, signup, `/dashboard` and `/vendor/*` send customers there). `/my` is discovery-first (What/Where/When search, occasion chips, recommended vendors near the next event's district), then the next event (earliest upcoming live enquiry date; same date + event type counts as one event) with enquiry/booked counts and "still needed" categories (`event_type_categories` minus categories already enquired, linking to a pre-filtered search), "Waiting for you" (unread replies, offers to answer) and a shortlist preview; empty state with occasion chips. Customer header: Find vendors, My events, Enquiries (unread dot), Shortlist (count), bell, avatar menu; phones get a bottom tab bar (Home, Search, Shortlist, Enquiries, Account) with safe-area padding, hidden on vendor profiles where the sticky quote bar sits. Counts from `GET /api/my/nav`. The home page hides the vendor CTA for customers. `/my/reviews` lists reviews written plus "rate your vendor" prompts (accepted/booked, event date passed, no review yet)._
 AC:
 - A customer with enquiries sees the next event, the latest replies and the shortlist.
 - Customers with no data see an empty state with event-type chips.
@@ -1217,7 +1217,7 @@ AC:
 - Every valid one writes `quote_status_events`.
 - Contact details in messages are masked while billing is on (flag tested).
 
-**P2-6 Vendor availability calendar.** Block, slots, capacity, bulk range, auto-block on booked, warning when blocking a date with a pending lead.
+[x] **P2-6 Vendor availability calendar.** Block, slots, capacity, bulk range, auto-block on booked, warning when blocking a date with a pending lead. _Status: done 2026-11-06. `/vendor/calendar` (month grid, day panel per slot: block/unblock and capacity, bulk range up to 120 days with a private note, booked and open leads linked) on GET/PUT `/api/vendor/availability` (lib/availability.ts). Blocking a date with an open (new/replied/accepted) enquiry answers 409 `PENDING_LEADS` with the leads until `force:true` (the UI asks first). Marking a lead booked increments `capacity_used` and leaving booked frees it (lib/availability-booking.ts, called from updateVendorLead; a manual block stays blocked). Capacity below what is booked is 400 `CAPACITY_BELOW_BOOKED`. Calendar is in the vendor nav and home quick actions. Migration 012._
 AC:
 - Blocking 14 Jan removes the vendor from search when the date filter is 14 Jan.
 - Capacity 2 with 1 booked shows "limited".
@@ -1236,16 +1236,16 @@ AC:
 - The pages have unique titles and meta descriptions.
 - An unknown slug gets 404.
 
-**P2-9 Shortlist and multi-vendor enquiry.** Shortlist with notes, guest localStorage merged on login, "send to selected" up to 5, maximum 15 per day per phone, per-vendor results. _Status (partial, 2026-11-06): the API is done: POST /api/enquiries/multi (1-5 vendors, 6 is 400 on `vendorIds`; one batch_id; per-vendor results with partial success; 409 when no vendor is available; 429 `DAILY_LIMIT` past 15 per phone per rolling 24 h under a per-phone lock; 6 sends per 10 min per user/IP). Missing: the shortlist UI with notes, guest localStorage merge on login and the "send to selected" screen. The 15/day cap applies to multi sends only; the single route keeps its per-IP/user limit (tests/api.test.mjs leaves untagged enquiries on fixed phones)._
+[x] **P2-9 Shortlist and multi-vendor enquiry.** Shortlist with notes, guest localStorage merged on login, "send to selected" up to 5, maximum 15 per day per phone, per-vendor results. _Status (partial, 2026-11-06): the API is done: POST /api/enquiries/multi (1-5 vendors, 6 is 400 on `vendorIds`; one batch_id; per-vendor results with partial success; 409 when no vendor is available; 429 `DAILY_LIMIT` past 15 per phone per rolling 24 h under a per-phone lock; 6 sends per 10 min per user/IP). UI done 2026-11-06: `/api/my/shortlist` (GET, POST `{vendorId, note?}` / `{vendorIds}` guest merge, PATCH note, DELETE; customers only; notes are migration 011 `favorites.note`, max 500), `/my/shortlist` grouped by category with notes, select up to 5 (a 6th is refused client side) and "Send enquiry" through the multi route with per-vendor results, Compare for 2-4. Guests save hearts to localStorage (`vela.shortlist.v1`), merged into the account right after login/signup. The 15/day cap applies to multi sends only; the single route keeps its per-IP/user limit (tests/api.test.mjs leaves untagged enquiries on fixed phones)._
 AC:
 - 6 selected vendors get 400.
 - The 16th enquiry in a day gets 429.
 - A batch with one unpublished vendor reports a partial success.
 
-**P2-10 Compare view** (`/my/compare`, 2–4 vendors).
+[x] **P2-10 Compare view** (`/my/compare`, 2–4 vendors). _Status: done 2026-11-06. Price from per unit (best highlighted only for like units), rating, verified, experience, median first-reply time (last 180 days, at least 3 replies), category, base, services, team, largest event, languages, the shared category's attributes and the customer's shortlist note. On phones only the table scrolls sideways with the label column pinned._
 AC: shows price from per unit, rating, verified, years, response time and key attributes for a shared category.
 
-**P2-11 Reviews v2.** Verified only when booked or accepted and the event date has passed; vendor public reply; "request a review" link from the lead.
+[x] **P2-11 Reviews v2.** Verified only when booked or accepted and the event date has passed; vendor public reply; "request a review" link from the lead. _Status: done 2026-11-06 (lib/vendor-reviews.ts). POST /api/vendors/[id]/reviews needs an enquiry from that customer (403 `NO_ENQUIRY`), links the review to it (`quote_request_id`, event type) and sets verified per section 9 #20 (Indian date); the vendor is notified. One public reply: POST /api/vendor/reviews/[id]/reply (409 `REPLY_EXISTS` on a second), PATCH edits it for 7 days after first posting (409 `EDIT_WINDOW_CLOSED`), 403 on another listing's review, 409 on a hidden one; the customer is notified. The profile shows "Verified booking" and "Reply from <vendor>" and only offers the form to customers who enquired (`#write-review` anchor). `/vendor/reviews` has the reply UI and the copyable review link, which booked/accepted lead pages also show (with a WhatsApp share)._
 AC:
 - A review before the event date is unverified.
 - A review after a booked event is verified.
@@ -1264,7 +1264,7 @@ AC:
 - Mark-all-read.
 - Created inside the same transaction as the triggering event.
 
-**P2-14 Vendor reviews and insights pages.** `/vendor/reviews` (reply) and `/vendor/insights` (views, clicks, enquiries, booked rate).
+[x] **P2-14 Vendor reviews and insights pages.** `/vendor/reviews` (reply) and `/vendor/insights` (views, clicks, enquiries, booked rate). _Status: done 2026-11-06. GET /api/vendor/insights?range=7|30|90 (lib/insights.ts) and `/vendor/insights`: views, WhatsApp clicks, enquiries and booked rate against the previous period, view-to-enquiry and reply rates, enquiries by status, and a zero state; in the vendor nav and avatar menu. tests/customer-vendortools.test.mjs checks the numbers against fixtures._
 AC: numbers match `vendor_events` and quotes fixtures, with a zero state.
 
 ### P3: Later (after income, or when an external account is approved)

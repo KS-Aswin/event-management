@@ -1,11 +1,13 @@
 // Navigation configs per role (PRODUCT_PLAN 2.7). One header switches
 // between these; the vendor workspace shell renders VENDOR_NAV as a sidebar
 // on desktop and a bottom tab bar on phones.
-import { CUSTOMER_DASHBOARD, VENDOR_HOME, ADMIN_HOME } from "./routes";
+import { CUSTOMER_HOME, VENDOR_HOME, ADMIN_HOME } from "./routes";
 
 export type NavIcon =
   | "home"
   | "leads"
+  | "calendar"
+  | "insights"
   | "offerings"
   | "media"
   | "profile"
@@ -43,14 +45,16 @@ export const VENDOR_NAV: NavItem[] = [
   { href: "/vendor/leads", label: "Leads", icon: "leads", tab: true },
   { href: "/vendor/offerings", label: "Offerings & packages", short: "Offerings", icon: "offerings", tab: true, also: ["/vendor/packages"] },
   { href: "/vendor/media", label: "Media", icon: "media", tab: true },
+  { href: "/vendor/calendar", label: "Calendar", icon: "calendar" },
   { href: "/vendor/profile", label: "Profile & business", short: "Profile", icon: "profile", also: ["/vendor/areas"] },
   { href: "/vendor/documents", label: "Business documents", short: "Documents", icon: "audit" },
   { href: "/vendor/reviews", label: "Reviews", icon: "reviews" },
+  { href: "/vendor/insights", label: "Insights", icon: "insights" },
   { href: "/vendor/settings", label: "Settings", icon: "settings" },
 ];
 
 /** Header links for a vendor browsing public pages (desktop). */
-export const VENDOR_HEADER_LINKS = VENDOR_NAV.filter((i) => i.tab || i.icon === "profile");
+export const VENDOR_HEADER_LINKS = VENDOR_NAV.filter((i) => i.tab || i.icon === "profile" || i.icon === "calendar");
 
 export interface MenuLink {
   href: string;
@@ -61,18 +65,28 @@ export const VENDOR_MENU: MenuLink[] = [
   { href: VENDOR_HOME, label: "Workspace home" },
   { href: "/vendor/profile", label: "Business profile" },
   { href: "/vendor/reviews", label: "Reviews" },
+  { href: "/vendor/insights", label: "Insights" },
   { href: "/vendor/settings", label: "Account settings" },
   { href: "/help", label: "Help" },
 ];
 
-/** Customer links. /my/* (P2) will replace the old dashboard links. */
-export const CUSTOMER_LINKS: MenuLink[] = [
+/**
+ * Customer header links (PRODUCT_PLAN 2.7), desktop. On phones they live in
+ * the bottom tab bar (app/_nav/customer-tab-bar.tsx) and the avatar menu.
+ * `badge` names the live count shown next to the link.
+ */
+export const CUSTOMER_LINKS: (MenuLink & { exact?: boolean; also?: string[]; badge?: "enquiries" | "shortlist" })[] = [
   { href: "/search", label: "Find vendors" },
-  { href: "/my/enquiries", label: "My enquiries" },
+  { href: CUSTOMER_HOME, label: "My events", exact: true },
+  { href: "/my/enquiries", label: "Enquiries", badge: "enquiries" },
+  { href: "/my/shortlist", label: "Shortlist", also: ["/my/compare"], badge: "shortlist" },
 ];
 
 export const CUSTOMER_MENU: MenuLink[] = [
-  { href: CUSTOMER_DASHBOARD, label: "Enquiries & saved vendors" },
+  { href: CUSTOMER_HOME, label: "My events" },
+  { href: "/my/enquiries", label: "Enquiries" },
+  { href: "/my/shortlist", label: "Shortlist" },
+  { href: "/my/reviews", label: "My reviews" },
   { href: "/settings", label: "Settings" },
   { href: "/help", label: "Help" },
 ];

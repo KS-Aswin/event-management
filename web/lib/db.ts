@@ -1,6 +1,7 @@
 import { Pool, type PoolClient } from "pg";
 import { assertTransition, type EnquiryStatus } from "./enquiry-status";
 import { notifyStatusChange } from "./enquiry-notify";
+import { recordBooking, releaseBooking } from "./availability-booking";
 import {
   PRICE_UNITS,
   PRICE_UNIT_LABELS,
@@ -478,6 +479,10 @@ export interface ReviewRecord {
   created_at: string;
   /** True when the reviewer had sent this vendor an enquiry (migration 003). */
   verified?: boolean;
+  /** Public vendor reply (P2-11, migrations 004/012). */
+  vendor_reply?: string | null;
+  vendor_reply_at?: string | null;
+  vendor_reply_edited_at?: string | null;
 }
 
 export async function findReviewsByVendor(
@@ -2831,33 +2836,10 @@ export async function updateVendorLead(
     await notifyStatusChange(client, leadId, p.status!, p.actor ?? "vendor");
     if (!old.event_date) return true;
     const slot = old.slot ?? "full";
-    if (p.status === "booked") {
-      await client.query(
-        `INSERT INTO vendor_availability (vendor_id, date, slot, status, quote_request_id, source, capacity_total, capacity_used)
-         SELECT $1, $2::date, $3, CASE WHEN v.max_events_per_day <= 1 THEN 'booked' ELSE 'limited' END,
-                $4, 'booking', v.max_events_per_day, 1
-         FROM vendors v WHERE v.id = $1
-         ON CONFLICT (vendor_id, date, slot) DO UPDATE SET
-           capacity_used = LEAST(vendor_availability.capacity_used + 1, vendor_availability.capacity_total),
-           status = CASE WHEN vendor_availability.capacity_used + 1 >= vendor_availability.capacity_total
-                         THEN 'booked' ELSE 'limited' END,
-           quote_request_id = COALESCE(vendor_availability.quote_request_id, EXCLUDED.quote_request_id),
-           updated_at = now()`,
-        [vendorId, old.event_date, slot, leadId]
-      );
-    } else if (old.status === "booked") {
-      // Un-booking frees the slot again (booking-sourced rows only; manual blocks stay).
-      await client.query(
-        `UPDATE vendor_availability SET capacity_used = GREATEST(capacity_used - 1, 0), status = 'limited', updated_at = now()
-         WHERE vendor_id = $1 AND date = $2::date AND slot = $3 AND source = 'booking'`,
-        [vendorId, old.event_date, slot]
-      );
-      await client.query(
-        `DELETE FROM vendor_availability
-         WHERE vendor_id = $1 AND date = $2::date AND slot = $3 AND source = 'booking' AND capacity_used = 0`,
-        [vendorId, old.event_date, slot]
-      );
-    }
+    // Calendar hook (P2-6, lib/availability-booking.ts): booked adds one to
+    // capacity_used, leaving "booked" frees it again.
+    if (p.status === "booked") await recordBooking(client, vendorId, old.event_date, slot, leadId);
+    else if (old.status === "booked") await releaseBooking(client, vendorId, old.event_date, slot, leadId);
     return true;
   });
   return ok ? findVendorLead(vendorId, leadId) : null;

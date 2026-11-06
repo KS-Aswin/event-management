@@ -291,13 +291,13 @@ export const allSeedVendors = [...vendors, ...adminFixtureVendors];
 
 export const reviewsByVendor = {
   "Backwater Grand Palace": [{ name: "Anjali R.", rating: 5, body: "Beautiful venue, staff coordinated everything smoothly on the day." }, { name: "Vishnu K.", rating: 5, body: "Spacious hall, parking was never an issue even with 800 guests." }],
-  "Studio Frames by Arun": [{ name: "Meera S.", rating: 5, body: "Arun captured moments we didn't even know were happening. Loved the drone shots." }, { name: "Rahul P.", rating: 4, body: "Great photos, delivery took a little longer than promised." }],
-  "Malabar Spice Caterers": [{ name: "Devika N.", rating: 5, body: "The sadya was authentic and the live counters were a huge hit with guests." }],
+  "Studio Frames by Arun": [{ name: "Meera S.", rating: 5, body: "Arun captured moments we didn't even know were happening. Loved the drone shots." }, { name: "Rahul P.", rating: 4, body: "Great photos, delivery took a little longer than promised.", reply: "Thank you Rahul! Sorry about the wait: the album printer was backed up that month. We now share a delivery date in writing with every booking." }],
+  "Malabar Spice Caterers": [{ name: "Devika N.", rating: 5, body: "The sadya was authentic and the live counters were a huge hit with guests.", reply: "Thank you Devika, our team loved serving your family. Do come back for the next celebration!" }],
   "Petal & Palm Decor": [{ name: "Sona T.", rating: 4, body: "Loved the floral mandap design, exactly what we asked for." }],
   "DJ Rhythm Kerala": [{ name: "Arjun M.", rating: 5, body: "Great song selection, kept the dance floor full all night." }],
   "Glow Bridal Studio": [{ name: "Nithya V.", rating: 5, body: "The trial session helped a lot, bridal look was perfect." }],
   "Henna Dreams": [{ name: "Fathima A.", rating: 5, body: "Intricate designs, finished quickly even with 20 guests waiting." }],
-  "Grand Vista Convention Centre": [{ name: "Kiran J.", rating: 4, body: "Nice outdoor lawn option, would have liked more shaded seating." }],
+  "Grand Vista Convention Centre": [{ name: "Kiran J.", rating: 4, body: "Nice outdoor lawn option, would have liked more shaded seating.", reply: "Thanks for the feedback, Kiran. We have added a second shamiana on the lawn for day events." }],
   "Momentz Cinematics": [{ name: "Anu B.", rating: 5, body: "The same-day edit at the reception made everyone emotional." }],
   "Kerala Celebrations Co.": [{ name: "Liya & Tom", rating: 5, body: "They handled our Munnar wedding end to end. We just turned up." }],
   "Guruvayur Chenda Sangham": [{ name: "Sreeraj M.", rating: 5, body: "The melam for the groom's arrival gave everyone goosebumps." }],

@@ -10,6 +10,7 @@ import { OfferCard } from "@/app/_components/enquiry-thread/offer-card";
 import { MessageList, StatusTimeline } from "@/app/_components/enquiry-thread/message-list";
 import Composer from "@/app/_components/enquiry-thread/composer";
 import OfferBuilder from "./offer-builder";
+import ReviewRequestLink from "../../_components/review-request-link";
 import LeadStatusControl from "../lead-status-control";
 import LeadFollowupForm from "../lead-followup-form";
 import { LeadContact, LeadMessage } from "../lead-contact";
@@ -277,11 +278,26 @@ export default async function VendorLeadPage({ params }: { params: Promise<{ id:
           </section>
           {status === "booked" && l.event_date && (
             <p className="alert-success">
-              Booked. {formatDate(l.event_date)} is marked as booked on your calendar.
+              Booked. {formatDate(l.event_date)} is marked as booked on your{" "}
+              <Link href={`/vendor/calendar?month=${l.event_date.slice(0, 7)}`} className="underline underline-offset-2">
+                calendar
+              </Link>
+              .
             </p>
           )}
           {status !== "booked" && l.event_date && (
             <p className="hint -mt-1">Marking this lead Booked also marks {formatDate(l.event_date)} as booked on your calendar.</p>
+          )}
+          {(status === "booked" || status === "accepted") && (
+            <section className="card" aria-labelledby="review-req-h">
+              <h2 id="review-req-h" className="text-title font-semibold">
+                Request a review
+              </h2>
+              <p className="text-body text-ink-soft mt-1 mb-3">
+                After the event, send {firstName} your review link. Reviews from booked customers show a &ldquo;Verified booking&rdquo; tag.
+              </p>
+              <ReviewRequestLink vendorId={vendor.id} vendorName={vendor.name} customerName={l.name} customerPhone={l.phone} />
+            </section>
           )}
           <section className="card" aria-labelledby="timeline-h">
             <h2 id="timeline-h" className="text-title font-semibold mb-3">

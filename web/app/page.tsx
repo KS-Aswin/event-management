@@ -5,6 +5,7 @@ import type { Taxonomy } from "@/lib/db";
 import { getTaxonomy } from "@/lib/taxonomy";
 import { VendorTile } from "@/lib/vendorVisuals";
 import HomeSearch from "./home-search";
+import { getSession } from "@/lib/session";
 
 export const metadata: Metadata = {
   title: { absolute: "Vela: Wedding & event vendors in Kerala" },
@@ -40,7 +41,7 @@ function countBy(keys: string[]) {
 }
 
 export default async function Home() {
-  const [vendors, taxonomy] = await Promise.all([loadVendors(), loadTaxonomy()]);
+  const [vendors, taxonomy, session] = await Promise.all([loadVendors(), loadTaxonomy(), getSession()]);
   const taxonomyNames = taxonomy?.categories.filter((c) => c.active).map((c) => c.name) ?? [];
   const districtNames = taxonomy?.districts.map((d) => d.name) ?? [];
   const eventTypes = taxonomy?.eventTypes.filter((e) => e.slug !== "other") ?? [];
@@ -197,9 +198,16 @@ export default async function Home() {
               Searching, comparing and requesting quotes costs you nothing.
             </p>
           </div>
-          <Link href="/for-vendors" className="btn btn-secondary w-full sm:w-auto whitespace-nowrap">
-            Are you a vendor? List your business
-          </Link>
+          {/* Signed-in customers never see vendor calls to action (P2-1). */}
+          {session?.role === "customer" ? (
+            <Link href="/my" className="btn btn-secondary w-full sm:w-auto whitespace-nowrap">
+              Go to my events
+            </Link>
+          ) : (
+            <Link href="/for-vendors" className="btn btn-secondary w-full sm:w-auto whitespace-nowrap">
+              Are you a vendor? List your business
+            </Link>
+          )}
         </div>
       </section>
     </main>

@@ -3,6 +3,7 @@ import "./globals.css";
 import { getSession } from "@/lib/session";
 import Header from "./header";
 import Footer from "./footer";
+import CustomerTabBar from "./_nav/customer-tab-bar";
 
 const SITE_NAME = "Vela";
 const SITE_DESCRIPTION =
@@ -92,6 +93,7 @@ export default async function RootLayout({
           {children}
         </div>
         <Footer role={session?.role ?? null} />
+        {session?.role === "customer" && <CustomerTabBar />}
       </body>
     </html>
   );

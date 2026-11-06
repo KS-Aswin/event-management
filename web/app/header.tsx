@@ -17,6 +17,8 @@ import {
 } from "./_nav/config";
 import { ADMIN_HOME, VENDOR_HOME, VENDOR_ONBOARDING } from "./_nav/routes";
 import NotificationBell from "./_nav/notification-bell";
+import ShortlistMerge from "./_nav/shortlist-merge";
+import { useCustomerCounts } from "./_nav/customer-counts";
 
 // Where the Back button goes when there is no in-app history to return to
 // (page opened from a shared link, bookmark or new tab).
@@ -26,7 +28,7 @@ function parentRoute(pathname: string): string {
   if (pathname.startsWith("/vendors/")) return "/search";
   if (pathname.startsWith("/vendor/")) return VENDOR_HOME;
   if (pathname.startsWith("/admin/")) return ADMIN_HOME;
-  if (pathname.startsWith("/dashboard/")) return "/dashboard";
+  if (pathname.startsWith("/my/")) return "/my";
   return "/";
 }
 
@@ -168,16 +170,9 @@ export default function Header({
           <AccountMenu name={session.name} links={ADMIN_MENU} />
         </div>
       ) : session ? (
-        // Customers: no "For vendors" here (footer only).
-        <div className="flex items-center gap-1 min-w-0">
-          <nav aria-label="Main" className="hidden md:flex items-center gap-0.5 text-sm">
-            {CUSTOMER_LINKS.map((l) => (
-              <HeaderLink key={l.label} href={l.href} label={l.label} active={pathname === l.href} />
-            ))}
-          </nav>
-          <NotificationBell />
-          <AccountMenu name={session.name} links={CUSTOMER_MENU} />
-        </div>
+        // Customers: no "For vendors" here (footer only). Phones get the
+        // bottom tab bar (root layout) instead of these links.
+        <CustomerNav name={session.name} pathname={pathname} />
       ) : (
         <nav aria-label="Main" className="flex items-center gap-0.5 sm:gap-1 text-sm whitespace-nowrap min-w-0">
           <Link
@@ -205,6 +200,46 @@ export default function Header({
       )}
       </div>
     </header>
+  );
+}
+
+function CustomerNav({ name, pathname }: { name: string; pathname: string }) {
+  const counts = useCustomerCounts(true);
+  return (
+    <div className="flex items-center gap-1 min-w-0">
+      <ShortlistMerge />
+      <nav aria-label="Main" className="hidden lg:flex items-center gap-0.5 text-sm">
+        {CUSTOMER_LINKS.map((l) => {
+          const active = isActive(pathname, l);
+          const n = l.badge ? counts[l.badge] : 0;
+          return (
+            <Link
+              key={l.href}
+              href={l.href}
+              aria-current={active ? "page" : undefined}
+              className={`inline-flex items-center gap-1.5 min-h-11 px-3 rounded-md whitespace-nowrap transition-colors ${
+                active ? "text-accent font-medium bg-accent-tint" : "text-foreground hover:bg-surface-muted hover:text-accent"
+              }`}
+            >
+              {l.label}
+              {n > 0 &&
+                (l.badge === "enquiries" ? (
+                  <span className="size-2 rounded-full bg-accent" data-testid="enquiries-dot">
+                    <span className="sr-only"> ({n} new)</span>
+                  </span>
+                ) : (
+                  <span className="min-w-5 h-5 px-1.5 inline-flex items-center justify-center rounded-full bg-surface-muted text-xs text-ink-soft tabular-nums" data-testid="shortlist-count">
+                    {n > 99 ? "99+" : n}
+                    <span className="sr-only"> saved</span>
+                  </span>
+                ))}
+            </Link>
+          );
+        })}
+      </nav>
+      <NotificationBell />
+      <AccountMenu name={name} links={CUSTOMER_MENU} />
+    </div>
   );
 }
 

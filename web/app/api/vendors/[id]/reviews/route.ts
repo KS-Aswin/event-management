@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
-import { createVendorReview, findVendorById } from "@/lib/db";
+import { findVendorById } from "@/lib/db";
+import { createReviewV2 } from "@/lib/vendor-reviews";
 import { checkRateLimit } from "@/lib/rate-limit";
 import { getLiveSession } from "../../../_lib/auth";
 import { LIMITS, parseId } from "../../../_lib/validation";
@@ -41,7 +42,7 @@ export async function POST(
     return NextResponse.json({ error: "Invalid request body." }, { status: 400 });
   }
 
-  const { rating, body: reviewBody } = (body ?? {}) as Record<string, unknown>;
+  const { rating, body: reviewBody, enquiryId } = (body ?? {}) as Record<string, unknown>;
 
   const ratingNum = typeof rating === "number" ? rating : Number(String(rating));
   if (!Number.isInteger(ratingNum) || ratingNum < 1 || ratingNum > 5) {
@@ -60,18 +61,31 @@ export async function POST(
     );
   }
 
+  // Optional: the enquiry this review is about (else the best match is used).
+  let enquiryIdNum: number | null = null;
+  if (enquiryId !== undefined && enquiryId !== null && enquiryId !== "") {
+    const n = typeof enquiryId === "number" ? enquiryId : Number(String(enquiryId));
+    if (!Number.isInteger(n) || n <= 0 || n > 2_147_483_647) {
+      return NextResponse.json({ error: "Invalid enquiry id.", code: "VALIDATION", field: "enquiryId" }, { status: 400 });
+    }
+    enquiryIdNum = n;
+  }
+
   // Only publicly listed vendors can be reviewed.
   const vendor = await findVendorById(vendorId, { publicOnly: true });
   if (!vendor) {
     return NextResponse.json({ error: "Vendor not found." }, { status: 404 });
   }
 
-  const result = await createVendorReview({
+  // Reviews v2 (P2-11): needs an enquiry to this vendor; verified only when
+  // that enquiry is accepted/booked and the event date has passed.
+  const result = await createReviewV2({
     vendorId,
     customerId: session.userId,
     reviewerName: session.name,
     rating: ratingNum,
     body: reviewBody.trim(),
+    enquiryId: enquiryIdNum,
   });
 
   if (!result.ok) {
@@ -82,6 +96,18 @@ export async function POST(
       return NextResponse.json(
         { error: "You can't review your own listing." },
         { status: 403 }
+      );
+    }
+    if (result.reason === "no_enquiry") {
+      return NextResponse.json(
+        { error: "You can review vendors you have sent an enquiry to through Vela.", code: "NO_ENQUIRY" },
+        { status: 403 }
+      );
+    }
+    if (result.reason === "enquiry_not_found") {
+      return NextResponse.json(
+        { error: "That enquiry wasn't sent to this vendor from your account.", code: "VALIDATION", field: "enquiryId" },
+        { status: 400 }
       );
     }
     // already_reviewed

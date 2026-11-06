@@ -1,8 +1,18 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { usePathname, useRouter } from "next/navigation";
+import { useEffect, useState, useSyncExternalStore } from "react";
+import { useRouter } from "next/navigation";
+import {
+  SHORTLIST_CHANGED,
+  getGuestShortlist,
+  getServerGuestShortlist,
+  subscribeGuestShortlist,
+  toggleGuestShortlist,
+} from "@/lib/guest-shortlist";
 
+// Shortlist heart (PRODUCT_PLAN P2-9). Signed-in users save to their account
+// (/api/vendors/[id]/favorite); guests save on this device (localStorage),
+// merged into the account after login by app/_nav/shortlist-merge.tsx.
 export default function FavoriteButton({
   vendorId,
   initialFavorited,
@@ -15,51 +25,48 @@ export default function FavoriteButton({
   size?: "sm" | "md";
 }) {
   const router = useRouter();
-  const pathname = usePathname();
-  const [favorited, setFavorited] = useState(initialFavorited);
+  const [saved, setSaved] = useState(initialFavorited);
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [message, setMessage] = useState<{ text: string; error: boolean } | null>(null);
+  const guestIds = useSyncExternalStore(subscribeGuestShortlist, getGuestShortlist, getServerGuestShortlist);
+  const favorited = loggedIn ? saved : guestIds.includes(vendorId);
 
   useEffect(() => {
-    if (!error) return;
-    const t = setTimeout(() => setError(null), 4000);
+    if (!message) return;
+    const t = setTimeout(() => setMessage(null), 4000);
     return () => clearTimeout(t);
-  }, [error]);
-
-  function goToLogin() {
-    router.push(`/login?next=${encodeURIComponent(pathname || "/")}`);
-  }
+  }, [message]);
 
   async function toggle(e: React.MouseEvent) {
     e.preventDefault(); // don't follow a parent <Link> (used on vendor cards)
     e.stopPropagation();
 
     if (!loggedIn) {
-      goToLogin();
+      const now = toggleGuestShortlist(vendorId);
+      if (now === null) setMessage({ text: "Couldn't save on this device", error: true });
+      else if (now) setMessage({ text: "Saved on this device. Sign in to keep it", error: false });
+      else setMessage(null);
       return;
     }
 
-    const next = !favorited;
-    setFavorited(next); // optimistic
-    setError(null);
+    const next = !saved;
+    setSaved(next); // optimistic
+    setMessage(null);
     setLoading(true);
     try {
       const res = await fetch(`/api/vendors/${vendorId}/favorite`, {
         method: next ? "POST" : "DELETE",
       });
       if (!res.ok) {
-        setFavorited(!next); // roll back
-        if (res.status === 401) {
-          goToLogin();
-        } else {
-          setError("Couldn't save, try again");
-        }
+        setSaved(!next); // roll back
+        setMessage({ text: res.status === 401 ? "Please sign in again" : "Couldn't save, try again", error: true });
         return;
       }
+      window.dispatchEvent(new Event(SHORTLIST_CHANGED));
       router.refresh();
     } catch {
-      setFavorited(!next); // roll back
-      setError("Couldn't save, try again");
+      setSaved(!next); // roll back
+      setMessage({ text: "Couldn't save, try again", error: true });
     } finally {
       setLoading(false);
     }
@@ -73,7 +80,8 @@ export default function FavoriteButton({
         type="button"
         onClick={toggle}
         disabled={loading}
-        aria-label={favorited ? "Remove from favorites" : "Save to favorites"}
+        aria-pressed={favorited}
+        aria-label={favorited ? "Remove from shortlist" : "Save to shortlist"}
         className="group shrink-0 -m-3 w-11 h-11 inline-flex items-center justify-center rounded-full hover:bg-surface-muted active:bg-line disabled:opacity-60 transition-colors"
       >
         <svg
@@ -95,12 +103,14 @@ export default function FavoriteButton({
         role="status"
         aria-live="polite"
         className={
-          error
-            ? "absolute top-full right-0 mt-1 z-10 whitespace-nowrap text-xs text-danger bg-white border border-danger-tint rounded-md px-2 py-1 shadow-pop"
+          message
+            ? `absolute top-full right-0 mt-1 z-10 whitespace-nowrap text-xs bg-white border rounded-md px-2 py-1 shadow-pop ${
+                message.error ? "text-danger border-danger-tint" : "text-foreground border-line"
+              }`
             : "sr-only"
         }
       >
-        {error ?? ""}
+        {message?.text ?? ""}
       </span>
     </span>
   );

@@ -83,8 +83,9 @@ test.describe("vendor and customer journey", () => {
 
   test("customer signs up, favourites and requests a quote", async ({ page, diag }, testInfo) => {
     await signUp(page, "customer", customer);
-    await page.goto("/dashboard");
-    await checkScreen(page, diag, testInfo, "dashboard-customer-empty");
+    // Customers land on their home (P2-1).
+    await expect(page).toHaveURL(/\/my$/);
+    await checkScreen(page, diag, testInfo, "my-home-empty");
 
     // The new listing is searchable.
     await page.goto(`/search?q=${encodeURIComponent(business())}`);
@@ -92,8 +93,8 @@ test.describe("vendor and customer journey", () => {
 
     await page.goto(await listingPath(page));
     await expect(page.locator("h1")).toHaveText(business());
-    await page.getByRole("button", { name: "Save to favorites" }).first().click();
-    await expect(page.getByRole("button", { name: "Remove from favorites" }).first()).toBeVisible();
+    await page.getByRole("button", { name: "Save to shortlist" }).first().click();
+    await expect(page.getByRole("button", { name: "Remove from shortlist" }).first()).toBeVisible();
 
     await page.getByRole("button", { name: "Request quote" }).first().click();
     const dialog = page.getByRole("dialog");
@@ -109,10 +110,12 @@ test.describe("vendor and customer journey", () => {
     await checkScreen(page, diag, testInfo, "quote-sent");
     await dialog.getByRole("button", { name: "Done" }).click();
 
-    await page.goto("/dashboard");
+    await page.goto("/my/enquiries");
     await expect(page.getByText(business()).first()).toBeVisible();
-    await expect(page.getByRole("heading", { name: "Your favorites" })).toBeVisible();
-    await checkScreen(page, diag, testInfo, "dashboard-customer");
+    await page.goto("/my/shortlist");
+    await expect(page.getByRole("heading", { name: "Shortlist", level: 1 })).toBeVisible();
+    await expect(page.getByText(business()).first()).toBeVisible();
+    await checkScreen(page, diag, testInfo, "my-shortlist");
   });
 
   test("customer updates settings and signs out", async ({ page, diag }, testInfo) => {

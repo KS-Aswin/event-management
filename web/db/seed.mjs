@@ -288,9 +288,12 @@ try {
     ]);
 
     for (const r of reviewsByVendor[v.name] ?? []) {
-      await client.query("INSERT INTO vendor_reviews (vendor_id, reviewer_name, rating, body) VALUES ($1,$2,$3,$4)", [
-        vendorId, r.name, r.rating, r.body,
-      ]);
+      // Some sample reviews carry the vendor's public reply (P2-11).
+      await client.query(
+        `INSERT INTO vendor_reviews (vendor_id, reviewer_name, rating, body, vendor_reply, vendor_reply_at)
+         VALUES ($1,$2,$3,$4,$5, CASE WHEN $5::text IS NULL THEN NULL ELSE now() - interval '2 days' END)`,
+        [vendorId, r.name, r.rating, r.body, r.reply ?? null]
+      );
     }
   }
 
@@ -424,6 +427,8 @@ try {
   //             slot booked (still shown: the evening is free); Malabar Spice
   //             at 1 of 2 events (shown as limited).
   //   +21 days  Glow Bridal Studio blocked (family function).
+  //   +30 days  Kerala Celebrations Co. runs 3 teams, 1 already booked (limited).
+  //   +45..+48  Guruvayur Chenda Sangham blocked for the temple festival (a bulk range).
   const availability = [
     ["Studio Frames by Arun", 14, "full", "blocked", 1, 0, "Out of station"],
     ["Momentz Cinematics", 14, "morning", "booked", 1, 1, null],
@@ -431,6 +436,8 @@ try {
     ["Backwater Grand Palace", 14, "morning", "booked", 1, 1, null],
     ["Malabar Spice Caterers", 14, "full", "limited", 2, 1, null],
     ["Glow Bridal Studio", 21, "full", "blocked", 1, 0, "Family function"],
+    ["Kerala Celebrations Co.", 30, "full", "limited", 3, 1, null],
+    ...[45, 46, 47, 48].map((d) => ["Guruvayur Chenda Sangham", d, "full", "blocked", 1, 0, "Temple festival"]),
   ];
   for (const [name, days, slot, status, total, used, note] of availability) {
     await client.query(

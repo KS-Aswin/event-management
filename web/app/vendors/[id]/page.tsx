@@ -19,6 +19,7 @@ import FavoriteButton from "@/lib/favorite-button";
 import QuoteButton from "./quote-button";
 import ReviewForm from "./review-form";
 import ReportReview from "./report-review";
+import { customerHasEnquiry } from "@/lib/vendor-reviews";
 import Gallery from "./gallery";
 import OfferingsSection from "./offerings";
 import VendorBeacon from "./vendor-beacon";
@@ -124,6 +125,9 @@ export default async function VendorProfilePage({
   const publicListing = isPublic(vendor);
   const myReview = session ? reviews.find((r) => r.customer_id === session.userId) : undefined;
   const favorited = session && !isOwnListing ? await isFavorited(session.userId, vendorId) : false;
+  // Reviews v2 (P2-11): only customers who enquired through Vela can review.
+  const canReview =
+    !!session && session.role === "customer" && !isOwnListing && !myReview && (await customerHasEnquiry(vendorId, session.userId));
   const quoteServices = offerings.quoteable;
   const hasMedia = media.photos.length > 0 || media.videos.length > 0;
   const languages = (vendor.languages ?? []).filter(Boolean);
@@ -454,6 +458,7 @@ export default async function VendorProfilePage({
                   return (
                     <li
                       key={r.id}
+                      id={`review-${r.id}`}
                       className={`flex gap-3 py-4 border-b border-line last:border-b-0 ${
                         mine ? "bg-accent-tint/50 -mx-3 px-3 rounded-control" : ""
                       }`}
@@ -471,6 +476,11 @@ export default async function VendorProfilePage({
                             {mine ? (
                               <span className="ml-2 text-xs font-medium text-accent">Your review</span>
                             ) : null}
+                            {r.verified ? (
+                              <span className="ml-2 text-xs font-medium text-accent-hover bg-accent-tint rounded-full px-2 py-0.5 align-middle">
+                                Verified booking
+                              </span>
+                            ) : null}
                           </span>
                           <span
                             role="img"
@@ -487,6 +497,17 @@ export default async function VendorProfilePage({
                           {formatDate(r.created_at)}
                         </time>
                         <p className="text-sm text-foreground/85 mt-1.5 leading-relaxed max-w-[68ch]">{r.body}</p>
+                        {r.vendor_reply ? (
+                          <div className="mt-2.5 border-l-2 border-accent/40 pl-3 max-w-[68ch]">
+                            <p className="text-caption font-semibold text-foreground">
+                              {`Reply from ${vendor.name}`}
+                              {r.vendor_reply_at ? (
+                                <span className="font-normal text-ink-soft"> · {formatDate(r.vendor_reply_at)}</span>
+                              ) : null}
+                            </p>
+                            <p className="text-sm text-foreground/85 mt-0.5 leading-relaxed whitespace-pre-line">{r.vendor_reply}</p>
+                          </div>
+                        ) : null}
                         {mine ? null : <ReportReview reviewId={r.id} loginHref={loginHref} />}
                       </div>
                     </li>
@@ -499,10 +520,18 @@ export default async function VendorProfilePage({
               <p role="status" className="alert-success mt-4">
                 Thanks for your review — it&apos;s highlighted above.
               </p>
+            ) : canReview ? (
+              <div id="write-review">
+                <ReviewForm vendorId={vendor.id} />
+              </div>
             ) : session ? (
-              <ReviewForm vendorId={vendor.id} />
+              <p id="write-review" className="text-sm text-ink-soft mt-5 rounded-card border border-dashed border-line-strong px-4 py-3.5">
+                {session.role === "customer"
+                  ? "You can review this vendor after you send them an enquiry through Vela."
+                  : "Reviews come from customers who enquired through Vela."}
+              </p>
             ) : (
-              <p className="text-sm text-ink-soft mt-5 rounded-card border border-dashed border-line-strong px-4 py-3.5">
+              <p id="write-review" className="text-sm text-ink-soft mt-5 rounded-card border border-dashed border-line-strong px-4 py-3.5">
                 <Link href={loginHref} className="font-medium text-accent underline-offset-2 hover:underline">
                   Sign in
                 </Link>{" "}

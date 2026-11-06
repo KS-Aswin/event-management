@@ -4,13 +4,8 @@
 
 export type Role = "customer" | "vendor" | "admin";
 
-/**
- * Where a signed-in customer lands. "/" until the customer area (/my, P2-1)
- * ships; change this one constant to "/my" then.
- */
-export const CUSTOMER_HOME = "/";
-/** Customer quotes and saved vendors live here until /my/* replaces it. */
-export const CUSTOMER_DASHBOARD = "/dashboard";
+/** Where a signed-in customer lands: the customer home (P2-1). */
+export const CUSTOMER_HOME = "/my";
 export const VENDOR_HOME = "/vendor";
 export const VENDOR_ONBOARDING = "/vendor/onboarding";
 export const ADMIN_HOME = "/admin";
@@ -83,8 +78,8 @@ export function roleRedirect(role: Role, path: string): string | null {
     if (legacy) return legacy;
     if (role === "vendor") return VENDOR_HOME;
     if (role === "admin") return ADMIN_HOME;
-    // Customers keep the old dashboard until /my ships (CUSTOMER_HOME).
-    return CUSTOMER_HOME === "/" ? null : CUSTOMER_HOME;
+    // The old customer dashboard is replaced by /my (2.6).
+    return CUSTOMER_HOME;
   }
   return null;
 }

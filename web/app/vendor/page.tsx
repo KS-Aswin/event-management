@@ -463,6 +463,8 @@ function QuickActions({ previewHref }: { previewHref: string }) {
   const actions = [
     { href: "/vendor/offerings/new", label: "Add an offering" },
     { href: "/vendor/media", label: "Upload photos or videos" },
+    { href: "/vendor/calendar", label: "Block a date" },
+    { href: "/vendor/insights", label: "See your insights" },
     { href: "/vendor/profile", label: "Edit business profile" },
     { href: "/vendor/areas", label: "Districts you serve" },
     { href: previewHref, label: "Preview public profile" },
