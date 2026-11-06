@@ -114,6 +114,20 @@ body {
   padding-right: env(safe-area-inset-right);
 }
 
+/* Long unbroken words (a one-word 80-character name, a pasted link) wrap
+   instead of making the page scroll sideways (QA-109). Body text breaks
+   only when a word would overflow; headings may break anywhere, which also
+   lets them shrink inside flex rows. For a name in a flex row that is not a
+   heading, add `wrap-anywhere` (or `min-w-0`) to that item. */
+body {
+  overflow-wrap: break-word;
+}
+h1,
+h2,
+h3,
+h4 {
+  overflow-wrap: anywhere;
+}
 h1,
 h2,
 h3 {

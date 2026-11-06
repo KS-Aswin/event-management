@@ -334,7 +334,7 @@ function NewLeads({ stats }: { stats: VendorHomeStats }) {
               <Link href={`/vendor/leads/${l.id}`} className="flex items-start justify-between gap-3 py-3 min-h-11 group">
                 <span className="min-w-0">
                   <span className="flex flex-wrap items-center gap-2">
-                    <span className="font-medium text-body group-hover:text-accent">{l.name}</span>
+                    <span className="min-w-0 wrap-anywhere font-medium text-body group-hover:text-accent">{l.name}</span>
                     <StatusPill status={l.status} audience="vendor" />
                   </span>
                   <span className="block text-caption text-ink-soft mt-0.5">
