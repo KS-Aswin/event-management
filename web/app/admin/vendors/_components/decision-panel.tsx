@@ -226,8 +226,8 @@ export default function DecisionPanel({
 
       <div className="mt-4 pt-4 border-t border-line flex flex-wrap items-center justify-between gap-3">
         <div className="min-w-0">
-          <p className="font-medium">Verified business badge</p>
-          <p className="text-caption text-ink-soft">
+          <p id="verified-badge-h" className="font-medium">Verified business badge</p>
+          <p id="verified-badge-d" className="text-caption text-ink-soft">
             {verified
               ? "Shown on the public profile."
               : status !== "approved"
@@ -239,9 +239,9 @@ export default function DecisionPanel({
         </div>
         <button
           type="button"
-          role="switch"
-          aria-checked={verified}
-          aria-label="Verified business badge"
+          // QA-098: a plain action button named by its visible text (WCAG 2.5.3),
+          // so "click Mark verified" works; the heading and status line describe it.
+          aria-describedby="verified-badge-h verified-badge-d"
           onClick={toggleVerified}
           disabled={verifyBusy || (!verified && (status !== "approved" || !hasVerifiedDoc))}
           className={`btn btn-sm ${verified ? "btn-secondary" : "btn-primary"} min-h-11`}
