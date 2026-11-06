@@ -1,3 +1,63 @@
+# Run 3: complete the product (6 Nov 2026 →)
+
+## Stages
+- **Finished (all 14 planned):** admin, p0rest, customer, prodready, deploy, qa1, fix1, qa2, fix2, qa3, fix3, qa4, fix4, qa5.
+- **Not reached:** a fix5 round for the 13 rows qa5 opened. The pipeline's stage list ended at qa5.
+- Product plan: P0 (16/16), P1 (14/14), P2 (14/14) and P3-1 (production storage) are ticked in `docs/PRODUCT_PLAN.md`. P3-2 to P3-18 are "after income" and were not started.
+
+## What each role can do now
+- **Vendor:** sign up and finish the 6-step onboarding, then submit for admin approval. Manage offerings, units and packages, including custom offerings. Manage media (photos, MP4s, video links, albums, cover and logo). Edit the profile and service areas, and upload verification documents. Work leads: reply, send itemised offers with versions and GST, mark a lead booked. Run an availability calendar. Reply to reviews. See insights and notifications.
+- **Customer:** search by offering, district, budget, date and event type. Browse the event-type and category pages. Shortlist vendors, compare 2–4 of them, and send one enquiry to up to 5. Track a guest enquiry by link, and it moves to the account after sign-up. In `/my`: message vendors, accept or withdraw offers, mark an enquiry booked, leave a verified review. Also notifications, settings and password change. WhatsApp click-to-chat works on the mobile bar.
+- **Admin:** the Today inbox. Vendor approval queue (approve, request changes, reject, suspend, verify, edit, claim). Review and media moderation. Taxonomy manager. Custom-offering queue. Users (suspend, force logout, one-time reset link). Documents, enquiry monitor with blocked contacts, analytics, and the audit log.
+
+## Deployment
+- **Live:** https://vela-drab-psi.vercel.app (Vercel, region icn1). The database is Supabase sfxtotgrrhamubczrdys and media is in the `vela-media` bucket.
+- On 6 Nov at 23:05 the orchestrator applied migrations 014, 016, 017 and 019 to production and deployed HEAD 8f9badf. qa5 confirmed live serves the fix4 code. The later commit 69b863d changed tests only.
+- **Owner to-dos** are in `C:\Aswin Projects\event-management-NEEDS-YOU.md`:
+  - replace the deploy-created admin login (item 5)
+  - set up an email provider (item 7)
+  - set up a real support inbox and set SUPPORT_EMAIL (items 8 and 13)
+  - clean up the QA test data before launch (item 6)
+  - optional: a custom domain and the SSL CA
+
+## QA rounds (tracker: `C:\Aswin Projects\event-management-qa-tracker.md`)
+| Round | New rows found | Fixed in the next round |
+|---|---|---|
+| prodready | 1 (1 medium) | yes (fix1) |
+| qa1 | 33 (1 critical, 3 high, 9 medium, 20 low) | 33 by fix1 (QA-007 is needs-human) |
+| qa2 | 19 (3 medium, 16 low) | all 24 then open, by fix2 |
+| qa3 | 27 (6 medium, 21 low) | 26 by fix3 (QA-057 is needs-human) |
+| qa4 | 16 (2 medium, 14 low) | all 16 by fix4 |
+| qa5 | 13 (1 medium, 12 low) | not reached |
+- **Totals:** 112 rows (including 3 extra rows logged in fix1). 97 are fixed and verified. 2 are needs-human (QA-007 email provider, QA-057 support mailbox).
+- **Still open: 13** (0 critical, 0 high, 1 medium, 12 low).
+- qa5 found no regressions.
+- Last full suites, at fix4: lint and tsc clean, unit 42/42, storage 28/28, admin 94 passed and 1 skipped, api 226 + 146, e2e 222 passed and 2 intentional skips.
+
+## Still pending
+- **Medium:** QA-106. On /admin/users, searching a plain 10-digit phone number crashes the page (local and live).
+- **Low (12):**
+  - QA-100: the event date has no max.
+  - QA-101: closing the lightbox loses focus.
+  - QA-102: every shortlist toggle has the same name.
+  - QA-103: unit-delete follow-up to QA-084.
+  - QA-104: offer lines default to the unit 'event'.
+  - QA-105: the resubmit flow after a rejection.
+  - QA-107: Remove badge has no confirm and no notification.
+  - QA-108: the message after reinstating a changes-requested listing.
+  - QA-109: long names don't wrap.
+  - QA-110: admin tap targets.
+  - QA-111: link underline on the customer enquiry heading.
+  - QA-112: star rating has no role.
+- Repro specs (marked test.fail) are in `web/e2e/qa5-*.spec.ts`.
+- Owner items in NEEDS-YOU (above).
+- P3 features (billing, email, OTP and the rest) are after income.
+
+## Exact next step to resume
+1. Run a **fix5** round with `fix.md` in the run3 run folder, on the 13 open qa5 rows (QA-100 to QA-112, QA-106 first). Turn the `qa5-*.spec.ts` repro specs into passing tests.
+2. Then run `npm run deploy` from `web/`. No migrations are pending unless fix5 adds some; if it does, run `npm run db:migrate:deploy` first.
+3. Then run a qa6 round. When it finds no open critical, high or medium rows, write QA_CLEAN.
+
 # Product build (31 Oct 2026 →)
 
 ## Stages
