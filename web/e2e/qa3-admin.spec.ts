@@ -84,7 +84,10 @@ test("QA-075: keyboard focus stays on the Move button after a move", async ({ pa
   await expect(page.getByRole("status").filter({ hasText: `Moved "${name}" down.` })).toBeVisible();
   await expect(page.getByRole("button", { name: `Move down: ${name}` })).toBeFocused();
   // Move it back with the keyboard too; focus stays on the same item.
-  await page.getByRole("button", { name: `Move up: ${name}` }).focus();
+  // The list reloads after a move; wait until its buttons are usable again.
+  const up = page.getByRole("button", { name: `Move up: ${name}` });
+  await expect(up).toBeEnabled();
+  await up.focus();
   await page.keyboard.press("Enter");
   await expect(page.getByRole("status").filter({ hasText: `Moved "${name}" up.` })).toBeVisible();
   // Back at the top, Move up is unavailable, so focus goes to Move down.

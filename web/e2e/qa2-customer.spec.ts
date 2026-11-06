@@ -6,6 +6,11 @@ import { test, expect, signIn, type Creds } from "./helpers";
 // fixed in round fix2 (now regular tests). Users are created in the LOCAL DB with
 // e2e-* emails (removed by the global cleanup).
 
+/** The India date `days` from today, matching the setup row's (now() AT TIME ZONE 'Asia/Kolkata')::date + days. */
+function istDayPlus(days: number) {
+  return new Date(Date.now() + 5.5 * 36e5 + days * 864e5).toISOString().slice(0, 10);
+}
+
 function client() {
   const url = process.env.DATABASE_URL ?? "";
   const host = (() => {
@@ -67,7 +72,7 @@ test.describe("qa2 customer", () => {
     const f = await setup(testInfo.workerIndex.toString());
     await signIn(page, f.customer);
     const res = await page.request.post(`/api/vendors/${f.listingId}/quotes`, {
-      data: { name: "Qa Two", phone: "+919847011111", eventDate: new Date(Date.now() + 100 * 864e5).toISOString().slice(0, 10), guestCount: 300, message: "again" },
+      data: { name: "Qa Two", phone: "+919847011111", eventDate: istDayPlus(100), guestCount: 300, message: "again" },
     });
     // Expected: refused (409) or at least a duplicate warning; actual: 201 with warnings [].
     const body = await res.json();
