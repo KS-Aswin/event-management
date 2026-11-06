@@ -10,10 +10,31 @@ export const TAXONOMY_TAG = "taxonomy";
  * every category list comes from the database (P0-8); /api/meta/taxonomy
  * serves the same data to client components.
  */
-export const getTaxonomy: () => Promise<Taxonomy> = unstable_cache(findTaxonomy, ["taxonomy-v1"], {
+const cachedTaxonomy: () => Promise<Taxonomy> = unstable_cache(findTaxonomy, ["taxonomy-v1"], {
   revalidate: 300,
   tags: [TAXONOMY_TAG],
 });
+
+// Next 16.4 stamps an expired tag with Date.now() but compares it with
+// performance.timeOrigin + performance.now(). In a long-running server the
+// monotonic clock drifts behind the wall clock (about 100 ms after an hour
+// on Windows), and until it catches up a read right after an admin edit
+// still gets the old taxonomy. So this process reads the database directly
+// for a short window after it invalidated the tag (other instances still
+// rely on the tag).
+const BYPASS_MS = 2000;
+const bypass = globalThis as typeof globalThis & { __velaTaxonomyChangedAt?: number };
+
+/** Called by invalidateTaxonomy() in lib/admin/taxonomy.ts after an admin edit. */
+export function markTaxonomyChanged(): void {
+  bypass.__velaTaxonomyChangedAt = Date.now();
+}
+
+export const getTaxonomy: () => Promise<Taxonomy> = () => {
+  const changedAt = bypass.__velaTaxonomyChangedAt;
+  if (changedAt !== undefined && Date.now() - changedAt < BYPASS_MS) return findTaxonomy();
+  return cachedTaxonomy();
+};
 
 /**
  * Categories have a stable internal `name` (stored on vendors.category and

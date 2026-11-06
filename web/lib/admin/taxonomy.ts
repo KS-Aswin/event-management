@@ -8,7 +8,7 @@
 
 import { revalidateTag } from "next/cache";
 import { pool, recomputeVendorPrice } from "@/lib/db";
-import { TAXONOMY_TAG } from "@/lib/taxonomy";
+import { TAXONOMY_TAG, markTaxonomyChanged } from "@/lib/taxonomy";
 import {
   ATTRIBUTE_TYPES,
   PRICE_UNITS,
@@ -23,6 +23,7 @@ import { HttpError, withTransaction, type TxClient } from "./tx";
 
 /** Expire the cached taxonomy immediately (next read is a cache miss). */
 export function invalidateTaxonomy(): void {
+  markTaxonomyChanged();
   try {
     revalidateTag(TAXONOMY_TAG, { expire: 0 });
   } catch (err) {
