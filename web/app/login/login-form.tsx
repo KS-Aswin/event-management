@@ -55,7 +55,9 @@ export default function LoginForm({
   }
 
   return (
-    <div className="flex-1 flex items-start sm:items-center justify-center bg-surface-muted px-4 sm:px-5 py-8 sm:py-14">
+    // The page's main landmark (QA-071): the root layout's #content wrapper
+    // is a plain div.
+    <main className="flex-1 flex items-start sm:items-center justify-center bg-surface-muted px-4 sm:px-5 py-8 sm:py-14">
       <div className="w-full max-w-[440px] bg-surface border border-line rounded-card shadow-card p-6 sm:p-10">
         <span
           aria-hidden="true"
@@ -134,6 +136,6 @@ export default function LoginForm({
           </Link>
         </p>
       </div>
-    </div>
+    </main>
   );
 }

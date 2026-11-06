@@ -111,7 +111,9 @@ export default function SignupForm({
   }
 
   return (
-    <div className="flex-1 flex items-start sm:items-center justify-center bg-surface-muted px-4 sm:px-5 py-8 sm:py-14">
+    // The page's main landmark (QA-071): the root layout's #content wrapper
+    // is a plain div.
+    <main className="flex-1 flex items-start sm:items-center justify-center bg-surface-muted px-4 sm:px-5 py-8 sm:py-14">
       <div className="w-full max-w-[440px] bg-surface border border-line rounded-card shadow-card p-6 sm:p-10">
         <span
           aria-hidden="true"
@@ -237,11 +239,11 @@ export default function SignupForm({
           </button>
           <p className="text-[13px] text-ink-soft text-center">
             By creating an account you agree to our{" "}
-            <Link href="/terms" className="text-accent hover:underline">
+            <Link href="/terms" className="text-accent underline underline-offset-2 hover:text-accent-hover">
               Terms and content policy
             </Link>{" "}
             and{" "}
-            <Link href="/privacy" className="text-accent hover:underline">
+            <Link href="/privacy" className="text-accent underline underline-offset-2 hover:text-accent-hover">
               Privacy policy
             </Link>
             .
@@ -258,6 +260,6 @@ export default function SignupForm({
           </Link>
         </p>
       </div>
-    </div>
+    </main>
   );
 }
