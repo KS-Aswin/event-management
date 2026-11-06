@@ -18,6 +18,7 @@ export interface StrengthItem {
 }
 
 export const STRENGTH_RULES = {
+  /** Strong-profile target. Going live needs fewer (SUBMIT_MIN_IMAGES in lib/db.ts, 3): QA-089. */
   photos: 6,
   offerings: 3,
   aboutChars: 150,
@@ -30,7 +31,7 @@ export function profileStrength(s: StrengthInput, about: string): { percent: num
     { key: "basics", label: "Business name, category, district and phone", done: s.checklist.basics, href: "/vendor/profile" },
     { key: "logo", label: "Upload your logo", done: s.checklist.logo, href: "/vendor/media" },
     { key: "cover", label: "Add a cover photo", done: s.checklist.cover, href: "/vendor/media" },
-    { key: "photos", label: `Show at least ${STRENGTH_RULES.photos} portfolio photos${soFar(s.media.images, STRENGTH_RULES.photos)}`, done: s.media.images >= STRENGTH_RULES.photos, href: "/vendor/media" },
+    { key: "photos", label: `For a strong profile, show at least ${STRENGTH_RULES.photos} portfolio photos${soFar(s.media.images, STRENGTH_RULES.photos)}`, done: s.media.images >= STRENGTH_RULES.photos, href: "/vendor/media" },
     { key: "offerings", label: `List ${STRENGTH_RULES.offerings} or more priced offerings, not counting packages${soFar(s.offerings.pricedUnits, STRENGTH_RULES.offerings)}`, done: s.offerings.pricedUnits >= STRENGTH_RULES.offerings, href: "/vendor/offerings" },
     { key: "package", label: "Create a package customers can book in one go", done: s.offerings.packages > 0, href: "/vendor/offerings" },
     { key: "areas", label: "Choose the districts you travel to", done: s.checklist.areas, href: "/vendor/areas" },

@@ -2,11 +2,11 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { requirePageRole } from "@/app/api/_lib/auth";
-import { findListingMissing, findVendorHomeStats, getOwnVendor, type VendorHomeStats } from "@/lib/db";
+import { findListingMissing, findVendorHomeStats, getOwnVendor, SUBMIT_MIN_IMAGES, type VendorHomeStats } from "@/lib/db";
 import StatusChip from "@/app/_nav/status-chip";
 import DocumentsPrompt from "./documents/documents-prompt";
 import { listNotifications } from "@/lib/notifications";
-import { profileStrength, type StrengthItem } from "./profile-strength";
+import { profileStrength, STRENGTH_RULES, type StrengthItem } from "./profile-strength";
 import NotificationsList from "./notifications-list";
 import { StatusPill } from "./leads/lead-row";
 import { daysFromToday, formatReceived, formatShortDate, relativeDays } from "./leads/format";
@@ -22,7 +22,8 @@ const MISSING_LABEL: Record<string, string> = {
   basics: "business basics (name, category, district, phone, a short about)",
   offering: "one offering or package with a price",
   logo_or_cover: "a logo or cover photo",
-  images: "at least 3 portfolio photos",
+  // QA-089: the listing minimum, told apart from the profile-strength target.
+  images: `at least ${SUBMIT_MIN_IMAGES} portfolio photos to go live (${STRENGTH_RULES.photos} or more make a strong profile)`,
 };
 
 /** Where to fix the first missing item on a live / pending listing. */
