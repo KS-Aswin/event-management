@@ -1,8 +1,8 @@
 # Run 3: complete the product (6 Nov 2026 →)
 
 ## Stages
-- **Finished (all 14 planned):** admin, p0rest, customer, prodready, deploy, qa1, fix1, qa2, fix2, qa3, fix3, qa4, fix4, qa5.
-- **Not reached:** a fix5 round for the 13 rows qa5 opened. The pipeline's stage list ended at qa5.
+- **Finished (all 15):** admin, p0rest, customer, prodready, deploy, qa1, fix1, qa2, fix2, qa3, fix3, qa4, fix4, qa5, and fix5 (added on 6 Nov, finished 7 Nov at 04:01).
+- **Not reached:** a qa6 round to retest fix5, so QA_CLEAN has not been written.
 - Product plan: P0 (16/16), P1 (14/14), P2 (14/14) and P3-1 (production storage) are ticked in `docs/PRODUCT_PLAN.md`. P3-2 to P3-18 are "after income" and were not started.
 
 ## What each role can do now
@@ -12,7 +12,8 @@
 
 ## Deployment
 - **Live:** https://vela-drab-psi.vercel.app (Vercel, region icn1). The database is Supabase sfxtotgrrhamubczrdys and media is in the `vela-media` bucket.
-- On 6 Nov at 23:05 the orchestrator applied migrations 014, 016, 017 and 019 to production and deployed HEAD 8f9badf. qa5 confirmed live serves the fix4 code. The later commit 69b863d changed tests only.
+- On 6 Nov at 23:05 the orchestrator applied migrations 014, 016, 017 and 019 to production and deployed HEAD 8f9badf (fix4).
+- On 7 Nov fix5 deployed HEAD 69df17d. `db:migrate:deploy` said the database was up to date, because fix5 added no migrations. A read-only smoke test passed, and the fix5 changes (QA-102 and QA-109) show on live.
 - **Owner to-dos** are in `C:\Aswin Projects\event-management-NEEDS-YOU.md`:
   - replace the deploy-created admin login (item 5)
   - set up an email provider (item 7)
@@ -28,35 +29,23 @@
 | qa2 | 19 (3 medium, 16 low) | all 24 then open, by fix2 |
 | qa3 | 27 (6 medium, 21 low) | 26 by fix3 (QA-057 is needs-human) |
 | qa4 | 16 (2 medium, 14 low) | all 16 by fix4 |
-| qa5 | 13 (1 medium, 12 low) | not reached |
-- **Totals:** 112 rows (including 3 extra rows logged in fix1). 97 are fixed and verified. 2 are needs-human (QA-007 email provider, QA-057 support mailbox).
-- **Still open: 13** (0 critical, 0 high, 1 medium, 12 low).
+| qa5 | 13 (1 medium, 12 low) | all 13 by fix5 (not yet retested) |
+- **Totals:** 112 rows (including 3 extra rows logged in fix1). 97 are fixed and verified. 13 are fixed by fix5 and still need a retest. 2 are needs-human (QA-007 email provider, QA-057 support mailbox).
+- **Still open: 0** (0 critical, 0 high, 0 medium, 0 low).
 - qa5 found no regressions.
-- Last full suites, at fix4: lint and tsc clean, unit 42/42, storage 28/28, admin 94 passed and 1 skipped, api 226 + 146, e2e 222 passed and 2 intentional skips.
+- Last full suites, at fix5: lint and tsc clean, unit 42/42, storage 28/28, admin 94 passed and 1 skipped, api 226 + 156 node tests. e2e: 247 passed and 3 intentional skips out of 250, after the 3 test bugs were fixed and their specs re-run.
 
 ## Still pending
-- **Medium:** QA-106. On /admin/users, searching a plain 10-digit phone number crashes the page (local and live).
-- **Low (12):**
-  - QA-100: the event date has no max.
-  - QA-101: closing the lightbox loses focus.
-  - QA-102: every shortlist toggle has the same name.
-  - QA-103: unit-delete follow-up to QA-084.
-  - QA-104: offer lines default to the unit 'event'.
-  - QA-105: the resubmit flow after a rejection.
-  - QA-107: Remove badge has no confirm and no notification.
-  - QA-108: the message after reinstating a changes-requested listing.
-  - QA-109: long names don't wrap.
-  - QA-110: admin tap targets.
-  - QA-111: link underline on the customer enquiry heading.
-  - QA-112: star rating has no role.
-- Repro specs (marked test.fail) are in `web/e2e/qa5-*.spec.ts`.
+- A qa6 retest of the 13 fix5 rows (QA-100 to QA-112), locally and on live.
 - Owner items in NEEDS-YOU (above).
+- QA test data on live (labelled QA test accounts and vendors) to remove before launch (NEEDS-YOU item 6).
 - P3 features (billing, email, OTP and the rest) are after income.
+- `SITE_AUDIT.md` (a site-audit synthesis report) is untracked in the repo root. It was left out of this commit.
 
 ## Exact next step to resume
-1. Run a **fix5** round with `fix.md` in the run3 run folder, on the 13 open qa5 rows (QA-100 to QA-112, QA-106 first). Turn the `qa5-*.spec.ts` repro specs into passing tests.
-2. Then run `npm run deploy` from `web/`. No migrations are pending unless fix5 adds some; if it does, run `npm run db:migrate:deploy` first.
-3. Then run a qa6 round. When it finds no open critical, high or medium rows, write QA_CLEAN.
+1. Run a **qa6** round with `qa.md` in the run3 run folder, against the local build and live (https://vela-drab-psi.vercel.app, which already serves fix5). It should verify QA-100 to QA-112 and look for regressions.
+2. If qa6 finds no open critical, high or medium rows, write QA_CLEAN in the run folder. If it does, run a fix6 round with `fix.md`, then `npm run deploy` from `web/` (run `npm run db:migrate:deploy` first only if fix6 adds migrations), and then repeat the QA round.
+3. Then the owner works through `C:\Aswin Projects\event-management-NEEDS-YOU.md` before launch.
 
 # Product build (31 Oct 2026 →)
 
