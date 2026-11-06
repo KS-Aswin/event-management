@@ -397,8 +397,9 @@ export async function searchVendors(f: SearchFilters): Promise<{ vendors: Search
     recommended: `${featured("vendors")} DESC, vendors.rank_boost DESC, ${bayes("vendors")} DESC, ${completeness("vendors")} DESC, vendors.id`,
     rating: `${bayes("vendors")} DESC, vendors.reviews_count DESC, vendors.id`,
     reviews: "vendors.reviews_count DESC, vendors.rating DESC, vendors.id",
-    priceLow: "vendors.price ASC, vendors.id",
-    priceHigh: "vendors.price DESC, vendors.id",
+    // "Price on request" (price 0) sorts last either way (QA-042).
+    priceLow: "(COALESCE(vendors.price, 0) <= 0), vendors.price ASC, vendors.id",
+    priceHigh: "(COALESCE(vendors.price, 0) <= 0), vendors.price DESC, vendors.id",
   };
   const list = await vendorsQuery(f, budgetUnit);
   const page = pageClause(f, list.add);

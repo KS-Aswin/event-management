@@ -18,6 +18,10 @@ import {
 import { assetUrls } from "@/lib/media/repo";
 import { parseVideoLink } from "@/lib/media/video-link";
 import { formatOfferingPrice, maskContactDetails } from "@/lib/offering-validation";
+import { getCategoryLabeller } from "@/lib/taxonomy";
+
+/** Vendor-typed text shown to customers: phones, emails and links masked (QA-043). */
+const mask = (s: string | null | undefined): string => maskContactDetails(s ?? "").text;
 
 export interface GalleryItem {
   id: number;
@@ -79,8 +83,8 @@ function toItem(row: MediaAssetRecord, byId: Map<number, MediaAssetRecord>): Gal
     id: row.id,
     kind: row.kind,
     albumId: row.album_id,
-    caption: row.caption ?? "",
-    alt: row.alt_text || row.caption || "",
+    caption: mask(row.caption),
+    alt: mask(row.alt_text || row.caption),
     pending: row.status === "pending_review",
     width: row.width,
     height: row.height,
@@ -155,7 +159,7 @@ export async function loadProfileMedia(vendor: VendorRecord, preview: boolean): 
     if (i.albumId != null) counts.set(i.albumId, (counts.get(i.albumId) ?? 0) + 1);
   }
   const albums = albumRows
-    .map((a) => ({ id: a.id, title: a.title, description: a.description ?? "", count: counts.get(a.id) ?? 0 }))
+    .map((a) => ({ id: a.id, title: mask(a.title), description: mask(a.description), count: counts.get(a.id) ?? 0 }))
     .filter((a) => a.count > 0);
 
   return {
@@ -190,6 +194,8 @@ export interface OfferingView {
 
 export interface OfferingGroup {
   category: string;
+  /** What people see: the admin display name (QA-035). */
+  label: string;
   slug: string;
   units: OfferingView[];
   /** Package-only units: listed under "Included in our packages". */
@@ -229,7 +235,7 @@ function trimQty(q: string): string {
 }
 
 export async function loadProfileOfferings(vendorId: number): Promise<ProfileOfferings> {
-  const rows = await findOfferingsByVendor(vendorId, { publicOnly: true });
+  const [rows, categoryLabel] = await Promise.all([findOfferingsByVendor(vendorId, { publicOnly: true }), getCategoryLabeller()]);
   const packageRows = rows.filter((o) => o.kind === "package");
   const items = await findPackageItems(packageRows.map((p) => p.id));
   const visibleIds = new Set(rows.map((r) => r.id));
@@ -237,12 +243,12 @@ export async function loadProfileOfferings(vendorId: number): Promise<ProfileOff
   const view = (o: OfferingRecord): OfferingView => ({
     id: o.id,
     kind: o.kind,
-    title: o.title,
-    description: maskContactDetails(o.description ?? "").text,
+    title: mask(o.title),
+    description: mask(o.description),
     priceText: formatOfferingPrice(o),
     priceUnit: o.price_unit,
     separate: o.kind !== "addon" && o.sale_mode === "separate",
-    inclusions: Array.isArray(o.inclusions) ? o.inclusions : [],
+    inclusions: Array.isArray(o.inclusions) ? o.inclusions.map(mask) : [],
     guestRange: guestRange(o),
     addons: [],
     items: [],
@@ -256,7 +262,7 @@ export async function loadProfileOfferings(vendorId: number): Promise<ProfileOff
     units.set(o.id, v);
     let g = groups.get(o.category);
     if (!g) {
-      g = { category: o.category, slug: o.category_slug, units: [], packageOnly: [] };
+      g = { category: o.category, label: categoryLabel(o.category), slug: o.category_slug, units: [], packageOnly: [] };
       groups.set(o.category, g);
     }
     (o.sale_mode === "package_only" ? g.packageOnly : g.units).push(v);
@@ -270,7 +276,7 @@ export async function loadProfileOfferings(vendorId: number): Promise<ProfileOff
     v.separate = true;
     v.items = items
       .filter((i) => i.package_id === p.id && i.active && visibleIds.has(i.item_id))
-      .map((i) => ({ id: i.item_id, title: i.title, qty: trimQty(i.qty), note: i.note ?? "" }));
+      .map((i) => ({ id: i.item_id, title: mask(i.title), qty: trimQty(i.qty), note: mask(i.note) }));
     return v;
   });
 

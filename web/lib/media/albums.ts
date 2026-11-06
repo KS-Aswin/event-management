@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { getVendorEntitlements } from "@/lib/entitlements";
 import { apiError, cleanText, optionalId } from "./http";
+import { maskContactDetails } from "@/lib/offering-validation";
 import {
   findAsset,
   getMediaUsage,
@@ -24,12 +25,12 @@ export async function parseAlbumInput(
   if (body.title !== undefined || creating) {
     const t = cleanText(body.title, 120);
     if (!t) return apiError(400, "Give the album a title (up to 120 characters).", "VALIDATION");
-    f.title = t;
+    f.title = maskContactDetails(t).text; // QA-043
   }
   if (body.description !== undefined) {
     const d = cleanText(body.description, 1000);
     if (d === null) return apiError(400, "Description can be at most 1000 characters.", "VALIDATION");
-    f.description = d;
+    f.description = maskContactDetails(d).text;
   }
   if (body.venueName !== undefined) {
     const v = cleanText(body.venueName, 160);

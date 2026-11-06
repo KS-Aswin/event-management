@@ -1,7 +1,7 @@
 import { test, expect, runTag, signUp, type Creds } from "./helpers";
 
 // QA round 2, vendor group: reproductions of new issues (not fixes).
-// Each test is marked test.fail() until the bug is fixed.
+// Fixed in round fix2; these are now regular regression tests.
 //
 //   QA2-VENDOR "contact details not masked in About / Specialities / photo captions"
 //   Offering descriptions mask phone numbers and links ("Call me at ••• or ..."),
@@ -18,7 +18,6 @@ test.describe("qa2 vendor findings", () => {
   });
 
   test("QA2 vendor: phone number in About / Specialities is masked on the profile", async ({ page }) => {
-    test.fail(true, "QA2 vendor finding: About and Specialities are not contact-masked");
     await signUp(page, "vendor", vendor);
     await expect(page).toHaveURL(/\/vendor\/onboarding/);
     const res = await page.request.post("/api/vendors", {

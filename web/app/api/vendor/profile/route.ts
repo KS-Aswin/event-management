@@ -13,6 +13,7 @@ import {
 } from "@/lib/db";
 import { normaliseE164, parseProfileBody } from "./validate";
 import { toProfile } from "./shape";
+import { maskContactDetails } from "@/lib/offering-validation";
 
 // Business profile of the signed-in vendor (PRODUCT_PLAN P0-13, section 6).
 // The vendor is always resolved from the session, never from the client.
@@ -55,6 +56,9 @@ export async function PATCH(request: Request) {
   const parsed = parseProfileBody(body);
   if (!parsed.ok) return err(400, parsed.error, parsed.code, { field: parsed.field });
   const patch = parsed.patch;
+  // Contact details go through Vela's sign-in gate, not free text (QA-043).
+  if (patch.about) patch.about = maskContactDetails(patch.about).text;
+  if (patch.tags) patch.tags = patch.tags.map((t) => maskContactDetails(t).text);
   const old = ctx.vendor;
 
   // The same number in a different format is not a change (no re-review).

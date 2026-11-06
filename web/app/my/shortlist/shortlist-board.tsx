@@ -273,11 +273,8 @@ function ShortlistRow({
                   " · New"
                 )}
               </p>
-              {i.available && i.fromPrice != null && (
-                <p className="text-[13px] font-semibold text-accent tabular-nums mt-0.5">
-                  From ₹{i.fromPrice.toLocaleString("en-IN")}
-                  {i.fromUnit ? ` / ${i.fromUnit}` : ""}
-                </p>
+              {i.available && (
+                <p className="text-[13px] font-semibold text-accent tabular-nums mt-0.5">{i.priceLabel ?? "Price on request"}</p>
               )}
               {!i.available && <p className="text-caption text-danger mt-0.5">No longer available on Vela</p>}
               {i.enquiryId && (

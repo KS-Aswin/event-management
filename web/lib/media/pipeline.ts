@@ -15,6 +15,7 @@ import {
 import { sniffType, imageRejectMessage, ACCEPTED_IMAGE_TYPES } from "./magic";
 import { processImage, readImageSize, extractRegion, ImageDecodeError, type CropRect } from "./image";
 import { parseVideoLink } from "./video-link";
+import { maskContactDetails } from "@/lib/offering-validation";
 import {
   albumBelongsTo,
   serviceBelongsTo,
@@ -120,7 +121,7 @@ export async function reserve(vendor: VendorRef, input: Record<string, unknown>)
     return fail(404, "Offering not found.", "NOT_FOUND");
   }
 
-  const caption = typeof input.caption === "string" ? input.caption.trim().slice(0, 300) : "";
+  const caption = typeof input.caption === "string" ? maskContactDetails(input.caption.trim().slice(0, 300)).text : ""; // QA-043
 
   const ent = await getVendorEntitlements(vendor.id);
   const usage = await getMediaUsage(vendor.id);
@@ -427,7 +428,7 @@ export async function addLink(vendor: VendorRef, input: Record<string, unknown>)
   if (ent.maxVideoLinks !== null && usage.videoLinks >= ent.maxVideoLinks) {
     return planLimit("video_links", ent.maxVideoLinks);
   }
-  const caption = typeof input.caption === "string" ? input.caption.trim().slice(0, 300) : "";
+  const caption = typeof input.caption === "string" ? maskContactDetails(input.caption.trim().slice(0, 300)).text : ""; // QA-043
   const row = await insertVideoLink({
     vendorId: vendor.id,
     url: parsed.url,

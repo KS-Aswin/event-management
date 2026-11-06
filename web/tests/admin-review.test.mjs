@@ -23,7 +23,8 @@ import {
 const P = "rvw";
 const CUSTOM = `Kolkali ${RUN_ID}`;
 const CUSTOM_NORM = CUSTOM.toLowerCase();
-const REJECT_NAME = `Fireworks ${RUN_ID}`;
+// base36 so the run id is not masked as a phone number on the public profile (QA-043).
+const REJECT_NAME = `Fireworks ${RUN_ID.toString(36)}`;
 
 let admin, customer, vendors, catId, newCatId, tplId;
 const createdTemplateIds = [];

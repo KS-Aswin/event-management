@@ -2,6 +2,7 @@
 // vendors side by side. Only approved, published vendors are returned.
 
 import { pool } from "@/lib/db";
+import { vendorFromPrice } from "@/lib/vendor-display";
 
 export const COMPARE_MIN = 2;
 export const COMPARE_MAX = 4;
@@ -29,7 +30,11 @@ export interface CompareVendor {
   teamSize: number | null;
   maxGuests: number | null;
   languages: string[];
+  /** The vendor's one "from" price (vendors.price / price_label, QA-036); null = on request. */
   fromPrice: number | null;
+  /** Same text search and the profile show, e.g. "₹600 per plate"; null = on request. */
+  priceLabel: string | null;
+  /** The label's unit part ("per plate", "onwards"), to tell whether prices are comparable. */
   fromUnit: string | null;
   offeringCount: number;
   /** Median minutes to the first vendor reply (last 180 days), null when too few. */
@@ -70,8 +75,8 @@ export async function findCompareVendors(ids: number[]): Promise<CompareVendor[]
     max_guests: number | null;
     languages: string[] | null;
     attributes: Record<string, unknown> | null;
-    from_price: number | null;
-    from_unit: string | null;
+    price: string | number | null;
+    price_label: string | null;
     offering_count: number;
     response_minutes: number | null;
     samples: number;
@@ -80,18 +85,12 @@ export async function findCompareVendors(ids: number[]): Promise<CompareVendor[]
   }>(
     `SELECT v.id, v.name, v.category, COALESCE(v.primary_category_id, c.id) AS category_id, v.location, v.rating, v.reviews_count,
             (v.verified_at IS NOT NULL) AS verified, v.years_experience, v.year_established, v.team_size, v.max_guests,
-            v.languages, v.attributes, p.price_from AS from_price, COALESCE(p.unit_label, p.price_unit) AS from_unit,
+            v.languages, v.attributes, v.price, v.price_label,
             (SELECT count(*)::int FROM services s WHERE s.vendor_id = v.id AND s.active AND s.kind IN ('unit','package')
                 AND s.sale_mode = 'separate' AND s.hidden_reason IS NULL AND NOT s.incomplete) AS offering_count,
             rt.minutes AS response_minutes, rt.samples, v.cover_media_id, v.cover_image_url
        FROM vendors v
        LEFT JOIN categories c ON c.name = v.category
-       LEFT JOIN LATERAL (
-         SELECT s.price_from, s.price_unit, s.unit_label FROM services s
-          WHERE s.vendor_id = v.id AND s.active AND s.kind IN ('unit','package') AND s.sale_mode = 'separate'
-            AND s.hidden_reason IS NULL AND NOT s.incomplete AND s.price_mode <> 'on_request' AND s.price_from > 0
-          ORDER BY s.price_from, s.id LIMIT 1
-       ) p ON true
        LEFT JOIN LATERAL (
          SELECT percentile_cont(0.5) WITHIN GROUP (ORDER BY x.mins)::int AS minutes, count(*)::int AS samples
            FROM (
@@ -110,33 +109,33 @@ export async function findCompareVendors(ids: number[]): Promise<CompareVendor[]
     [ids]
   );
   const thisYear = new Date().getFullYear();
-  const byId = new Map(
-    r.rows.map((x) => [
-      x.id,
-      {
-        id: x.id,
-        name: x.name,
-        category: x.category,
-        categoryId: x.category_id,
-        location: x.location,
-        rating: Number(x.rating) || 0,
-        reviewsCount: x.reviews_count ?? 0,
-        verified: x.verified,
-        yearsExperience:
-          x.years_experience ?? (x.year_established && x.year_established <= thisYear ? thisYear - x.year_established : null),
-        teamSize: x.team_size,
-        maxGuests: x.max_guests,
-        languages: x.languages ?? [],
-        fromPrice: x.from_price,
-        fromUnit: x.from_unit,
-        offeringCount: x.offering_count,
-        responseMinutes: x.samples >= MIN_RESPONSE_SAMPLES ? x.response_minutes : null,
-        attributes: x.attributes ?? {},
-        coverMediaId: x.cover_media_id,
-        coverImageUrl: x.cover_image_url,
-      } satisfies CompareVendor,
-    ])
-  );
+  const byId = new Map<number, CompareVendor>();
+  for (const x of r.rows) {
+    const priceLabel = vendorFromPrice(x);
+    byId.set(x.id, {
+      id: x.id,
+      name: x.name,
+      category: x.category,
+      categoryId: x.category_id,
+      location: x.location,
+      rating: Number(x.rating) || 0,
+      reviewsCount: x.reviews_count ?? 0,
+      verified: x.verified,
+      yearsExperience:
+        x.years_experience ?? (x.year_established && x.year_established <= thisYear ? thisYear - x.year_established : null),
+      teamSize: x.team_size,
+      maxGuests: x.max_guests,
+      languages: x.languages ?? [],
+      fromPrice: priceLabel ? Number(x.price) : null,
+      priceLabel,
+      fromUnit: priceLabel ? priceLabel.replace(/^₹[\d,]+\s*/, "") || null : null,
+      offeringCount: x.offering_count,
+      responseMinutes: x.samples >= MIN_RESPONSE_SAMPLES ? x.response_minutes : null,
+      attributes: x.attributes ?? {},
+      coverMediaId: x.cover_media_id,
+      coverImageUrl: x.cover_image_url,
+    });
+  }
   // Keep the order the customer picked.
   return ids.map((id) => byId.get(id)).filter((v): v is CompareVendor => !!v);
 }

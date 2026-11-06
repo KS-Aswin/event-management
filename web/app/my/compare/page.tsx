@@ -36,9 +36,9 @@ function bestIndex(nums: (number | null)[], lower: boolean): number | null {
   return best !== -1 && nums.filter((n) => n !== null).length >= 2 ? best : null;
 }
 
+/** The same "from" price search and the profile show (QA-036). */
 function priceText(v: CompareVendor) {
-  if (v.fromPrice === null) return "On request";
-  return `From ₹${v.fromPrice.toLocaleString("en-IN")}${v.fromUnit ? ` / ${v.fromUnit}` : ""}`;
+  return v.priceLabel ?? "Price on request";
 }
 
 export default async function ComparePage({ searchParams }: { searchParams: Promise<Record<string, string | string[] | undefined>> }) {

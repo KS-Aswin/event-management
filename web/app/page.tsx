@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { findVendors, type VendorRecord } from "@/lib/db";
 import type { Taxonomy } from "@/lib/db";
-import { getTaxonomy } from "@/lib/taxonomy";
+import { categoryLabeller, getTaxonomy } from "@/lib/taxonomy";
 import { VendorTile } from "@/lib/vendorVisuals";
 import HomeSearch from "./home-search";
 import { reviewCountLabel } from "@/lib/vendor-display";
@@ -47,6 +47,8 @@ export default async function Home() {
   const districtNames = taxonomy?.districts.map((d) => d.name) ?? [];
   const eventTypes = taxonomy?.eventTypes.filter((e) => e.slug !== "other") ?? [];
   const categoryCounts = countBy(vendors.map((v) => v.category));
+  // People see the admin display name (QA-035); links keep the stable internal name.
+  const categoryLabel = categoryLabeller(taxonomy);
   // Home district (the town falls back when a vendor has no district yet).
   const districtById = new Map(taxonomy?.districts.map((d) => [d.id, d.name]) ?? []);
   const districtCounts = countBy(vendors.map((v) => (v.district_id && districtById.get(v.district_id)) || v.location));
@@ -106,7 +108,7 @@ export default async function Home() {
                   href={`/search?category=${encodeURIComponent(c.name)}`}
                   className="group inline-flex items-center min-h-11 gap-2 border border-line bg-white rounded-full pl-4 pr-2 text-sm text-foreground transition-colors hover:bg-accent-tint hover:text-accent hover:border-accent/30 whitespace-nowrap"
                 >
-                  {c.name}
+                  {categoryLabel(c.name)}
                   <span className="min-w-6 h-6 px-1.5 inline-flex items-center justify-center rounded-full bg-surface-muted text-xs text-ink-soft tabular-nums group-hover:bg-white group-hover:text-accent">{c.count}</span>
                 </Link>
               </li>
@@ -152,7 +154,7 @@ export default async function Home() {
                   <div className="min-w-0">
                     <div className="font-semibold truncate group-hover:text-accent">{v.name}</div>
                     <div className="text-[13px] text-ink-soft truncate mt-0.5">
-                      {v.category} · {v.location}
+                      {categoryLabel(v.category)} · {v.location}
                     </div>
                     <div className="text-[13px] mt-1 tabular-nums">
                       {v.reviews_count > 0 ? (

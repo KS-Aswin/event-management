@@ -21,6 +21,7 @@ import FavoriteButton from "@/lib/favorite-button";
 import SearchFilterPanel, { type BudgetPreset } from "./search-filters";
 import SortSelect from "./sort-select";
 import { reviewCountLabel, vendorFromPrice } from "@/lib/vendor-display";
+import { maskContactDetails } from "@/lib/offering-validation";
 
 export const metadata: Metadata = {
   title: "Search vendors and services",
@@ -226,11 +227,15 @@ export default async function SearchPage({ searchParams }: { searchParams: Promi
         <Rating rating={v.rating} count={v.reviews_count} />
         {v.tags.length > 0 && (
           <div className="hidden sm:flex gap-1.5 flex-wrap mt-2.5">
-            {v.tags.map((t) => (
-              <span key={t} className="chip">
-                {t}
-              </span>
-            ))}
+            {v.tags.map((raw, i) => {
+              // Specialities are vendor-typed: mask phones, emails and links (QA-043).
+              const t = maskContactDetails(raw).text;
+              return (
+                <span key={`${i}-${t}`} className="chip">
+                  {t}
+                </span>
+              );
+            })}
           </div>
         )}
         <div className="text-sm sm:text-[15px] font-semibold text-accent mt-1.5 sm:mt-auto sm:pt-2.5">

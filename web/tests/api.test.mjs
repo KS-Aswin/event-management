@@ -316,7 +316,9 @@ async function main() {
 
   const sortedByPriceLow = await request("/api/vendors?sort=priceLow");
   const prices = sortedByPriceLow.data?.vendors?.map((v) => v.price) ?? [];
-  const isAscending = prices.every((p, i) => i === 0 || p >= prices[i - 1]);
+  // QA-042: "Price on request" (price 0) sorts after every priced vendor.
+  const rank = (p) => (Number(p) > 0 ? Number(p) : Infinity);
+  const isAscending = prices.every((p, i) => i === 0 || rank(p) >= rank(prices[i - 1]));
   checkTrue("vendors: sort=priceLow actually ascending", isAscending);
 
   // ---------- Vendors: detail ----------

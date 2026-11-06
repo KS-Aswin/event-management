@@ -309,7 +309,9 @@ test("legacy requests keep their shape and meaning", async () => {
   assert.ok(Array.isArray(r.data.vendors) && typeof r.data.total === "number");
   assert.equal(r.data.vendors.length, r.data.total, "no paging without page/limit");
   const prices = r.data.vendors.map((v) => v.price);
-  assert.ok(prices.every((p, i) => i === 0 || p >= prices[i - 1]));
+  // Priced vendors low to high, then "Price on request" (0) last (QA-042).
+  const rank = (p) => (Number(p) > 0 ? Number(p) : Infinity);
+  assert.ok(prices.every((p, i) => i === 0 || rank(p) >= rank(prices[i - 1])));
   assert.ok(r.data.vendors.every((v) => !("owner_id" in v) && !("phone" in v)), "public fields only");
   // Legacy location stays home-only: the Thrissur vendor is not "in" Ernakulam.
   const loc = await request(q({ location: "Ernakulam" }));

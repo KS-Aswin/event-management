@@ -7,6 +7,7 @@ import {
   PRICE_UNITS,
   PRICE_UNIT_LABELS,
   formatVendorPriceLabel,
+  maskContactDetails,
   normaliseCustomName,
   parseAttributeSchema,
   type AttributeField,
@@ -1724,7 +1725,7 @@ export async function findListingMissing(vendorId: number): Promise<SubmitMissin
             (v.logo_media_id IS NOT NULL OR v.cover_media_id IS NOT NULL
              OR COALESCE(v.logo_url, '') <> '' OR COALESCE(v.cover_image_url, '') <> '') AS logo_or_cover,
             (SELECT COUNT(*)::int FROM media_assets m WHERE m.vendor_id = v.id AND m.kind = 'image'
-               AND m.status IN ('pending_review','approved')) AS images
+               AND m.purpose = 'gallery' AND m.status IN ('pending_review','approved')) AS images
      FROM vendors v WHERE v.id = $1`,
     [vendorId]
   );
@@ -2895,7 +2896,8 @@ export interface VendorHomeStats {
   leads: { new: number; total: number; last7Days: number; booked: number; followUpsDue: number };
   upcoming: { id: number; name: string; event_date: string; event_type_name: string | null; guest_count: number | null }[];
   recentLeads: { id: number; name: string; event_date: string | null; status: string; created_at: string; units: string[] }[];
-  offerings: { active: number; pricedSeparate: number; packages: number; incompletePackages: number };
+  /** pricedUnits: active, visible offerings (not packages or add-ons) with a real price (QA-046). */
+  offerings: { active: number; pricedSeparate: number; pricedUnits: number; packages: number; incompletePackages: number };
   media: { images: number; videos: number; pendingReview: number; hasLogo: boolean; hasCover: boolean };
   serviceAreas: number;
   last7Days: { profileViews: number; whatsappClicks: number; phoneReveals: number };

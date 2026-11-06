@@ -71,14 +71,18 @@ export default async function MyHomePage() {
 
   // "Still needed": the event type's bundle (core first) minus categories
   // that already have a live enquiry for this event.
-  let stillNeeded: { id: number; name: string; core: boolean }[] = [];
+  let stillNeeded: { id: number; name: string; label: string; core: boolean }[] = [];
   if (next?.eventTypeId) {
     const bundle = taxonomy?.eventTypes.find((e) => e.id === next.eventTypeId)?.categories ?? [];
     const covered = new Set(next.coveredCategoryIds);
     stillNeeded = bundle
       .filter((b) => !covered.has(b.category_id) && categories.get(b.category_id)?.active)
       .sort((a, b) => Number(b.is_core) - Number(a.is_core))
-      .map((b) => ({ id: b.category_id, name: categories.get(b.category_id)!.name, core: b.is_core }));
+      .map((b) => {
+        const c = categories.get(b.category_id)!;
+        // name = the ?category= filter value; label = the admin display name (QA-035).
+        return { id: b.category_id, name: c.name, label: c.display_name?.trim() || c.name, core: b.is_core };
+      });
   }
 
   const media = await findCardMedia(
@@ -169,9 +173,8 @@ export default async function MyHomePage() {
                         rating: s.rating.toFixed(1),
                         reviews_count: s.reviewsCount,
                         verified: s.verified,
-                        from_price: s.fromPrice,
-                        from_unit: s.fromUnit,
-                        from_unit_label: null,
+                        price: s.fromPrice,
+                        price_label: s.priceLabel,
                         cover_media_id: s.coverMediaId,
                         cover_image_url: s.coverImageUrl,
                         status: "approved",
@@ -218,7 +221,7 @@ export default async function MyHomePage() {
 
 }
 
-function NextEventCard({ next, stillNeeded }: { next: NextEvent; stillNeeded: { id: number; name: string; core: boolean }[] }) {
+function NextEventCard({ next, stillNeeded }: { next: NextEvent; stillNeeded: { id: number; name: string; label: string; core: boolean }[] }) {
   const title = next.eventTypeName ?? "Your event";
   return (
     <section aria-labelledby="next-heading" className="card border-accent/30 bg-[linear-gradient(180deg,var(--color-accent-tint),var(--color-surface)_70%)]">
@@ -267,7 +270,7 @@ function NextEventCard({ next, stillNeeded }: { next: NextEvent; stillNeeded: { 
                       }`}
                     >
                       <span aria-hidden="true">+</span>
-                      {c.name}
+                      {c.label}
                       {!c.core && <span className="sr-only"> (optional)</span>}
                     </Link>
                   </li>

@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { findSearchSuggestions } from "@/lib/db";
-import { getTaxonomy } from "@/lib/taxonomy";
+import { categoryLabeller, getTaxonomy } from "@/lib/taxonomy";
 
 const MAX_OFFERINGS = 5;
 
@@ -33,5 +33,12 @@ export async function GET(request: Request) {
     if (offerings.length >= MAX_OFFERINGS) break;
   }
 
-  return NextResponse.json({ categories: matchingCategories, offerings, locations, vendors });
+  // Values stay the internal names (the ?category= filter); people see the
+  // admin display name (QA-035) from categoryLabels.
+  const label = categoryLabeller(taxonomy);
+  const categoryLabels: Record<string, string> = {};
+  for (const name of [...matchingCategories, ...offerings.map((o) => o.category), ...vendors.map((v) => v.category)]) {
+    if (name) categoryLabels[name] = label(name);
+  }
+  return NextResponse.json({ categories: matchingCategories, categoryLabels, offerings, locations, vendors });
 }

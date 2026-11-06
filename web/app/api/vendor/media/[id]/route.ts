@@ -9,6 +9,8 @@ import {
   cleanText,
 } from "@/lib/media/http";
 import { removeAsset } from "@/lib/media/pipeline";
+import { maskContactDetails } from "@/lib/offering-validation";
+import { guardListingMinimum } from "@/lib/media/listing-minimum";
 import {
   albumBelongsTo,
   findAsset,
@@ -48,12 +50,12 @@ export async function PATCH(request: Request, { params }: Ctx) {
   if (body.caption !== undefined) {
     const c = cleanText(body.caption, 300);
     if (c === null) return apiError(400, "Captions can be at most 300 characters.", "VALIDATION");
-    fields.caption = c;
+    fields.caption = maskContactDetails(c).text; // QA-043
   }
   if (body.altText !== undefined) {
     const a = cleanText(body.altText, 200);
     if (a === null) return apiError(400, "Alt text can be at most 200 characters.", "VALIDATION");
-    fields.alt_text = a;
+    fields.alt_text = maskContactDetails(a).text;
   }
   const albumId = optionalId(body.albumId);
   if (albumId === "invalid") return apiError(400, "Invalid album.", "VALIDATION");

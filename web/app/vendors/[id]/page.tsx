@@ -26,6 +26,8 @@ import OfferingsSection from "./offerings";
 import VendorBeacon from "./vendor-beacon";
 import { loadProfileMedia, loadProfileOfferings } from "./profile-data";
 import { siteUrl } from "@/lib/site-url";
+import { maskContactDetails } from "@/lib/offering-validation";
+import { getCategoryLabeller } from "@/lib/taxonomy";
 
 const MAX_INT4 = 2147483647;
 
@@ -68,7 +70,18 @@ function WhatsappIcon({ className = "w-[18px] h-[18px]" }: { className?: string 
 const loadVendor = cache(async (rawId: string) => {
   const vendorId = parseId(rawId);
   if (vendorId === null) return null;
-  return findVendorById(vendorId);
+  const [vendor, categoryLabel] = await Promise.all([findVendorById(vendorId), getCategoryLabeller()]);
+  if (!vendor) return null;
+  // Free text the vendor typed is shown with phones, emails and links masked,
+  // like offering text (QA-043): contact goes through Vela's sign-in gate.
+  // categoryLabel is the admin display name (QA-035); vendor.category stays
+  // the internal name for links and visuals.
+  return {
+    ...vendor,
+    about: vendor.about ? maskContactDetails(vendor.about).text : vendor.about,
+    tags: (vendor.tags ?? []).map((t) => maskContactDetails(t).text),
+    categoryLabel: categoryLabel(vendor.category),
+  };
 });
 
 export async function generateMetadata({
@@ -82,9 +95,9 @@ export async function generateMetadata({
     return { title: "Vendor", robots: { index: false, follow: false } };
   }
   const description =
-    vendor.about?.slice(0, 160) || `${vendor.category} in ${vendor.location}. ${vendorFromPrice(vendor) ?? "Price on request"}.`;
+    vendor.about?.slice(0, 160) || `${vendor.categoryLabel} in ${vendor.location}. ${vendorFromPrice(vendor) ?? "Price on request"}.`;
   return {
-    title: `${vendor.name} — ${vendor.category} in ${vendor.location}`,
+    title: `${vendor.name} — ${vendor.categoryLabel} in ${vendor.location}`,
     description,
     alternates: { canonical: `/vendors/${vendor.id}` },
     openGraph: {
@@ -323,7 +336,7 @@ export default async function VendorProfilePage({
                 {vendor.name}
               </h1>
               <p className="text-ink-soft text-body mt-1.5">
-                {vendor.category} · {vendor.location}
+                {vendor.categoryLabel} · {vendor.location}
                 {vendor.years_experience
                   ? ` · ${vendor.years_experience}+ years`
                   : vendor.experience

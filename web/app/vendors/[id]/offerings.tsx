@@ -144,7 +144,7 @@ export default function OfferingsSection({
 
       {data.groups.map((g) => (
         <div key={g.category}>
-          {multi ? <h3 className="eyebrow mb-2">{g.category}</h3> : null}
+          {multi ? <h3 className="eyebrow mb-2">{g.label}</h3> : null}
           {g.units.length ? (
             <ul className="divide-y divide-line overflow-hidden rounded-card border border-line">
               {g.units.map((u) => (

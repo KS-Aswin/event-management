@@ -3,6 +3,7 @@
 // id; callers pass the session user, never an id from the request.
 
 import { pool } from "@/lib/db";
+import { vendorFromPrice } from "@/lib/vendor-display";
 
 export const SHORTLIST_LIMITS = {
   /** Most vendors one customer can keep. */
@@ -16,10 +17,6 @@ export const SHORTLIST_LIMITS = {
 /** A vendor customers may see: approved and published. */
 const PUBLIC_VENDOR = "v.status = 'approved' AND v.published";
 
-/** A unit or package a customer can book on its own (same rule as lib/search.ts). */
-const SELLABLE = `s.active AND s.kind IN ('unit','package') AND s.sale_mode = 'separate'
-  AND s.hidden_reason IS NULL AND NOT s.incomplete`;
-
 export interface ShortlistItem {
   vendorId: number;
   name: string;
@@ -31,8 +28,12 @@ export interface ShortlistItem {
   verified: boolean;
   /** Still approved and published; unavailable rows can only be removed. */
   available: boolean;
+  /**
+   * The vendor's one "from" price (vendors.price / price_label, QA-023/QA-036):
+   * the same figure search, /e and the profile show. Null = price on request.
+   */
   fromPrice: number | null;
-  fromUnit: string | null;
+  priceLabel: string | null;
   note: string | null;
   savedAt: string;
   // For the card image (app/search/card-media.ts).
@@ -50,8 +51,8 @@ interface Row {
   reviews_count: number;
   verified: boolean;
   available: boolean;
-  from_price: number | null;
-  from_unit: string | null;
+  price: string | number | null;
+  price_label: string | null;
   note: string | null;
   saved_at: Date;
   cover_media_id: number | null;
@@ -63,38 +64,36 @@ export async function listShortlist(customerId: number): Promise<ShortlistItem[]
     `SELECT v.id AS vendor_id, v.name, v.category, COALESCE(v.primary_category_id, c.id) AS category_id, v.location,
             v.rating, v.reviews_count, (v.verified_at IS NOT NULL) AS verified,
             (${PUBLIC_VENDOR}) AS available,
-            p.price_from AS from_price, COALESCE(p.unit_label, p.price_unit) AS from_unit,
+            v.price, v.price_label,
             f.note, f.created_at AS saved_at, v.cover_media_id, v.cover_image_url
        FROM favorites f
        JOIN vendors v ON v.id = f.vendor_id
        LEFT JOIN categories c ON c.name = v.category
-       LEFT JOIN LATERAL (
-         SELECT s.price_from, s.price_unit, s.unit_label FROM services s
-          WHERE s.vendor_id = v.id AND ${SELLABLE} AND s.price_mode <> 'on_request' AND s.price_from > 0
-          ORDER BY s.price_from, s.id LIMIT 1
-       ) p ON true
       WHERE f.customer_id = $1
       ORDER BY f.created_at DESC, f.id DESC
       LIMIT ${SHORTLIST_LIMITS.maxItems}`,
     [customerId]
   );
-  return r.rows.map((x) => ({
-    vendorId: x.vendor_id,
-    name: x.name,
-    category: x.category,
-    categoryId: x.category_id,
-    location: x.location,
-    rating: Number(x.rating) || 0,
-    reviewsCount: x.reviews_count ?? 0,
-    verified: x.verified,
-    available: x.available,
-    fromPrice: x.from_price,
-    fromUnit: x.from_unit,
-    note: x.note,
-    savedAt: x.saved_at.toISOString(),
-    coverMediaId: x.cover_media_id,
-    coverImageUrl: x.cover_image_url,
-  }));
+  return r.rows.map((x) => {
+    const priceLabel = vendorFromPrice(x);
+    return {
+      vendorId: x.vendor_id,
+      name: x.name,
+      category: x.category,
+      categoryId: x.category_id,
+      location: x.location,
+      rating: Number(x.rating) || 0,
+      reviewsCount: x.reviews_count ?? 0,
+      verified: x.verified,
+      available: x.available,
+      fromPrice: priceLabel ? Number(x.price) : null,
+      priceLabel,
+      note: x.note,
+      savedAt: x.saved_at.toISOString(),
+      coverMediaId: x.cover_media_id,
+      coverImageUrl: x.cover_image_url,
+    };
+  });
 }
 
 export async function shortlistCount(customerId: number): Promise<number> {

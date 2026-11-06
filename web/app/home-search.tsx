@@ -13,6 +13,8 @@ const EXAMPLES = [
 
 interface Suggestions {
   categories: string[];
+  /** Internal category name -> admin display name (QA-035). */
+  categoryLabels?: Record<string, string>;
   offerings: { name: string; category: string }[];
   locations: string[];
   vendors: { id: number; name: string; category: string }[];
@@ -123,11 +125,12 @@ export default function HomeSearch({ districts = [] }: { districts?: string[] })
     router.push(qs ? `/search?${qs}` : "/search");
   }
 
+  const catLabel = (c: string) => suggestions.categoryLabels?.[c] || c;
   const options: Option[] = [
     ...suggestions.categories.map((c) => ({
       id: `${listId}-c-${c}`,
       group: "Categories" as const,
-      label: c,
+      label: catLabel(c),
       run: () => search({ category: c }),
     })),
     ...(suggestions.offerings ?? []).map((o) => ({
@@ -135,7 +138,7 @@ export default function HomeSearch({ districts = [] }: { districts?: string[] })
       group: "Offerings" as const,
       label: (
         <>
-          {o.name} <span className="text-ink-soft">· {o.category}</span>
+          {o.name} <span className="text-ink-soft">· {catLabel(o.category)}</span>
         </>
       ),
       run: () => search({ category: o.category }),
@@ -151,7 +154,7 @@ export default function HomeSearch({ districts = [] }: { districts?: string[] })
       group: "Vendors" as const,
       label: (
         <>
-          {v.name} <span className="text-ink-soft">· {v.category}</span>
+          {v.name} <span className="text-ink-soft">· {catLabel(v.category)}</span>
         </>
       ),
       run: () => {
