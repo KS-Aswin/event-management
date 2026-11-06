@@ -135,7 +135,7 @@ export default function NotificationsList({
                           }
                         }}
                       >
-                        <span>
+                        <span className="min-w-0 wrap-anywhere">
                           {n.title}
                           {n.readAt ? null : <span className="sr-only"> (unread)</span>}
                         </span>

@@ -11,7 +11,7 @@
     "db:migrate": "node --env-file-if-exists=.env.local --disable-warning=MODULE_TYPELESS_PACKAGE_JSON db/migrate.mjs",
     "db:seed": "node --env-file-if-exists=.env.local --disable-warning=MODULE_TYPELESS_PACKAGE_JSON db/seed.mjs",
     "admin:create": "node --env-file-if-exists=.env.local --disable-warning=MODULE_TYPELESS_PACKAGE_JSON scripts/admin-create.mjs",
-    "test:api": "node --env-file-if-exists=.env.local tests/api.test.mjs && node --env-file-if-exists=.env.local --test --test-concurrency=1 tests/qa1-*.test.mjs tests/qa2-*.test.mjs tests/qa3-*.test.mjs tests/qa4-*.test.mjs",
+    "test:api": "node --env-file-if-exists=.env.local tests/api.test.mjs && node --env-file-if-exists=.env.local --test --test-concurrency=1 tests/qa1-*.test.mjs tests/qa2-*.test.mjs tests/qa3-*.test.mjs tests/qa4-*.test.mjs tests/qa5-*.test.mjs",
     "test:admin": "node --env-file-if-exists=.env.local --test --test-concurrency=1 tests/admin-*.test.mjs",
     "test:e2e": "playwright test",
     "test:unit": "node --test tests/offering-validation.test.mjs tests/profile-validation.test.mjs",
