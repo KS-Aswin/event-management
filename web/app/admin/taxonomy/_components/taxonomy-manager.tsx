@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { AdminCategory, AdminEventType, AdminTemplate } from "@/lib/admin/taxonomy";
 import { ATTRIBUTE_TYPES, type AttributeField, type AttributeType } from "@/lib/offering-validation";
 import { ApiError, Dialog, ErrorNote, StatusChip, UnitPicker, adminApi, unitLabel, useToast } from "./ui";
@@ -38,6 +38,19 @@ type ReorderKind = "categories" | "templates" | "event-types";
 function useReorder(onDone: (msg: string) => Promise<void>) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // QA-075: after a move, keep keyboard focus on the moved item's button
+  // (the list re-renders in the new order, which would drop focus to body).
+  const refocus = useRef<{ key: string; dir: -1 | 1 } | null>(null);
+  useEffect(() => {
+    const want = refocus.current;
+    if (busy || !want) return;
+    refocus.current = null;
+    const btn = (d: -1 | 1) =>
+      document.querySelector<HTMLButtonElement>(`button[data-move-key="${want.key}"][data-move-dir="${d}"]`);
+    const same = btn(want.dir);
+    const target = same && same.getAttribute("aria-disabled") !== "true" ? same : btn(want.dir === -1 ? 1 : -1) ?? same;
+    target?.focus();
+  });
   const move = useCallback(
     async <T extends { id: number; active: boolean }>(
       kind: ReorderKind,
@@ -54,6 +67,9 @@ function useReorder(onDone: (msg: string) => Promise<void>) {
       const next = [...active];
       [next[i], next[j]] = [next[j], next[i]];
       const ids = [...next, ...list.filter((x) => !x.active)].map((x) => x.id);
+      const focused = typeof document !== "undefined" ? document.activeElement : null;
+      const key = `${kind}-${item.id}`;
+      if (focused instanceof HTMLElement && focused.dataset.moveKey === key) refocus.current = { key, dir };
       setBusy(true);
       setError(null);
       try {
@@ -71,12 +87,15 @@ function useReorder(onDone: (msg: string) => Promise<void>) {
 }
 
 function MoveButtons({
+  moveKey,
   label,
   first,
   last,
   busy,
   onMove,
 }: {
+  /** `${kind}-${id}`: lets useReorder put focus back on this item's button after a move. */
+  moveKey: string;
   label: string;
   first: boolean;
   last: boolean;
@@ -84,14 +103,38 @@ function MoveButtons({
   onMove: (dir: -1 | 1) => void;
 }) {
   const cls = "btn btn-secondary btn-sm min-h-11 min-w-11 px-0";
+  // aria-disabled rather than disabled: a disabled button loses focus, and the
+  // keyboard user's place with it (QA-075).
+  const off = (dir: -1 | 1) => busy || (dir < 0 ? first : last);
+  const press = (dir: -1 | 1) => {
+    if (!off(dir)) onMove(dir);
+  };
   return (
-    <div className="flex gap-2" role="group" aria-label={`Order of ${label}`}>
-      <button type="button" className={cls} aria-label={`Move up: ${label}`} title="Move up" disabled={busy || first} onClick={() => onMove(-1)}>
+    <div className="flex gap-2" role="group" aria-label={`Order of ${label}`} aria-busy={busy || undefined}>
+      <button
+        type="button"
+        className={cls}
+        aria-label={`Move up: ${label}`}
+        title="Move up"
+        data-move-key={moveKey}
+        data-move-dir="-1"
+        aria-disabled={off(-1) || undefined}
+        onClick={() => press(-1)}
+      >
         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
           <path d="M12 19V5M5 12l7-7 7 7" />
         </svg>
       </button>
-      <button type="button" className={cls} aria-label={`Move down: ${label}`} title="Move down" disabled={busy || last} onClick={() => onMove(1)}>
+      <button
+        type="button"
+        className={cls}
+        aria-label={`Move down: ${label}`}
+        title="Move down"
+        data-move-key={moveKey}
+        data-move-dir="1"
+        aria-disabled={off(1) || undefined}
+        onClick={() => press(1)}
+      >
         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
           <path d="M12 5v14M5 12l7 7 7-7" />
         </svg>
@@ -276,6 +319,7 @@ function CategoriesPanel({
                 <div className="flex flex-wrap gap-2 sm:shrink-0">
                   {c.active && activeIds.length > 1 && (
                     <MoveButtons
+                      moveKey={`categories-${c.id}`}
                       label={c.display_name}
                       first={activeIds[0] === c.id}
                       last={activeIds[activeIds.length - 1] === c.id}
@@ -595,6 +639,7 @@ function TemplatesPanel({
               <div className="mt-auto flex flex-wrap gap-2">
                 {t.active && activeIds.length > 1 && (
                   <MoveButtons
+                    moveKey={`templates-${t.id}`}
                     label={t.name}
                     first={activeIds[0] === t.id}
                     last={activeIds[activeIds.length - 1] === t.id}
@@ -979,6 +1024,7 @@ function EventTypesPanel({ data, onDone }: { data: Data; onDone: (msg: string) =
                 <div className="flex flex-wrap gap-2 sm:shrink-0">
                   {e.active && activeIds.length > 1 && (
                     <MoveButtons
+                      moveKey={`event-types-${e.id}`}
                       label={e.name}
                       first={activeIds[0] === e.id}
                       last={activeIds[activeIds.length - 1] === e.id}

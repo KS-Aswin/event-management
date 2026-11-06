@@ -139,7 +139,12 @@ export default async function UserDetailPage({ params }: { params: Promise<{ id:
                     <p>
                       <span className="font-medium">{a.action}</span>{" "}
                       {a.entity_type === "vendor" && <span className="chip">on the listing</span>}{" "}
-                      <span className="text-ink-soft">by {a.actor_name ?? (a.actor_id ? `#${a.actor_id}` : "system")}</span>
+                      <span className="text-ink-soft">
+                        {a.action === "user.password_reset_used"
+                          ? // The user did this; actor_id is the admin who made the link (QA-076).
+                            `by the account holder, with a reset link created by ${a.actor_name ?? (a.actor_id ? `#${a.actor_id}` : "an admin")}`
+                          : `by ${a.actor_name ?? (a.actor_id ? `#${a.actor_id}` : "system")}`}
+                      </span>
                     </p>
                     {a.reason && <p className="text-ink-soft break-words">“{a.reason}”</p>}
                     <p className="text-caption text-ink-soft">{fmtDateTime(a.created_at)}</p>

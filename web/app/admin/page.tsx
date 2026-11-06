@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { AdminPage } from "./_components/admin-page";
 import { getTodaySummary, type TodayTile } from "@/lib/admin/ops";
+import { clip } from "@/lib/admin/format";
 import { ago, fmtDateTime } from "./users/_components/ui";
 
 export const metadata: Metadata = { title: "Today" };
@@ -82,7 +83,12 @@ function Tile({ tile: t }: { tile: TodayTile }) {
           <Link href={t.item.href} className="block w-full min-w-0 min-h-11 py-3 hover:text-foreground focus-visible:text-foreground">
             <span className="font-medium">{t.itemLabel}:</span>{" "}
             <span className="text-foreground">{t.item.label}</span>
-            {t.item.sub ? <span className="break-words"> · {t.item.sub.replace(/_/g, " ").slice(0, 60)}</span> : null}
+            {t.item.sub ? (
+              <span className="break-words" title={t.item.sub.replace(/_/g, " ")}>
+                {" "}
+                · {clip(t.item.sub.replace(/_/g, " "), 90)}
+              </span>
+            ) : null}
             <span> · {ago(t.item.at)}</span>
           </Link>
         ) : (

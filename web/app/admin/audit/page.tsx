@@ -97,6 +97,9 @@ const ENTITY_HREF: Record<string, (id: string) => string> = {
   vendor: (id) => `/admin/vendors/${id}`,
 };
 
+/** Done by the user themself; actor_id is the admin who enabled it. */
+const SELF_SERVICE_ACTIONS = new Set(["user.password_reset_used"]);
+
 function actorLabel(a: AuditRow): string {
   if (a.actor_name) return a.actor_name;
   if (a.actor_id) return `Admin #${a.actor_id}`;
@@ -152,8 +155,19 @@ function AuditItem({ a }: { a: AuditRow }) {
         </p>
       </div>
       <p className="text-caption text-ink-soft mt-1">
-        by {actorLabel(a)}
-        {a.actor_email ? ` (${a.actor_email})` : ""}
+        {SELF_SERVICE_ACTIONS.has(a.action) ? (
+          // The account holder did this with a link an admin made; the stored
+          // actor is that admin, so say so instead of crediting them (QA-076).
+          <>
+            by the account holder, with a reset link created by {actorLabel(a)}
+            {a.actor_email ? ` (${a.actor_email})` : ""}
+          </>
+        ) : (
+          <>
+            by {actorLabel(a)}
+            {a.actor_email ? ` (${a.actor_email})` : ""}
+          </>
+        )}
         {a.ip ? ` · ${a.ip}` : ""}
       </p>
       {a.reason && <p className="text-body mt-1 break-words">“{a.reason}”</p>}

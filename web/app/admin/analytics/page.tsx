@@ -124,7 +124,13 @@ function SignupsTable({ data }: { data: AnalyticsSummary["signups"] }) {
   const rows = [...data.byDay].reverse(); // newest first
   const max = Math.max(...rows.map((r) => r.customer + r.vendor + r.admin));
   return (
-    <div className="max-h-[28rem] overflow-auto rounded-control border border-line">
+    <div
+      className="max-h-[28rem] overflow-auto rounded-control border border-line focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+      // Scrollable, so keyboard users must be able to reach it (QA-083, axe scrollable-region-focusable).
+      tabIndex={0}
+      role="region"
+      aria-label="Signups per day (scrollable)"
+    >
       <table className="w-full text-sm">
         <caption className="sr-only">Signups per day by role, newest first</caption>
         <thead className="sticky top-0 bg-surface-muted">
@@ -201,7 +207,12 @@ function EnquiriesTable({ data }: { data: AnalyticsSummary["enquiries"] }) {
   const max = Math.max(...data.rows.map((r) => r.enquiries));
   return (
     <>
-      <div className="overflow-x-auto rounded-control border border-line">
+      <div
+        className="overflow-x-auto rounded-control border border-line focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+        tabIndex={0}
+        role="region"
+        aria-label="Enquiries by district, category and event type"
+      >
         <table className="w-full text-sm">
           <caption className="sr-only">Enquiries by district, category and event type, most first</caption>
           <thead className="bg-surface-muted">
@@ -246,7 +257,12 @@ function SupplyGapTable({ rows }: { rows: AnalyticsSummary["supplyGap"] }) {
   if (!rows.length) return <Empty>No enquiries with a district and category in the last {SUPPLY_GAP_DAYS} days.</Empty>;
   const max = Math.max(...rows.map((r) => (r.ratio == null ? r.enquiries : r.ratio)));
   return (
-    <div className="overflow-x-auto rounded-control border border-line">
+    <div
+      className="overflow-x-auto rounded-control border border-line focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+      tabIndex={0}
+      role="region"
+      aria-label="Supply gap by district and category"
+    >
       <table className="w-full text-sm">
         <caption className="sr-only">Supply gap: enquiries per approved vendor by district and category, biggest gap first</caption>
         <thead className="bg-surface-muted">

@@ -139,8 +139,10 @@ export async function consumeResetToken(
         action: "user.password_reset_used",
         entityType: "user",
         entityId: row.user_id,
-        after: { resetId: Number(row.id) },
-        reason: "Password changed with a reset link",
+        // actor_id is the admin who created the link (audit rows need an
+        // admin actor); the account holder did the change (QA-076).
+        after: { resetId: Number(row.id), changedBy: "account holder", linkCreatedBy: row.created_by },
+        reason: "The account holder changed their password with a reset link",
         ip,
       });
     }
