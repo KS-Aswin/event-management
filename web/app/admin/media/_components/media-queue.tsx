@@ -12,6 +12,7 @@ const EMPTY: Record<MediaTab, { title: string; body: string }> = {
   pre: { title: "Nothing waiting", body: "No photos or videos from new listings need a check right now." },
   recent: { title: "All caught up", body: "Every upload from live vendors in the last 14 days has been checked." },
   reported: { title: "No reported media", body: "When visitors report a photo, it shows up here." },
+  hidden: { title: "Nothing hidden", body: "When an admin hides a photo or video, it shows up here so it can be put back." },
 };
 
 const REJECT_PRESETS = [
@@ -34,6 +35,7 @@ const DONE_TEXT: Record<MediaAction, string> = {
   reject: "Rejected. The vendor can see your reason.",
   hide: "Hidden from the profile. The vendor was told why.",
   remove: "Removed and the files deleted. The vendor was told why.",
+  unhide: "Back on the public profile. The vendor was told.",
 };
 
 function when(iso: string) {
@@ -159,6 +161,12 @@ export default function MediaQueueGrid({ tab, items: initial }: { tab: MediaTab;
                       .join(" · ")}
                   </p>
                   {item.caption ? <p className="mt-2 line-clamp-2 text-body">{item.caption}</p> : null}
+                  {item.status === "hidden" && item.statusReason ? (
+                    <p className="mt-2 break-words text-caption text-ink-soft">
+                      <span className="font-medium text-foreground">Hidden because:</span> {item.statusReason}
+                      {item.reviewedAt ? ` · ${when(item.reviewedAt)}` : null}
+                    </p>
+                  ) : null}
 
                   {item.reports.length ? (
                     <div className="mt-3 rounded-control bg-danger-tint/60 p-3">
@@ -175,6 +183,27 @@ export default function MediaQueueGrid({ tab, items: initial }: { tab: MediaTab;
                     </div>
                   ) : null}
 
+                  {tab === "hidden" ? (
+                    <div className="mt-auto grid grid-cols-2 gap-2 pt-4">
+                      <button
+                        type="button"
+                        className="btn btn-primary btn-sm"
+                        disabled={busy}
+                        onClick={() => void run(item, "unhide", "")}
+                        aria-label={`Unhide: ${what} from ${item.vendor.name}`}
+                      >
+                        {busy ? "Saving..." : "Unhide"}
+                      </button>
+                      <button
+                        type="button"
+                        className="btn btn-ghost btn-sm text-danger hover:bg-danger-tint"
+                        disabled={busy}
+                        onClick={() => ask(item, "remove")}
+                      >
+                        Remove
+                      </button>
+                    </div>
+                  ) : (
                   <div className="mt-auto grid grid-cols-2 gap-2 pt-4">
                     <button
                       type="button"
@@ -200,6 +229,7 @@ export default function MediaQueueGrid({ tab, items: initial }: { tab: MediaTab;
                       Remove
                     </button>
                   </div>
+                  )}
                 </div>
               </li>
             );

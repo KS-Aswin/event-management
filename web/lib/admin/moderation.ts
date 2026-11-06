@@ -7,13 +7,13 @@ import { pool, recomputeVendorRating } from "@/lib/db";
 import { assetUrls, type MediaAssetRow, type MediaStatus } from "@/lib/media/repo";
 import { getStorage } from "@/lib/storage";
 import { audit } from "./audit";
+import { ADMIN_HIDE_PREFIX, displayStatusReason, isAdminHidden } from "./format";
 import { notify } from "./notify";
 import { HttpError, withTransaction, type TxClient } from "./tx";
 
 /** Distinct open reports at which an approved asset goes back to review. */
 export const MEDIA_REPORT_THRESHOLD = 2;
-/** Admin-hidden media carry status_reason "admin:<reason>" so the vendor cannot unhide them. */
-export const ADMIN_HIDE_PREFIX = "admin:";
+export { ADMIN_HIDE_PREFIX, displayStatusReason, isAdminHidden };
 const RECENT_DAYS = 14;
 const PAGE_SIZE = 48;
 
@@ -21,8 +21,9 @@ const PAGE_SIZE = 48;
 // Media queue
 // ---------------------------------------------------------------------------
 
-export type MediaTab = "pre" | "recent" | "reported";
-export const MEDIA_TABS: readonly MediaTab[] = ["pre", "recent", "reported"];
+export type MediaTab = "pre" | "recent" | "reported" | "hidden";
+export const MEDIA_TABS: readonly MediaTab[] = ["pre", "recent", "reported", "hidden"];
+
 
 export function parseMediaTab(v: unknown): MediaTab {
   return MEDIA_TABS.includes(v as MediaTab) ? (v as MediaTab) : "pre";
@@ -83,6 +84,10 @@ function tabWhere(tab: MediaTab): string {
     case "reported":
       return `m.status NOT IN ('uploading','processing')
               AND EXISTS (SELECT 1 FROM media_reports r WHERE r.media_id = m.id AND r.status = 'open')`;
+    // Hidden by an admin: kept so a mistaken hide can be undone (QA-060).
+    // Items the vendor hid themselves are their own choice and not listed.
+    case "hidden":
+      return `m.status = 'hidden' AND m.status_reason LIKE '${ADMIN_HIDE_PREFIX}%'`;
   }
 }
 
@@ -97,7 +102,7 @@ function toQueueItem(r: QueueRow): MediaQueueItem {
     kind: r.kind,
     purpose: r.purpose,
     status: r.status,
-    statusReason: r.status_reason,
+    statusReason: displayStatusReason(r.status_reason),
     caption: r.caption,
     altText: r.alt_text,
     width: r.width,
@@ -124,7 +129,12 @@ export interface MediaQueue {
 
 export async function listMediaQueue(tab: MediaTab, page = 1): Promise<MediaQueue> {
   const p = Math.max(1, Math.floor(page) || 1);
-  const order = tab === "recent" ? "m.created_at DESC, m.id DESC" : "m.created_at ASC, m.id ASC";
+  const order =
+    tab === "recent"
+      ? "m.created_at DESC, m.id DESC"
+      : tab === "hidden"
+        ? "m.reviewed_at DESC NULLS LAST, m.id DESC"
+        : "m.created_at ASC, m.id ASC";
   const [rows, counts] = await Promise.all([
     pool.query<QueueRow>(
       `SELECT m.*, v.name AS vendor_name, v.status AS vendor_status, d.name AS district_name,
@@ -143,11 +153,12 @@ export async function listMediaQueue(tab: MediaTab, page = 1): Promise<MediaQueu
 }
 
 export async function mediaQueueCounts(): Promise<Record<MediaTab, number>> {
-  const r = await pool.query<{ pre: number; recent: number; reported: number }>(
+  const r = await pool.query<Record<MediaTab, number>>(
     `SELECT
        (SELECT count(*)::int FROM media_assets m JOIN vendors v ON v.id = m.vendor_id WHERE ${tabWhere("pre")}) AS pre,
        (SELECT count(*)::int FROM media_assets m JOIN vendors v ON v.id = m.vendor_id WHERE ${tabWhere("recent")}) AS recent,
-       (SELECT count(*)::int FROM media_assets m JOIN vendors v ON v.id = m.vendor_id WHERE ${tabWhere("reported")}) AS reported`
+       (SELECT count(*)::int FROM media_assets m JOIN vendors v ON v.id = m.vendor_id WHERE ${tabWhere("reported")}) AS reported,
+       (SELECT count(*)::int FROM media_assets m JOIN vendors v ON v.id = m.vendor_id WHERE ${tabWhere("hidden")}) AS hidden`
   );
   return r.rows[0];
 }
@@ -156,8 +167,8 @@ export async function mediaQueueCounts(): Promise<Record<MediaTab, number>> {
 // Media decisions
 // ---------------------------------------------------------------------------
 
-export type MediaAction = "approve" | "reject" | "hide" | "remove";
-export const MEDIA_ACTIONS: readonly MediaAction[] = ["approve", "reject", "hide", "remove"];
+export type MediaAction = "approve" | "reject" | "hide" | "remove" | "unhide";
+export const MEDIA_ACTIONS: readonly MediaAction[] = ["approve", "reject", "hide", "remove", "unhide"];
 /** Actions that need a written reason (reason dialog). */
 export const MEDIA_REASON_REQUIRED: readonly MediaAction[] = ["reject", "hide", "remove"];
 
@@ -195,6 +206,7 @@ export interface MediaDecisionResult {
  * approve: status approved, marks it checked, dismisses open reports.
  * reject / hide: reason required, closes open reports as actioned, notifies the vendor.
  * remove: deletes the row (objects deleted after commit), notifies the vendor.
+ * unhide: puts an admin-hidden item back on the profile (approved), notifies the vendor.
  * Throws HttpError 404 (missing), 409 (already handled / still processing).
  */
 export async function decideMedia(params: {
@@ -230,8 +242,11 @@ export async function decideMedia(params: {
       (action === "reject" && a.status === "rejected" && !hasReports) ||
       (action === "hide" && a.status === "hidden" && (a.status_reason ?? "").startsWith(ADMIN_HIDE_PREFIX) && !hasReports);
     if (already) throw new HttpError(409, "Someone already handled this item.", "ALREADY_HANDLED");
+    if (action === "unhide" && !isAdminHidden(a.status, a.status_reason)) {
+      throw new HttpError(409, "This item is not hidden by Vela any more.", "ALREADY_HANDLED");
+    }
 
-    const reportStatus = action === "approve" ? "dismissed" : "actioned";
+    const reportStatus = action === "approve" || action === "unhide" ? "dismissed" : "actioned";
     if (action !== "remove") {
       await client.query("UPDATE media_reports SET status = $2 WHERE media_id = $1 AND status = 'open'", [
         mediaId,
@@ -241,13 +256,24 @@ export async function decideMedia(params: {
 
     let status: MediaStatus | "removed";
     const kindLabel = a.kind === "image" ? "photo" : "video";
-    if (action === "approve") {
+    if (action === "approve" || action === "unhide") {
       status = "approved";
       await client.query(
         `UPDATE media_assets SET status = 'approved', status_reason = NULL, reviewed_by = $2, reviewed_at = now(),
                 report_count = 0, updated_at = now() WHERE id = $1`,
         [mediaId, actorId]
       );
+      if (action === "unhide") {
+        await notify(
+          client,
+          a.owner_id,
+          "media.unhidden",
+          `A ${kindLabel} is back on your profile`,
+          reason ?? "Vela's team reviewed it again and it is public now.",
+          "/vendor/media",
+          { mediaId }
+        );
+      }
     } else if (action === "reject" || action === "hide") {
       status = action === "reject" ? "rejected" : "hidden";
       const stored = action === "reject" ? reason : `${ADMIN_HIDE_PREFIX}${reason}`;

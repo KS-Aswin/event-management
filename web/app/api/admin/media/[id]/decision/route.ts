@@ -4,7 +4,7 @@ import { clientIp } from "@/lib/admin/audit";
 import { adminError, adminJson, parseReason, readJsonObject } from "@/lib/admin/http";
 import { decideMedia, MEDIA_ACTIONS, MEDIA_REASON_REQUIRED, type MediaAction } from "@/lib/admin/moderation";
 
-// POST /api/admin/media/[id]/decision {action: approve|reject|hide|remove, reason}
+// POST /api/admin/media/[id]/decision {action: approve|reject|hide|remove|unhide, reason}
 // reason is required for reject, hide and remove. 409 when already handled.
 export async function POST(req: Request, { params }: { params: Promise<{ id: string }> }) {
   const auth = await requireAdmin();
@@ -15,7 +15,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
   if (!body) return adminJson({ error: "Invalid request body." }, 400);
   const action = body.action as MediaAction;
   if (!MEDIA_ACTIONS.includes(action)) {
-    return adminJson({ field: "action", error: "Choose approve, reject, hide or remove." }, 400);
+    return adminJson({ field: "action", error: "Choose approve, reject, hide, remove or unhide." }, 400);
   }
   let reason: string | null = null;
   if (MEDIA_REASON_REQUIRED.includes(action)) {

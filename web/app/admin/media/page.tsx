@@ -22,6 +22,11 @@ const TABS: { id: MediaTab; label: string; blurb: string }[] = [
     label: "Reported",
     blurb: "Media that visitors reported. Two reports take an item off the public profile until you decide.",
   },
+  {
+    id: "hidden",
+    label: "Hidden by Vela",
+    blurb: "Photos and videos an admin took off a public profile. Unhide one to put it back on the profile; the vendor is told.",
+  },
 ];
 
 export default async function Page({ searchParams }: { searchParams: Promise<{ tab?: string; page?: string }> }) {
