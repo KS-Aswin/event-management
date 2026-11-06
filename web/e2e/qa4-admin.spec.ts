@@ -2,10 +2,8 @@ import pg from "pg";
 import bcrypt from "bcryptjs";
 import { test, expect, loginAsAdmin, runTag, type Creds } from "./helpers";
 
-// QA round 4 (admin) reproductions. Each test is marked test.fail until the
-// bug is fixed. Not run during qa4 (the Playwright webServer and global
-// teardown would disturb the parallel testers). Uses the LOCAL DB only and
-// removes what it creates.
+// QA round 4 (admin) regression tests (QA-085, QA-097, QA-098, QA-099 and the
+// QA-086 landmark check). Uses the LOCAL DB only and removes what it creates.
 
 const LOCAL = new Set(["localhost", "127.0.0.1", "::1", "[::1]"]);
 function db() {
@@ -65,7 +63,7 @@ async function decide(page: import("@playwright/test").Page, vendorId: number, b
   await dialog.getByRole("button", { name: confirm }).click();
 }
 
-test.fail("QA4-ADM-1: unsuspending a changes-requested listing keeps the admin's change request note", async ({ page, browser }, testInfo) => {
+test("QA4-ADM-1: unsuspending a changes-requested listing keeps the admin's change request note", async ({ page, browser }, testInfo) => {
   const tag = runTag(testInfo) + Math.random().toString(36).slice(2, 6);
   const { creds, userId, vendorId } = await makePendingListing(tag);
   try {
@@ -79,9 +77,9 @@ test.fail("QA4-ADM-1: unsuspending a changes-requested listing keeps the admin's
     await expect(page.getByText("Suspension lifted.")).toBeVisible();
     await page.reload();
     await expect(page.locator("main")).toContainText("changes requested");
-    // Bug: lib/admin/vendors.ts unsuspend sets status_reason = NULL even when it
-    // restores changes_requested (or rejected), so the note is gone for both the
-    // admin page and the vendor home ("Our team asked for a few changes" + nothing).
+    // QA-085: unsuspend used to set status_reason = NULL even when it restored
+    // changes_requested (or rejected), so the note was gone for the admin page
+    // and the vendor home ("Our team asked for a few changes" + nothing).
     await expect(page.locator("main")).toContainText(note);
 
     const vendor = await browser.newPage();
@@ -97,29 +95,36 @@ test.fail("QA4-ADM-1: unsuspending a changes-requested listing keeps the admin's
   }
 });
 
-test.fail("QA4-ADM-2: at 390px the active admin tab is scrolled into view", async ({ page }, testInfo) => {
+test("QA4-ADM-2: at 390px the active admin tab is scrolled into view", async ({ page }, testInfo) => {
   await page.setViewportSize({ width: 390, height: 844 });
   await loginAsAdmin(page, testInfo);
   for (const url of ["/admin/media?tab=hidden", "/admin/vendors?status=suspended", "/admin/vendors?status=all"]) {
     await page.goto(url);
     const active = page.locator("main [aria-current=page]").last();
-    const box = await active.boundingBox();
-    // Observed: 'Hidden by Vela' left=494, 'Suspended' left=582, 'All' left=944 in a 390px viewport.
-    expect(box!.x + box!.width, `${url} active tab right edge`).toBeLessThanOrEqual(390);
+    // Was: 'Hidden by Vela' left=494, 'Suspended' left=582, 'All' left=944 in a 390px viewport.
+    // The strip scrolls after hydration, so poll.
+    await expect
+      .poll(async () => {
+        const box = await active.boundingBox();
+        return box && box.x >= 0 && box.x + box.width <= 390;
+      }, { message: `${url} active tab is inside the viewport` })
+      .toBe(true);
   }
 });
 
-test.fail("QA4-ADM-3: the Verified badge control's accessible name includes its visible label", async ({ page }, testInfo) => {
+test("QA4-ADM-3: the Verified badge control's accessible name includes its visible label", async ({ page }, testInfo) => {
   await loginAsAdmin(page, testInfo);
   await page.goto("/admin/vendors?status=approved");
   await page.locator("main a[href^='/admin/vendors/']").first().click();
-  // The visible text is 'Mark verified' / 'Remove badge' but aria-label is
-  // 'Verified business badge' (WCAG 2.5.3 label in name): voice control users
-  // saying "click Mark verified" get nothing.
-  await expect(page.getByRole("switch", { name: /Mark verified|Remove badge/ })).toHaveCount(1);
+  // QA-098: the visible text was 'Mark verified' / 'Remove badge' but the
+  // aria-label was 'Verified business badge' (WCAG 2.5.3 label in name), so
+  // voice control users saying "click Mark verified" got nothing. It is now a
+  // plain action button named by its visible text.
+  await expect(page.getByRole("button", { name: /^(Mark verified|Remove badge)$/ })).toHaveCount(1);
+  await expect(page.getByRole("switch")).toHaveCount(0);
 });
 
-test.fail("QA4-ADM-4: unhiding a review tells the vendor, like hiding it does", async ({ page }, testInfo) => {
+test("QA4-ADM-4: unhiding a review tells the vendor, like hiding it does", async ({ page }, testInfo) => {
   const tag = runTag(testInfo) + Math.random().toString(36).slice(2, 6);
   const { userId, vendorId } = await makePendingListing(tag);
   const c = db();
@@ -155,7 +160,7 @@ test.fail("QA4-ADM-4: unhiding a review tells the vendor, like hiding it does", 
   }
 });
 
-test.fail("QA4-ADM-5: the forgot and reset password pages have a main landmark", async ({ page }) => {
+test("QA4-ADM-5: the forgot and reset password pages have a main landmark", async ({ page }) => {
   for (const url of ["/forgot-password", "/reset-password?token=qa4-invalid"]) {
     await page.goto(url);
     // /login and /signup render <main>; these two use a plain <div>.
