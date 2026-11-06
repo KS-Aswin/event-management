@@ -43,7 +43,8 @@ export const VENDOR_NAV: NavItem[] = [
   { href: "/vendor/leads", label: "Leads", icon: "leads", tab: true },
   { href: "/vendor/offerings", label: "Offerings & packages", short: "Offerings", icon: "offerings", tab: true, also: ["/vendor/packages"] },
   { href: "/vendor/media", label: "Media", icon: "media", tab: true },
-  { href: "/vendor/profile", label: "Profile & business", short: "Profile", icon: "profile", also: ["/vendor/areas", "/vendor/documents"] },
+  { href: "/vendor/profile", label: "Profile & business", short: "Profile", icon: "profile", also: ["/vendor/areas"] },
+  { href: "/vendor/documents", label: "Business documents", short: "Documents", icon: "audit" },
   { href: "/vendor/reviews", label: "Reviews", icon: "reviews" },
   { href: "/vendor/settings", label: "Settings", icon: "settings" },
 ];
@@ -84,6 +85,7 @@ export const ADMIN_NAV: NavItem[] = [
   { href: ADMIN_HOME, label: "Today", icon: "home", exact: true },
   { href: "/admin/vendors", label: "Vendors", icon: "vendors" },
   { href: "/admin/media", label: "Media", icon: "media" },
+  { href: "/admin/documents", label: "Documents", icon: "audit" },
   { href: "/admin/reviews", label: "Reviews", icon: "reviews" },
   { href: "/admin/taxonomy", label: "Taxonomy", icon: "taxonomy" },
   { href: "/admin/taxonomy/custom", label: "Custom offerings", icon: "custom" },

@@ -1,8 +1,8 @@
 import { requireAdmin } from "@/app/api/_lib/auth";
 import { adminError, adminJson } from "@/lib/admin/http";
-import { countVendorTabs, listAdminVendors, parseVendorTab } from "@/lib/admin/vendors";
+import { countVendorTabs, listAdminVendors, parseCreatedFilter, parseVendorTab } from "@/lib/admin/vendors";
 
-// GET /api/admin/vendors?status=pending|rereview|...|all&q=&district=&category=&page=
+// GET /api/admin/vendors?status=pending|rereview|...|all&q=&district=&category=&created=7d|30d|90d&documents=pending&page=
 // Queue and search with duplicate hints (PRODUCT_PLAN 6 "Admin").
 
 function posInt(v: string | null): number | undefined {
@@ -15,7 +15,8 @@ export async function GET(req: Request) {
   if (auth instanceof Response) return auth;
   try {
     const sp = new URL(req.url).searchParams;
-    const tab = parseVendorTab(sp.get("status") ?? "pending");
+    // ?rereview=1 is the Today tile's shortcut for the re-review tab.
+    const tab = parseVendorTab(sp.get("rereview") === "1" ? "rereview" : (sp.get("status") ?? "pending"));
     const page = posInt(sp.get("page")) ?? 1;
     const limit = Math.min(posInt(sp.get("limit")) ?? 50, 100);
     const [list, counts] = await Promise.all([
@@ -24,6 +25,8 @@ export async function GET(req: Request) {
         q: sp.get("q") ?? undefined,
         districtId: posInt(sp.get("district")),
         categoryId: posInt(sp.get("category")),
+        createdWithinDays: parseCreatedFilter(sp.get("created"))?.days,
+        docsPending: sp.get("documents") === "pending",
         limit,
         offset: (page - 1) * limit,
       }),

@@ -7,6 +7,7 @@
 import { pool, escapeLike, type VendorRecord, type VendorStatus } from "@/lib/db";
 import { assetUrls } from "@/lib/media/repo";
 import { audit } from "./audit";
+import { hasVerifiedDocument } from "./documents";
 import { notify } from "./notify";
 import { HttpError, withTransaction, type TxClient } from "./tx";
 
@@ -58,6 +59,7 @@ export interface AdminVendorRow {
   rereview_fields: string[];
   status_reason: string | null;
   pending_media: number;
+  pending_documents: number;
   duplicates: DuplicateHint[];
 }
 
@@ -66,8 +68,23 @@ export interface VendorListFilters {
   q?: string;
   districtId?: number;
   categoryId?: number;
+  /** Listings created within the last N days (the "Created" filter). */
+  createdWithinDays?: number;
+  /** Only listings with a vendor document waiting for review (Today "Documents" tile). */
+  docsPending?: boolean;
   limit?: number;
   offset?: number;
+}
+
+export const CREATED_FILTERS = [
+  { key: "7d", label: "Last 7 days", days: 7 },
+  { key: "30d", label: "Last 30 days", days: 30 },
+  { key: "90d", label: "Last 90 days", days: 90 },
+] as const;
+
+export function parseCreatedFilter(v: unknown): { key: string; days: number } | null {
+  const f = CREATED_FILTERS.find((x) => x.key === v);
+  return f ? { key: f.key, days: f.days } : null;
 }
 
 // Last 10 digits of a phone number (Indian mobile), NULL when empty.
@@ -121,6 +138,13 @@ function listWhere(f: VendorListFilters, values: unknown[]): string[] {
       `(v.primary_category_id = $${values.length} OR EXISTS (SELECT 1 FROM vendor_categories vc WHERE vc.vendor_id = v.id AND vc.category_id = $${values.length}))`
     );
   }
+  if (f.createdWithinDays && Number.isInteger(f.createdWithinDays) && f.createdWithinDays > 0) {
+    values.push(f.createdWithinDays);
+    where.push(`v.created_at >= now() - make_interval(days => $${values.length}::int)`);
+  }
+  if (f.docsPending) {
+    where.push("EXISTS (SELECT 1 FROM vendor_documents vd WHERE vd.vendor_id = v.id AND vd.status = 'pending')");
+  }
   const q = (f.q ?? "").trim().slice(0, 100);
   if (q) {
     const parts: string[] = [];
@@ -171,6 +195,7 @@ export async function listAdminVendors(f: VendorListFilters): Promise<{ rows: Ad
               v.submitted_at, v.created_at, v.updated_at, v.verified_at, v.rereview_required, v.rereview_fields,
               v.status_reason,
               (SELECT COUNT(*)::int FROM media_assets m WHERE m.vendor_id = v.id AND m.status = 'pending_review') AS pending_media,
+              (SELECT COUNT(*)::int FROM vendor_documents vd WHERE vd.vendor_id = v.id AND vd.status = 'pending') AS pending_documents,
               dup.duplicates
        ${from}
        ${DUPLICATES_LATERAL}
@@ -259,6 +284,8 @@ export interface AdminVendorDetail {
     expires_at: string | null;
     note: string | null;
     created_at: string;
+    /** Verified and not past its expiry (India date): counts for the Verified badge. */
+    valid: boolean;
   }[];
   statusEvents: { id: number; from_status: string; to_status: string; reason: string | null; changed_by_name: string | null; created_at: string }[];
   auditTrail: {
@@ -323,7 +350,8 @@ export async function getAdminVendorDetail(id: number): Promise<AdminVendorDetai
       [id]
     ),
     pool.query<AdminVendorDetail["documents"][number]>(
-      `SELECT id, doc_type, number, status, expires_at, note, created_at
+      `SELECT id, doc_type, number, status, expires_at, note, created_at,
+              (status = 'verified' AND (expires_at IS NULL OR expires_at >= (now() AT TIME ZONE 'Asia/Kolkata')::date)) AS valid
        FROM vendor_documents WHERE vendor_id = $1 ORDER BY created_at DESC`,
       [id]
     ),
@@ -605,6 +633,9 @@ export async function setVendorVerified(actorId: number, vendorId: number, verif
     if (verified && v.status !== "approved") {
       throw new HttpError(409, "Approve the listing before giving it the Verified badge.", "NOT_APPROVED");
     }
+    if (verified && !(await hasVerifiedDocument(client, vendorId))) {
+      throw new HttpError(409, "Verify at least one business document before giving the Verified badge.", "NO_VERIFIED_DOCUMENT");
+    }
     const upd = await client.query<VendorRow>(
       verified
         ? "UPDATE vendors SET verified_at = now(), verified_by = $2, updated_at = now() WHERE id = $1 RETURNING *"
@@ -729,11 +760,49 @@ export async function editVendor(actorId: number, vendorId: number, patch: Recor
 // Assign owner / claim (P1-11)
 // ---------------------------------------------------------------------------
 
+export interface ClaimCandidate {
+  id: number;
+  name: string;
+  email: string;
+  phone_e164: string | null;
+  created_at: string;
+}
+
+/**
+ * Vendor accounts that could take an unowned listing: role vendor, active,
+ * and no listing of their own (one listing per account). Search by name,
+ * email or phone; newest sign-ups first.
+ */
+export async function searchClaimCandidates(q: string, limit = 10): Promise<ClaimCandidate[]> {
+  const term = q.trim().slice(0, 100);
+  const values: unknown[] = [];
+  const where = ["u.role = 'vendor'", "u.status = 'active'", "NOT EXISTS (SELECT 1 FROM vendors o WHERE o.owner_id = u.id)"];
+  if (term) {
+    values.push(`%${escapeLike(term)}%`);
+    const parts = [`u.name ILIKE $${values.length}`, `u.email ILIKE $${values.length}`];
+    const digits = term.replace(/\D/g, "");
+    if (digits.length >= 5) {
+      values.push(`%${digits}%`);
+      parts.push(`regexp_replace(COALESCE(u.phone_e164, ''), '\\D', '', 'g') LIKE $${values.length}`);
+    }
+    where.push(`(${parts.join(" OR ")})`);
+  }
+  values.push(Math.min(Math.max(limit, 1), 25));
+  const r = await pool.query<ClaimCandidate>(
+    `SELECT u.id, u.name, u.email, u.phone_e164, u.created_at FROM users u
+     WHERE ${where.join(" AND ")}
+     ORDER BY u.created_at DESC, u.id DESC LIMIT $${values.length}`,
+    values
+  );
+  return r.rows;
+}
+
 export async function assignVendorOwner(
   actorId: number,
   vendorId: number,
   target: { userId?: number; email?: string },
-  ip?: string | null
+  ip?: string | null,
+  reason: string | null = null
 ) {
   return withTransaction(async (client) => {
     const v = await lockVendor(client, vendorId);
@@ -766,6 +835,7 @@ export async function assignVendorOwner(
       entityId: vendorId,
       before: { owner_id: null },
       after: { owner_id: user.id, owner_email: user.email },
+      reason,
       ip,
     });
     return { vendor: upd.rows[0], owner: { id: user.id, email: user.email, name: user.name } };

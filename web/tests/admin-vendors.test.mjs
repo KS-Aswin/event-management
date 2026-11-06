@@ -224,6 +224,28 @@ test("verified badge: only via admin, only for approved listings, shown publicly
   await request("/api/vendor/profile", { method: "PATCH", cookie: v.cookie, body: { verified_at: new Date().toISOString(), verifiedAt: true } });
   assert.equal((await db().query("SELECT verified_at FROM vendors WHERE id = $1", [v.listing.id])).rows[0].verified_at, null);
 
+  // No verified business document yet: the badge is refused, nothing audited.
+  const noDocMark = await auditWatermark();
+  const noDoc = await request(`/api/admin/vendors/${v.listing.id}/verify`, { method: "POST", cookie: admin.cookie, body: { verified: true } });
+  assert.equal(noDoc.status, 409);
+  assert.equal(noDoc.data.code, "NO_VERIFIED_DOCUMENT");
+  assert.equal(await countAudit({ entityType: "vendor", entityId: v.listing.id, afterId: noDocMark }), 0);
+  // An expired verified document doesn't count either.
+  await db().query(
+    `INSERT INTO vendor_documents (vendor_id, doc_type, storage_driver, storage_key, mime, bytes, status, expires_at)
+     VALUES ($1, 'trade_licence', 'local', 'private/admtest-exp-${RUN_ID}.pdf', 'application/pdf', 100, 'verified', CURRENT_DATE - 1)`,
+    [v.listing.id]
+  );
+  assert.equal(
+    (await request(`/api/admin/vendors/${v.listing.id}/verify`, { method: "POST", cookie: admin.cookie, body: { verified: true } })).status,
+    409
+  );
+  await db().query(
+    `INSERT INTO vendor_documents (vendor_id, doc_type, storage_driver, storage_key, mime, bytes, status)
+     VALUES ($1, 'gst', 'local', 'private/admtest-ok-${RUN_ID}.pdf', 'application/pdf', 100, 'verified')`,
+    [v.listing.id]
+  );
+
   const mark = await auditWatermark();
   const r = await request(`/api/admin/vendors/${v.listing.id}/verify`, { method: "POST", cookie: admin.cookie, body: { verified: true } });
   assert.equal(r.status, 200);
@@ -319,4 +341,96 @@ test("per-item media decision: reject needs a reason, vendor sees it; approve sk
     rows.rows.map((x) => [x.status, x.status_reason]),
     [["rejected", "Contains a phone number."], ["approved", null]]
   );
+});
+
+test("list filters: Today tile params (rereview=1, documents=pending), created date, district", async () => {
+  const fresh = await createListing(null, { name: `Admtest Filter Fresh ${RUN_ID}`, district: "Kollam" });
+  const old = await createListing(null, { name: `Admtest Filter Old ${RUN_ID}`, district: "Kollam" });
+  const rr = await createListing(null, { name: `Admtest Filter Rereview ${RUN_ID}`, status: "approved" });
+  unowned.push(fresh.id, old.id, rr.id);
+  await db().query("UPDATE vendors SET created_at = now() - interval '40 days' WHERE id = $1", [old.id]);
+  await db().query("UPDATE vendors SET rereview_required = true, rereview_fields = '{name}', rereview_requested_at = now() WHERE id = $1", [rr.id]);
+  await db().query(
+    `INSERT INTO vendor_documents (vendor_id, doc_type, storage_driver, storage_key, mime, bytes)
+     VALUES ($1, 'gst', 'local', 'private/admtest-${RUN_ID}.pdf', 'application/pdf', 100)`,
+    [fresh.id]
+  );
+  const q = encodeURIComponent(`Admtest Filter`);
+  const ids = (r) => r.data.vendors.map((v) => v.id);
+
+  const recent = await request(`/api/admin/vendors?status=pending&q=${q}&created=30d`, { cookie: admin.cookie });
+  assert.equal(recent.status, 200);
+  assert.ok(ids(recent).includes(fresh.id) && !ids(recent).includes(old.id), "created=30d excludes the 40-day-old listing");
+  const any = await request(`/api/admin/vendors?status=pending&q=${q}&created=bogus`, { cookie: admin.cookie });
+  assert.ok(ids(any).includes(old.id), "an unknown created value is ignored");
+
+  const docs = await request(`/api/admin/vendors?status=all&q=${q}&documents=pending`, { cookie: admin.cookie });
+  assert.deepEqual(ids(docs), [fresh.id], "documents=pending");
+  assert.equal(docs.data.vendors[0].pending_documents, 1);
+
+  const re = await request(`/api/admin/vendors?rereview=1&q=${q}`, { cookie: admin.cookie });
+  assert.equal(re.data.status, "rereview");
+  assert.deepEqual(ids(re), [rr.id], "rereview=1 opens the re-review tab");
+
+  const kollam = (await db().query("SELECT id FROM districts WHERE name = 'Kollam' AND state = 'Kerala'")).rows[0].id;
+  const byDistrict = await request(`/api/admin/vendors?status=all&q=${q}&district=${kollam}`, { cookie: admin.cookie });
+  assert.deepEqual(ids(byDistrict).sort(), [fresh.id, old.id].sort());
+
+  // The admin queue page itself renders with the same params.
+  for (const qsx of ["?status=pending", "?rereview=1", "?status=changes_requested", "?documents=pending", "?status=approved", `?status=all&q=${q}&created=7d`]) {
+    const page = await request(`/admin/vendors${qsx}`, { cookie: admin.cookie });
+    assert.equal(page.status, 200, `/admin/vendors${qsx}`);
+    assert.ok(!page.text.includes("Coming soon"), "real queue page");
+  }
+  const pageRe = await request(`/admin/vendors?rereview=1&q=${q}`, { cookie: admin.cookie });
+  assert.ok(pageRe.text.includes(`Admtest Filter Rereview ${RUN_ID}`));
+  assert.ok(!pageRe.text.includes(`Admtest Filter Fresh ${RUN_ID}`));
+});
+
+test("claim candidates: only active vendor accounts without a listing; admin only", async () => {
+  const l = await createListing(null, { name: `Admtest Cand ${RUN_ID}` });
+  unowned.push(l.id);
+  const free = await makeVendor(P);
+  const owner = await vendorWithListing("draft");
+  const path = (q) => `/api/admin/vendors/${l.id}/owner?q=${encodeURIComponent(q)}`;
+  assert.equal((await request(path(free.email))).status, 401);
+  assert.equal((await request(path(free.email), { cookie: vendor.cookie })).status, 403);
+  assert.equal((await request(path(free.email), { cookie: customer.cookie })).status, 403);
+
+  const r = await request(path(free.email), { cookie: admin.cookie });
+  assert.equal(r.status, 200);
+  assert.deepEqual(r.data.users.map((u) => u.id), [free.userId]);
+  assert.equal((await request(path(owner.email), { cookie: admin.cookie })).data.users.length, 0, "owner of a listing excluded");
+  assert.equal((await request(path(customer.email), { cookie: admin.cookie })).data.users.length, 0, "customer excluded");
+  assert.equal((await request(path(admin.email), { cookie: admin.cookie })).data.users.length, 0, "admin excluded");
+
+  // Assign with a note: the note lands in the audit row.
+  const mark = await auditWatermark();
+  const a = await request(`/api/admin/vendors/${l.id}/owner`, {
+    method: "POST",
+    cookie: admin.cookie,
+    body: { userId: free.userId, reason: "Owner called and proved ownership." },
+  });
+  assert.equal(a.status, 200, JSON.stringify(a.data));
+  const rows = await findAudit({ action: "vendor.assign_owner", entityId: l.id, afterId: mark });
+  assert.equal(rows.length, 1);
+  assert.equal(rows[0].reason, "Owner called and proved ownership.");
+  assert.equal((await request(path(free.email), { cookie: admin.cookie })).data.users.length, 0, "no longer a candidate");
+  const page = await request("/vendor", { cookie: free.cookie });
+  assert.equal(page.status, 200);
+  assert.ok(page.text.includes(`Admtest Cand ${RUN_ID}`), "the vendor home shows the claimed listing");
+});
+
+test("detail page renders for an admin with history, media and actions", async () => {
+  const v = await vendorWithListing("pending", { name: `Admtest Detail ${RUN_ID}` });
+  await insertMedia(v.listing.id, "pending_review", 1);
+  const page = await request(`/admin/vendors/${v.listing.id}`, { cookie: admin.cookie });
+  assert.equal(page.status, 200);
+  for (const s of [`Admtest Detail ${RUN_ID}`, "Decision", "Status history", "Admin history", "Edit listing", `/admin/documents?vendor=${v.listing.id}`]) {
+    assert.ok(page.text.includes(s), `detail page shows ${s}`);
+  }
+  const missing = await request("/admin/vendors/999999999", { cookie: admin.cookie });
+  assert.ok(missing.status === 404 || /couldn(&#x27;|&apos;|')t find that page/.test(missing.text));
+  const asVendor = await request(`/admin/vendors/${v.listing.id}`, { cookie: v.cookie });
+  assert.ok(!asVendor.text.includes("Status history"), "vendor cannot see the admin page");
 });
