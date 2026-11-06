@@ -51,14 +51,16 @@ export default async function EventTypePage({ params }: Props) {
   const others = taxonomy.eventTypes.filter((e) => e.slug !== eventType.slug && e.slug !== "other");
 
   const section = (items: typeof bundle) => (
-    <ul className="grid gap-3 sm:gap-4 sm:grid-cols-2 lg:grid-cols-3">
+    // grid-cols-1 (minmax(0,1fr)) + min-w-0: a card never grows past the
+    // screen for a long vendor name; the name truncates instead (QA-011).
+    <ul className="grid grid-cols-1 gap-3 sm:gap-4 sm:grid-cols-2 lg:grid-cols-3">
       {items.map((b) => {
         const t = top.get(b.category_id);
         const searchHref = `/search?category=${encodeURIComponent(b.category.name)}&eventType=${encodeURIComponent(eventType.slug)}`;
         return (
-          <li key={b.category_id} className="card flex flex-col p-4 sm:p-5">
+          <li key={b.category_id} className="card flex flex-col min-w-0 p-4 sm:p-5">
             <div className="flex items-baseline justify-between gap-3">
-              <h3 className="text-title font-semibold">
+              <h3 className="min-w-0 break-words text-title font-semibold">
                 <Link href={`/c/${b.category.slug}`} className="inline-flex items-center min-h-11 hover:text-accent hover:underline underline-offset-4">
                   {b.category.display_name}
                 </Link>
@@ -68,7 +70,7 @@ export default async function EventTypePage({ params }: Props) {
               </span>
             </div>
             {t && t.vendors.length > 0 ? (
-              <div className="mt-3 flex flex-col gap-1">
+              <div className="mt-3 flex flex-col gap-1 min-w-0">
                 {t.vendors.map((v) => (
                   <VendorMiniCard key={v.id} v={v} media={media.get(v.id)} />
                 ))}

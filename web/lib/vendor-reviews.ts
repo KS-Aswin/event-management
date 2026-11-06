@@ -267,3 +267,25 @@ export async function customerHasEnquiry(vendorId: number, customerId: number): 
   const r = await pool.query("SELECT 1 FROM quote_requests WHERE vendor_id = $1 AND customer_id = $2 LIMIT 1", [vendorId, customerId]);
   return (r.rowCount ?? 0) > 0;
 }
+
+export interface ReviewBreakdown {
+  /** Visible (not hidden) reviews on Vela. */
+  count: number;
+  /** Count per star, 5 down to 1. */
+  stars: { star: number; count: number }[];
+}
+
+/**
+ * The star breakdown of a vendor's visible reviews, counted in the database
+ * (not from the first page of reviews the profile lists), so it always adds
+ * up to the review count shown next to it (QA-010).
+ */
+export async function reviewBreakdown(vendorId: number): Promise<ReviewBreakdown> {
+  const r = await pool.query<{ rating: number; n: number }>(
+    "SELECT rating, count(*)::int AS n FROM vendor_reviews WHERE vendor_id = $1 AND hidden_at IS NULL GROUP BY rating",
+    [vendorId]
+  );
+  const by = new Map(r.rows.map((x) => [Number(x.rating), x.n]));
+  const stars = [5, 4, 3, 2, 1].map((star) => ({ star, count: by.get(star) ?? 0 }));
+  return { count: stars.reduce((a, s) => a + s.count, 0), stars };
+}

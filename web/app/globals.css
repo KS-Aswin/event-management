@@ -37,7 +37,10 @@
   --color-accent: #0f6d52;
   --color-accent-hover: #0b5940;
   --color-accent-tint: #e6f2ee;
-  --color-gold: #c9a227;
+  /* Rating stars and gold accents: >= 3:1 against white, #f6f7f8 and the
+     accent tint, as WCAG 1.4.11 asks of meaningful graphics (QA-026; the old
+     #c9a227 was 2.3:1). */
+  --color-gold: #a8841a;
   /* Gold dark enough for text on white (AA 4.5:1). */
   --color-gold-ink: #876a0c;
   --color-ink-soft: #5f6368;

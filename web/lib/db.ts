@@ -901,9 +901,11 @@ export async function createVendorReview(params: {
 
 /**
  * Recompute a vendor's rating and review count from its real reviews plus
- * the seeded/imported baseline kept in seed_rating/seed_reviews_count
- * (migration 003), so the first real review adds to "4.7 from 210 reviews"
- * instead of replacing it. New vendors have a 0/0 baseline. Reviews hidden
+ * the imported baseline kept in seed_rating/seed_reviews_count (migration
+ * 003). Every vendor has a 0/0 baseline since migration 016 (QA-010: invented
+ * seed aggregates contradicted the reviews shown on the profile), so this is
+ * the plain average of the visible reviews; the baseline stays only for a
+ * future, verifiable review import. Reviews hidden
  * by an admin (hidden_at set, P1-5) do not count. Exported for the admin
  * moderation code (lib/admin/moderation.ts), which calls it in its own txn.
  */
@@ -1892,17 +1894,25 @@ export async function findPackageItems(packageIds: number[]): Promise<PackageIte
 }
 
 /**
- * vendors.price / price_label cache = the cheapest active, priced,
- * separately-sellable unit or package (not incomplete, not hidden). With none,
- * price 0 and "Price on request". Called after every offering write.
+ * vendors.price / price_label cache = THE "from" price of a vendor, shown on
+ * every surface (search, profile, /e, /my; QA-023): the cheapest active,
+ * priced, separately-sellable unit or package (not incomplete, not hidden) in
+ * the vendor's main category, else the cheapest in any category. So a venue
+ * reads "₹1,50,000 per slot" (its hall), not "₹600 per plate" (its catering
+ * add-on). With none, price 0 and "Price on request". Called after every
+ * offering write; migration 016 refreshed existing rows with the same rule.
  */
 export async function recomputeVendorPrice(vendorId: number, client: Queryable = pool): Promise<void> {
   const r = await client.query<{ price_from: number; price_unit: string; unit_label: string | null }>(
-    `SELECT price_from, price_unit, unit_label FROM services
-     WHERE vendor_id = $1 AND active AND hidden_reason IS NULL AND NOT incomplete
-       AND kind IN ('unit','package') AND sale_mode = 'separate'
-       AND price_mode <> 'on_request' AND price_from > 0
-     ORDER BY price_from, id LIMIT 1`,
+    `SELECT s.price_from, s.price_unit, s.unit_label
+       FROM services s JOIN vendors v ON v.id = s.vendor_id
+      WHERE s.vendor_id = $1 AND s.active AND s.hidden_reason IS NULL AND NOT s.incomplete
+        AND s.kind IN ('unit','package') AND s.sale_mode = 'separate'
+        AND s.price_mode <> 'on_request' AND s.price_from > 0
+      ORDER BY COALESCE(s.category_id = COALESCE(v.primary_category_id,
+                 (SELECT c.id FROM categories c WHERE c.name = v.category)), false) DESC,
+               s.price_from, s.id
+      LIMIT 1`,
     [vendorId]
   );
   const best = r.rows[0] ?? null;

@@ -492,17 +492,13 @@ try {
     );
   }
 
-  // Seed baseline (migration 003): the part of rating/reviews_count not backed
-  // by vendor_reviews rows, so the first real review adds to it.
+  // QA-010 / QA-023: no invented aggregates. Rating and review count come from
+  // the seeded review rows only (no seed baseline), and price/price_label from
+  // the cheapest main-category offering. Migration 016 holds that SQL and is
+  // idempotent, so a re-seed cannot bring back "4.9 from 189 reviews" or a
+  // per-plate add-on as the "from" price.
   await client.query(
-    `UPDATE vendors v SET
-       seed_reviews_count = GREATEST(v.reviews_count - r.n, 0),
-       seed_rating = CASE WHEN v.reviews_count - r.n > 0
-         THEN LEAST(5, GREATEST(0, (v.rating * v.reviews_count - r.total) / (v.reviews_count - r.n)))
-         ELSE 0 END
-     FROM (SELECT v2.id, count(rv.id)::int AS n, COALESCE(sum(rv.rating), 0) AS total
-           FROM vendors v2 LEFT JOIN vendor_reviews rv ON rv.vendor_id = v2.id GROUP BY v2.id) r
-     WHERE r.id = v.id`
+    readFileSync(path.join(path.dirname(fileURLToPath(import.meta.url)), "migrations", "016_qa1_public.sql"), "utf8")
   );
 
   await client.query("COMMIT");

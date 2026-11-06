@@ -114,9 +114,9 @@ export interface RecommendedVendor {
   rating: string;
   reviews_count: number;
   verified: boolean;
-  from_price: number | null;
-  from_unit: string | null;
-  from_unit_label: string | null;
+  /** The vendor's one "from" price, as on search and the profile (QA-023). */
+  price: number;
+  price_label: string;
   cover_media_id: number | null;
   cover_image_url: string | null;
   status: "approved";
@@ -135,15 +135,8 @@ export async function recommendedVendors(
   const limit = Math.min(Math.max(opts.limit ?? 6, 1), 12);
   const r = await pool.query<RecommendedVendor>(
     `SELECT v.id, v.name, v.category, v.location, v.rating, v.reviews_count, (v.verified_at IS NOT NULL) AS verified,
-            p.price_from AS from_price, p.price_unit AS from_unit, p.unit_label AS from_unit_label,
-            v.cover_media_id, v.cover_image_url, v.status, v.published
+            v.price, v.price_label, v.cover_media_id, v.cover_image_url, v.status, v.published
        FROM vendors v
-       LEFT JOIN LATERAL (
-         SELECT s.price_from, s.price_unit, s.unit_label FROM services s
-          WHERE s.vendor_id = v.id AND s.active AND s.kind IN ('unit','package') AND s.sale_mode = 'separate'
-            AND s.hidden_reason IS NULL AND NOT s.incomplete AND s.price_mode <> 'on_request' AND s.price_from > 0
-          ORDER BY s.price_from, s.id LIMIT 1
-       ) p ON true
       WHERE v.status = 'approved' AND v.published
         AND v.owner_id IS DISTINCT FROM $1
         AND NOT EXISTS (SELECT 1 FROM favorites f WHERE f.customer_id = $1 AND f.vendor_id = v.id)

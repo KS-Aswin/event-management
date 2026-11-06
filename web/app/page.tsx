@@ -5,6 +5,7 @@ import type { Taxonomy } from "@/lib/db";
 import { getTaxonomy } from "@/lib/taxonomy";
 import { VendorTile } from "@/lib/vendorVisuals";
 import HomeSearch from "./home-search";
+import { reviewCountLabel } from "@/lib/vendor-display";
 import { getSession } from "@/lib/session";
 
 export const metadata: Metadata = {
@@ -140,9 +141,9 @@ export default async function Home() {
               <span aria-hidden="true">&rarr;</span>
             </Link>
           </div>
-          <ul className="grid gap-3 sm:gap-4 sm:grid-cols-2 lg:grid-cols-3">
+          <ul className="grid grid-cols-1 gap-3 sm:gap-4 sm:grid-cols-2 lg:grid-cols-3">
             {topRated.map((v) => (
-              <li key={v.id}>
+              <li key={v.id} className="min-w-0">
                 <Link
                   href={`/vendors/${v.id}`}
                   className="card card-link flex gap-4 items-center p-3 sm:p-3.5 group h-full"
@@ -154,8 +155,14 @@ export default async function Home() {
                       {v.category} · {v.location}
                     </div>
                     <div className="text-[13px] mt-1 tabular-nums">
-                      <span className="text-gold" aria-hidden="true">★</span> <span className="font-semibold">{v.rating}</span>{" "}
-                      <span className="text-ink-soft">({v.reviews_count} reviews)</span>
+                      {v.reviews_count > 0 ? (
+                        <>
+                          <span className="text-gold" aria-hidden="true">★</span> <span className="font-semibold">{v.rating}</span>{" "}
+                          <span className="text-ink-soft">({reviewCountLabel(v.reviews_count)})</span>
+                        </>
+                      ) : (
+                        <span className="text-ink-soft">New on Vela</span>
+                      )}
                     </div>
                   </div>
                 </Link>

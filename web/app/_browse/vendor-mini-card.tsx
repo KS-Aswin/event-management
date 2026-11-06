@@ -2,14 +2,23 @@ import Link from "next/link";
 import type { BrowseVendor } from "@/lib/search";
 import type { CardMedia } from "@/app/search/card-media";
 import CardImage from "@/app/search/card-image";
+import { reviewCountLabel, vendorFromPrice } from "@/lib/vendor-display";
+
+/** The one "from" price (QA-023); the per-card fallback is only for callers that don't pass price_label yet. */
+function priceText(v: BrowseVendor): string | null {
+  if (v.price_label !== undefined) return vendorFromPrice(v);
+  if (v.from_price == null) return null;
+  const unit = v.from_unit_label || v.from_unit;
+  return `From ₹${v.from_price.toLocaleString("en-IN")}${unit ? ` / ${unit}` : ""}`;
+}
 
 /** Compact vendor row for the /e and /c browse pages. */
 export default function VendorMiniCard({ v, media }: { v: BrowseVendor; media?: CardMedia }) {
-  const unit = v.from_unit_label || v.from_unit;
+  const price = priceText(v);
   return (
     <Link
       href={`/vendors/${v.id}`}
-      className="group flex items-center gap-3 rounded-control p-2 -mx-2 min-h-11 hover:bg-surface-muted transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+      className="group flex items-center gap-3 min-w-0 rounded-control p-2 -mx-2 min-h-11 hover:bg-surface-muted transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
     >
       <CardImage
         src={media?.src ?? null}
@@ -31,18 +40,14 @@ export default function VendorMiniCard({ v, media }: { v: BrowseVendor; media?: 
           {v.reviews_count > 0 ? (
             <>
               {" · "}
-              <span className="text-gold" aria-hidden="true">★</span> {v.rating} ({v.reviews_count})
+              <span className="text-gold" aria-hidden="true">★</span> {v.rating}{" "}
+              <span className="sr-only">out of 5, </span>({reviewCountLabel(v.reviews_count)})
             </>
           ) : (
             " · New"
           )}
         </span>
-        {v.from_price != null && (
-          <span className="block text-[13px] font-semibold text-accent mt-0.5 tabular-nums">
-            From ₹{v.from_price.toLocaleString("en-IN")}
-            {unit ? ` / ${unit}` : ""}
-          </span>
-        )}
+        {price && <span className="block text-[13px] font-semibold text-accent mt-0.5 tabular-nums truncate">{price}</span>}
       </span>
     </Link>
   );

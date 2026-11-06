@@ -7,6 +7,7 @@
 
 import { useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useOptimistic, useRef, useState, useTransition, type ReactNode } from "react";
+import { trapTabKey } from "@/app/_components/focus-trap";
 
 export interface BudgetPreset {
   value: number;
@@ -44,8 +45,8 @@ export default function SearchFilters({
   resultLabel,
   mobileToolbar,
 }: {
-  /** Active category names from the DB taxonomy. */
-  categories: string[];
+  /** Active categories from the DB taxonomy: value = stable internal name (the URL value), label = display name. */
+  categories: { value: string; label: string }[];
   /** Kerala district names. */
   districts: string[];
   eventTypes: { slug: string; name: string }[];
@@ -88,7 +89,15 @@ export default function SearchFilters({
     (parseFloat(active.minRating) > 0 ? 1 : 0) +
     (active.verified ? 1 : 0);
 
-  // Sheet: Escape closes it, the page behind doesn't scroll, focus moves in.
+  // Closing the sheet, however it happens, hands focus back to "Filters".
+  function closeSheet() {
+    setMobileOpen(false);
+    toggleRef.current?.focus();
+  }
+
+  // Sheet (a modal dialog on phones, QA-027): Escape closes it, the page
+  // behind doesn't scroll, focus moves in and Tab stays inside. Widening the
+  // window to the desktop sidebar layout closes it.
   useEffect(() => {
     if (!mobileOpen) return;
     const mq = window.matchMedia("(max-width: 767.98px)");
@@ -102,10 +111,15 @@ export default function SearchFilters({
         toggleRef.current?.focus();
       }
     };
+    const onWiden = () => {
+      if (!mq.matches) setMobileOpen(false);
+    };
     document.addEventListener("keydown", onKey);
+    mq.addEventListener("change", onWiden);
     return () => {
       document.body.style.overflow = prev;
       document.removeEventListener("keydown", onKey);
+      mq.removeEventListener("change", onWiden);
     };
   }, [mobileOpen]);
 
@@ -124,7 +138,8 @@ export default function SearchFilters({
 
   function toggleCategory(category: string) {
     updateParams((params) => {
-      const current = params.getAll("category");
+      // The server's normalised list (a link may have used a slug or display name).
+      const current = active.categories;
       params.delete("category");
       const next = current.includes(category) ? current.filter((c) => c !== category) : [...current, category];
       next.forEach((c) => params.append("category", c));
@@ -151,17 +166,16 @@ export default function SearchFilters({
   const panel = (
     <>
       <div className="flex items-center justify-between gap-3 mb-3 md:mb-4 min-h-10">
-        <h2 className="text-[15px] font-semibold">Refine results</h2>
+        <h2 id="search-filters-title" className="text-[15px] font-semibold">
+          Refine results
+        </h2>
         <div className="flex items-center gap-1">
           <button type="button" onClick={clearAll} disabled={activeCount === 0} className="btn btn-ghost btn-sm disabled:invisible">
             Clear all
           </button>
           <button
             type="button"
-            onClick={() => {
-              setMobileOpen(false);
-              toggleRef.current?.focus();
-            }}
+            onClick={closeSheet}
             aria-label="Close filters"
             className="md:hidden inline-flex items-center justify-center w-11 h-11 -mr-2 rounded-full text-ink-soft hover:bg-surface-muted"
           >
@@ -175,7 +189,7 @@ export default function SearchFilters({
       <fieldset>
         <legend className="eyebrow mb-2.5">Category</legend>
         <div className="grid grid-cols-2 md:grid-cols-1 gap-2 md:gap-1.5">
-          {categories.map((c) => {
+          {categories.map(({ value: c, label }) => {
             const checked = active.categories.includes(c);
             return (
               <label
@@ -199,7 +213,7 @@ export default function SearchFilters({
                     </svg>
                   )}
                 </span>
-                {c}
+                {label}
               </label>
             );
           })}
@@ -408,10 +422,7 @@ export default function SearchFilters({
         <button
           type="button"
           className="btn btn-primary btn-block"
-          onClick={() => {
-            setMobileOpen(false);
-            toggleRef.current?.focus();
-          }}
+          onClick={closeSheet}
           aria-busy={pending}
         >
           {pending ? "Updating…" : `Show ${resultLabel}`}
@@ -448,7 +459,7 @@ export default function SearchFilters({
         <div
           aria-hidden="true"
           className="md:hidden fixed inset-0 z-40 bg-black/40"
-          onClick={() => setMobileOpen(false)}
+          onClick={closeSheet}
         />
       )}
 
@@ -456,7 +467,12 @@ export default function SearchFilters({
         id="search-filters-panel"
         ref={sheetRef}
         tabIndex={-1}
-        aria-label="Filters"
+        // Open on a phone it is a modal bottom sheet; on desktop a plain sidebar.
+        role={mobileOpen ? "dialog" : undefined}
+        aria-modal={mobileOpen ? true : undefined}
+        aria-labelledby={mobileOpen ? "search-filters-title" : undefined}
+        aria-label={mobileOpen ? undefined : "Filters"}
+        onKeyDown={mobileOpen ? trapTabKey : undefined}
         className={`${
           mobileOpen
             ? "fixed inset-x-0 bottom-0 z-50 max-h-[88dvh] overflow-y-auto overscroll-contain rounded-t-[20px] bg-surface px-4 pt-3 shadow-pop"

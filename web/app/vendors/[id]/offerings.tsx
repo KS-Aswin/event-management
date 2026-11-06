@@ -22,12 +22,14 @@ function Price({ o }: { o: OfferingView }) {
   return <div className="text-[15px] font-semibold text-accent sm:text-right">{o.priceText}</div>;
 }
 
-function UnitRow({ o, quote }: { o: OfferingView; quote?: (id: number) => ReactNode }) {
+function UnitRow({ o, quote, nested }: { o: OfferingView; quote?: (id: number) => ReactNode; nested: boolean }) {
+  // h4 under a category h3, else h3 straight under the section's h2 (QA-015: no skipped levels).
+  const Title = nested ? "h4" : "h3";
   return (
     <li className="p-4 sm:p-5" id={`offering-${o.id}`}>
       <div className="flex flex-col gap-1.5 sm:flex-row sm:items-start sm:justify-between sm:gap-4">
         <div className="min-w-0">
-          <h4 className="text-[15px] font-semibold">{o.title}</h4>
+          <Title className="text-[15px] font-semibold">{o.title}</Title>
           <div className="mt-1 flex flex-wrap gap-1.5">
             {o.separate ? <Badge tone="accent">Bookable separately</Badge> : <Badge tone="muted">Package only</Badge>}
             {o.guestRange ? <Badge tone="muted">{o.guestRange}</Badge> : null}
@@ -146,7 +148,7 @@ export default function OfferingsSection({
           {g.units.length ? (
             <ul className="divide-y divide-line overflow-hidden rounded-card border border-line">
               {g.units.map((u) => (
-                <UnitRow key={u.id} o={u} quote={quote} />
+                <UnitRow key={u.id} o={u} quote={quote} nested={multi} />
               ))}
             </ul>
           ) : null}
@@ -155,7 +157,7 @@ export default function OfferingsSection({
               <div className="mb-1.5 text-caption font-medium text-ink-soft">Included in our packages</div>
               <ul className="divide-y divide-line overflow-hidden rounded-card border border-dashed border-line-strong">
                 {g.packageOnly.map((u) => (
-                  <UnitRow key={u.id} o={u} />
+                  <UnitRow key={u.id} o={u} nested={multi} />
                 ))}
               </ul>
             </div>

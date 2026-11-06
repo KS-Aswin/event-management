@@ -2,6 +2,7 @@
 
 import { useEffect, useId, useRef, useState } from "react";
 import Link from "next/link";
+import { trapTabKey } from "@/app/_components/focus-trap";
 
 // Quote dialog v2 (P2-2): event type, date, time of day, guests, district,
 // venue type, food preference (caterers), budget band, the offerings asked
@@ -278,6 +279,8 @@ export default function QuoteButton({
         <dialog
           ref={dialogRef}
           aria-labelledby={titleId}
+          // Tab wraps inside the dialog instead of leaving for the browser chrome (QA-016).
+          onKeyDown={trapTabKey}
           onClose={() => {
             setOpen(false);
             setSent(null);

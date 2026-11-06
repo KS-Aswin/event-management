@@ -19,7 +19,8 @@ import FavoriteButton from "@/lib/favorite-button";
 import QuoteButton from "./quote-button";
 import ReviewForm from "./review-form";
 import ReportReview from "./report-review";
-import { customerHasEnquiry } from "@/lib/vendor-reviews";
+import { customerHasEnquiry, reviewBreakdown } from "@/lib/vendor-reviews";
+import { reviewCountLabel, vendorFromPrice } from "@/lib/vendor-display";
 import Gallery from "./gallery";
 import OfferingsSection from "./offerings";
 import VendorBeacon from "./vendor-beacon";
@@ -81,7 +82,7 @@ export async function generateMetadata({
     return { title: "Vendor", robots: { index: false, follow: false } };
   }
   const description =
-    vendor.about?.slice(0, 160) || `${vendor.category} in ${vendor.location}. ${vendor.price_label}.`;
+    vendor.about?.slice(0, 160) || `${vendor.category} in ${vendor.location}. ${vendorFromPrice(vendor) ?? "Price on request"}.`;
   return {
     title: `${vendor.name} — ${vendor.category} in ${vendor.location}`,
     description,
@@ -110,8 +111,9 @@ export default async function VendorProfilePage({
   const isOwnListing = session ? vendor.owner_id === session.userId : false;
   // Owner (and admin) preview also sees media still under review, badged.
   const preview = isOwnListing || session?.role === "admin";
-  const [reviews, media, offerings, eventTypes, districts, viewer] = await Promise.all([
+  const [reviews, breakdown, media, offerings, eventTypes, districts, viewer] = await Promise.all([
     findReviewsByVendor(vendorId),
+    reviewBreakdown(vendorId),
     loadProfileMedia(vendor, preview),
     loadProfileOfferings(vendorId),
     findEventTypes(),
@@ -130,11 +132,14 @@ export default async function VendorProfilePage({
   const languages = (vendor.languages ?? []).filter(Boolean);
   const loginHref = `/login?next=${encodeURIComponent(`/vendors/${vendorId}`)}`;
   const ratingNum = Number(vendor.rating);
-
-  const distribution = [5, 4, 3, 2, 1].map((star) => ({
-    star,
-    count: reviews.filter((r) => r.rating === star).length,
-  }));
+  const hasRating = vendor.reviews_count > 0 && ratingNum > 0;
+  // One price for this vendor everywhere (QA-023): the vendors.price_label cache.
+  const fromPrice = vendorFromPrice(vendor);
+  const priceText = fromPrice ?? "Price on request";
+  // vendors.rating/reviews_count are recomputed from the visible reviews
+  // (QA-010). Any older, imported ratings not listed here are called out
+  // instead of silently inflating the count next to the breakdown.
+  const importedCount = Math.max(0, vendor.reviews_count - breakdown.count);
 
   const viewerPhone = (viewer as { phone_e164?: string | null } | null)?.phone_e164 ?? "";
   const quoteProps = {
@@ -196,7 +201,7 @@ export default async function VendorProfilePage({
         name: vendor.name,
         description: vendor.about || undefined,
         image: media.coverUrl || media.logoUrl || undefined,
-        priceRange: vendor.price_label || undefined,
+        priceRange: fromPrice || undefined,
         address: {
           "@type": "PostalAddress",
           addressLocality: vendor.location,
@@ -234,7 +239,7 @@ export default async function VendorProfilePage({
     </span>
   );
 
-  const ratingRow = (
+  const ratingRow = hasRating ? (
     <div className="flex items-center gap-1.5 text-sm flex-wrap">
       <span role="img" aria-label={`Rated ${vendor.rating} out of 5`} className="text-gold text-base leading-none">
         ★
@@ -242,13 +247,14 @@ export default async function VendorProfilePage({
       <span aria-hidden="true" className="font-semibold">
         {vendor.rating}
       </span>{" "}
-      <span className="text-ink-soft">({vendor.reviews_count} reviews)</span>
+      <span className="text-ink-soft">({reviewCountLabel(vendor.reviews_count)})</span>
     </div>
+  ) : (
+    <p className="text-sm text-ink-soft">New on Vela · no reviews yet</p>
   );
 
   return (
-    // Bottom padding = the sticky mobile bar's height plus the safe-area inset, so it never covers content.
-    <main className="w-full pb-[calc(6rem+env(safe-area-inset-bottom))] lg:pb-0">
+    <main className="w-full">
       {/* Analytics (P1-12): not for the owner's or an admin's preview; the server re-checks. */}
       {publicListing && !preview ? <VendorBeacon vendorId={vendor.id} /> : null}
       {jsonLd ? (
@@ -339,10 +345,10 @@ export default async function VendorProfilePage({
               ) : null}
               <div className="flex items-center gap-x-4 gap-y-1.5 mt-3 flex-wrap">
                 {ratingRow}
-                {vendor.price_label ? (
+                {fromPrice ? (
                   <p className="text-sm">
                     <span className="text-ink-soft">Starting from </span>
-                    <span className="text-accent font-semibold">{vendor.price_label}</span>
+                    <span className="text-accent font-semibold">{fromPrice}</span>
                   </p>
                 ) : null}
               </div>
@@ -409,7 +415,7 @@ export default async function VendorProfilePage({
             </h2>
             <OfferingsSection
               data={offerings}
-              fallbackPrice={vendor.price_label}
+              fallbackPrice={priceText}
               quote={
                 isOwnListing
                   ? undefined
@@ -423,23 +429,26 @@ export default async function VendorProfilePage({
               Reviews
             </h2>
 
-            {reviews.length > 0 && (
-              <div className="flex flex-col sm:flex-row sm:items-center gap-4 sm:gap-8 mb-2 rounded-card bg-surface-muted p-4 sm:p-5">
+            {breakdown.count > 0 && hasRating && (
+              <div
+                data-testid="rating-summary"
+                className="flex flex-col sm:flex-row sm:items-center gap-4 sm:gap-8 mb-2 rounded-card bg-surface-muted p-4 sm:p-5"
+              >
                 <div className="shrink-0 sm:min-w-[96px]">
                   <div className="font-display text-[34px] font-semibold leading-none">{vendor.rating}</div>
                   <div aria-hidden="true" className="text-gold text-sm tracking-[0.1em] mt-1.5">
                     {"★".repeat(Math.max(0, Math.min(5, Math.round(ratingNum))))}
                   </div>
-                  <div className="text-caption text-ink-soft mt-0.5">{vendor.reviews_count} reviews</div>
+                  <div className="text-caption text-ink-soft mt-0.5">{reviewCountLabel(vendor.reviews_count)}</div>
                 </div>
                 <ul className="flex-1 space-y-1.5 sm:max-w-[360px]" aria-label="Rating breakdown">
-                  {distribution.map(({ star, count }) => (
+                  {breakdown.stars.map(({ star, count }) => (
                     <li key={star} className="flex items-center gap-2.5 text-caption text-ink-soft">
                       <span className="w-7 shrink-0">{star} ★</span>
                       <span className="flex-1 h-2 bg-white rounded-full overflow-hidden" aria-hidden="true">
                         <span
                           className="block h-full bg-gold rounded-full"
-                          style={{ width: `${Math.round((count / reviews.length) * 100)}%` }}
+                          style={{ width: `${Math.round((count / breakdown.count) * 100)}%` }}
                         />
                       </span>
                       <span className="w-6 text-right tabular-nums">
@@ -451,6 +460,17 @@ export default async function VendorProfilePage({
                 </ul>
               </div>
             )}
+            {importedCount > 0 && breakdown.count > 0 ? (
+              <p className="text-caption text-ink-soft mb-2">
+                The overall rating also counts {reviewCountLabel(importedCount)} collected before this business joined Vela.
+                The breakdown and the list show the {reviewCountLabel(breakdown.count)} written on Vela.
+              </p>
+            ) : null}
+            {reviews.length < breakdown.count ? (
+              <p className="text-caption text-ink-soft mb-2">
+                Showing the {reviews.length} most recent of {reviewCountLabel(breakdown.count)}.
+              </p>
+            ) : null}
 
             {reviews.length === 0 ? (
               <p className="text-sm text-ink-soft">No reviews yet.</p>
@@ -546,7 +566,7 @@ export default async function VendorProfilePage({
 
         <aside className="hidden lg:block sticky top-[calc(var(--header-h)+20px)] mt-[88px] card p-6 shadow-card">
           <div className="text-caption text-ink-soft">Starting from</div>
-          <div className="font-display text-accent font-semibold text-heading mt-0.5">{vendor.price_label}</div>
+          <div className="font-display text-accent font-semibold text-heading mt-0.5">{priceText}</div>
           <div className="mt-2">{ratingRow}</div>
           <div className="mt-5 pt-5 border-t border-line">
             {isOwnListing ? (
@@ -567,7 +587,13 @@ export default async function VendorProfilePage({
         </aside>
       </div>
 
-      <div className="lg:hidden fixed bottom-0 inset-x-0 z-40 bg-white/95 backdrop-blur border-t border-line shadow-[0_-6px_20px_rgb(32_33_36/0.06)] safe-bottom">
+      {/* Mobile/tablet action bar (QA-009): sticky, not fixed, and the last child
+          of <main>, so it rides the bottom of the screen while the profile
+          scrolls, then stops above the site footer instead of covering it. */}
+      <div
+        data-testid="vendor-mobile-cta"
+        className="lg:hidden sticky bottom-0 z-40 bg-white/95 backdrop-blur border-t border-line shadow-[0_-6px_20px_rgb(32_33_36/0.06)] safe-bottom"
+      >
         <div className="page pt-3 flex items-center justify-between gap-2.5">
           {waHref && !isOwnListing ? (
             <a
@@ -583,7 +609,7 @@ export default async function VendorProfilePage({
           ) : (
             <div className="min-w-0">
               <div className="text-[11px] text-ink-soft">Starting from</div>
-              <div className="text-accent font-semibold text-[15px] truncate">{vendor.price_label}</div>
+              <div className="text-accent font-semibold text-[15px] truncate">{priceText}</div>
             </div>
           )}
           {isOwnListing ? (

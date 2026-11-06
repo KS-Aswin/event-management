@@ -638,10 +638,16 @@ export interface BrowseVendor {
   rating: string;
   reviews_count: number;
   verified: boolean;
-  /** Cheapest sellable offering in this category, if any. */
-  from_price: number | null;
-  from_unit: string | null;
-  from_unit_label: string | null;
+  /**
+   * The vendor's one "from" price (vendors.price / price_label, kept by
+   * recomputeVendorPrice): the same figure search and the profile show (QA-023).
+   */
+  price?: number | null;
+  price_label?: string | null;
+  /** Legacy per-card price (shortlist preview); ignored when price_label is set. */
+  from_price?: number | null;
+  from_unit?: string | null;
+  from_unit_label?: string | null;
   // For the card image (app/search/card-media.ts).
   cover_media_id: number | null;
   cover_image_url: string | null;
@@ -676,15 +682,8 @@ export async function topVendorsByCategory(categoryIds: number[], perCategory = 
      )
      SELECT m.for_category_id, m.total, m.id, m.name, m.location, m.category, m.rating, m.reviews_count,
             m.cover_media_id, m.cover_image_url, m.status, m.published,
-            (m.verified_at IS NOT NULL) AS verified,
-            p.price_from AS from_price, p.price_unit AS from_unit, p.unit_label AS from_unit_label
+            (m.verified_at IS NOT NULL) AS verified, m.price, m.price_label
        FROM m
-       LEFT JOIN LATERAL (
-         SELECT s.price_from, s.price_unit, s.unit_label FROM services s
-          WHERE s.vendor_id = m.id AND s.category_id = m.for_category_id AND ${sellable("s")}
-            AND s.price_mode <> 'on_request' AND s.price_from > 0
-          ORDER BY s.price_from, s.id LIMIT 1
-       ) p ON true
       WHERE m.rn <= $2
       ORDER BY m.for_category_id, m.rn`,
     [categoryIds, perCategory]

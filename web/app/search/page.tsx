@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { findFavoriteVendorIds, pool, type VendorRecord } from "@/lib/db";
 import { getSession } from "@/lib/session";
-import { getTaxonomy } from "@/lib/taxonomy";
+import { categoryLabeller, getTaxonomy, resolveCategoryName } from "@/lib/taxonomy";
 import {
   nearbyDistrictCounts,
   parseSearchParams,
@@ -20,6 +20,7 @@ import { findCardMedia } from "./card-media";
 import FavoriteButton from "@/lib/favorite-button";
 import SearchFilterPanel, { type BudgetPreset } from "./search-filters";
 import SortSelect from "./sort-select";
+import { reviewCountLabel, vendorFromPrice } from "@/lib/vendor-display";
 
 export const metadata: Metadata = {
   title: "Search vendors and services",
@@ -80,7 +81,11 @@ export default async function SearchPage({ searchParams }: { searchParams: Promi
     getTaxonomy(),
     session ? findFavoriteVendorIds(session.userId) : Promise.resolve(new Set<number>()),
   ]);
-  const categoryNames = taxonomy.categories.filter((c) => c.active).map((c) => c.name);
+  const activeCategories = taxonomy.categories.filter((c) => c.active);
+  // Filter values stay the stable internal name; people see the display name
+  // an admin may have renamed it to (QA-008).
+  const categoryLabel = categoryLabeller(taxonomy);
+  const categoryOptions = activeCategories.map((c) => ({ value: c.name, label: categoryLabel(c.name) }));
   const districts = taxonomy.districts;
 
   // Lenient parse: a bad value in an old or edited link is ignored, not an error.
@@ -89,7 +94,14 @@ export default async function SearchPage({ searchParams }: { searchParams: Promi
   let page = parsed.ok ? parsed.page : 1;
 
   // Only categories the taxonomy knows, so the checkboxes and the results agree.
-  f.categories = f.categories?.filter((c) => categoryNames.includes(c));
+  // A link may name one by internal name, slug or current display name.
+  f.categories = [
+    ...new Set(
+      (f.categories ?? [])
+        .map((c) => resolveCategoryName({ categories: activeCategories }, c))
+        .filter((c): c is string => c !== null)
+    ),
+  ];
   if (!f.categories?.length) f.categories = undefined;
   // "location" on this page is a district (or a town / old name in it) and
   // matches vendors based there or travelling there.
@@ -154,7 +166,7 @@ export default async function SearchPage({ searchParams }: { searchParams: Promi
   const eventType = taxonomy.eventTypes.find((e) => e.slug === f.eventType);
   const chips: { label: string; href: string }[] = [
     ...(f.query ? [{ label: `“${f.query}”`, href: href({ q: null }) }] : []),
-    ...cats.map((c) => ({ label: c, href: href({ category: cats.filter((x) => x !== c), offering: null }) })),
+    ...cats.map((c) => ({ label: categoryLabel(c), href: href({ category: cats.filter((x) => x !== c), offering: null }) })),
     ...(template ? [{ label: template.name, href: href({ offering: null }) }] : []),
     ...(district ? [{ label: f.homeOnly ? `Based in ${district.name}` : district.name, href: href({ location: null, homeOnly: null }) }] : []),
     ...(eventType ? [{ label: eventType.name, href: href({ eventType: null }) }] : []),
@@ -174,6 +186,12 @@ export default async function SearchPage({ searchParams }: { searchParams: Promi
     const qs = p.toString();
     return qs ? `/search?${qs}` : "/search";
   })();
+
+  // Page title for screen readers and the document outline (QA-015); the
+  // visible layout leads with the filters and the result count instead.
+  const pageTitle = `${
+    template?.name ?? (cats.length ? cats.map(categoryLabel).join(", ") : f.view === "offerings" ? "Services" : "Wedding and event vendors")
+  }${district ? ` in ${district.name}` : " in Kerala"}${f.query ? ` matching “${f.query}”` : ""}`;
 
   const noun = f.view === "offerings" ? (total === 1 ? "service" : "services") : total === 1 ? "vendor" : "vendors";
 
@@ -202,7 +220,7 @@ export default async function SearchPage({ searchParams }: { searchParams: Promi
           </div>
         </div>
         <div className="text-[13px] sm:text-sm text-ink-soft mt-0.5 line-clamp-2">
-          {v.category} · {v.location} · {v.experience} experience
+          {categoryLabel(v.category)} · {v.location} · {v.experience} experience
         </div>
         <Badges verified={!!v.verified_at} featured={!!v.featured} demo={!!v.is_demo} />
         <Rating rating={v.rating} count={v.reviews_count} />
@@ -215,7 +233,9 @@ export default async function SearchPage({ searchParams }: { searchParams: Promi
             ))}
           </div>
         )}
-        <div className="text-sm sm:text-[15px] font-semibold text-accent mt-1.5 sm:mt-auto sm:pt-2.5">{v.price_label}</div>
+        <div className="text-sm sm:text-[15px] font-semibold text-accent mt-1.5 sm:mt-auto sm:pt-2.5">
+          {vendorFromPrice(v) ?? "Price on request"}
+        </div>
       </div>
     </article>
   );
@@ -274,8 +294,9 @@ export default async function SearchPage({ searchParams }: { searchParams: Promi
 
   return (
     <main className="page w-full pt-4 pb-10 md:pt-8 md:pb-16 flex flex-col md:flex-row md:items-start gap-x-10">
+      <h1 className="sr-only">{pageTitle}</h1>
       <SearchFilterPanel
-        categories={categoryNames}
+        categories={categoryOptions}
         districts={districts.map((d) => d.name)}
         eventTypes={taxonomy.eventTypes.filter((e) => e.slug !== "other").map((e) => ({ slug: e.slug, name: e.name }))}
         templates={templatesForFilter}
@@ -436,7 +457,7 @@ function Rating({ rating, count }: { rating: string; count: number }) {
         <>
           <span className="text-gold" aria-hidden="true">★</span>
           <span className="font-medium text-foreground">{rating}</span>
-          <span className="text-ink-soft">({count} reviews)</span>
+          <span className="text-ink-soft">({reviewCountLabel(count)})</span>
         </>
       ) : (
         <span className="text-ink-soft">New on Vela · no reviews yet</span>

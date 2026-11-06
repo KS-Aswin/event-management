@@ -283,15 +283,21 @@ export default function HomeSearch({ districts = [] }: { districts?: string[] })
         )}
       </div>
 
-      <div className="w-full grid grid-cols-2 gap-2.5 sm:gap-3 mt-3">
-        <label className="block rounded-card border border-line-strong bg-white px-4 pt-2 pb-1 transition-[box-shadow,border-color] focus-within:border-accent focus-within:shadow-[0_0_0_3px_var(--color-accent-tint)]">
+      {/* Where gets the wider column on phones so "Anywhere in Kerala" and the
+          longest district (Thiruvananthapuram) fit at 390px (QA-025); below
+          360px the two fields stack. */}
+      <div
+        data-testid="home-search-fields"
+        className="w-full grid grid-cols-1 min-[360px]:grid-cols-[minmax(0,1.35fr)_minmax(0,1fr)] sm:grid-cols-2 gap-2.5 sm:gap-3 mt-3"
+      >
+        <label className="block min-w-0 rounded-card border border-line-strong bg-white px-3 sm:px-4 pt-2 pb-1 transition-[box-shadow,border-color] focus-within:border-accent focus-within:shadow-[0_0_0_3px_var(--color-accent-tint)]">
           <span className="eyebrow block">Where</span>
           <select
             aria-label="Where: district"
             id={whereId}
             defaultValue=""
 
-            className="w-full min-h-10 bg-transparent text-base sm:text-[15px] outline-none cursor-pointer -ml-1"
+            className="w-full min-w-0 min-h-10 bg-transparent text-base sm:text-[15px] outline-none cursor-pointer -ml-1"
             style={{ outline: "none" }}
           >
             <option value="">Anywhere in Kerala</option>
@@ -302,7 +308,7 @@ export default function HomeSearch({ districts = [] }: { districts?: string[] })
             ))}
           </select>
         </label>
-        <label className="block rounded-card border border-line-strong bg-white px-4 pt-2 pb-1 transition-[box-shadow,border-color] focus-within:border-accent focus-within:shadow-[0_0_0_3px_var(--color-accent-tint)]">
+        <label className="block min-w-0 rounded-card border border-line-strong bg-white px-3 sm:px-4 pt-2 pb-1 transition-[box-shadow,border-color] focus-within:border-accent focus-within:shadow-[0_0_0_3px_var(--color-accent-tint)]">
           <span className="eyebrow block">
             When <span className="normal-case tracking-normal font-normal">(optional)</span>
           </span>
@@ -313,7 +319,7 @@ export default function HomeSearch({ districts = [] }: { districts?: string[] })
             defaultValue=""
             min={today || undefined}
 
-            className="w-full min-h-10 bg-transparent text-base sm:text-[15px] outline-none"
+            className="w-full min-w-0 min-h-10 bg-transparent text-base sm:text-[15px] outline-none"
             style={{ outline: "none" }}
           />
         </label>
