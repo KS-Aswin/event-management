@@ -22,6 +22,9 @@ import {
   whatsappUrl,
 } from "@/app/vendor/leads/format";
 
+/** Still open: the vendor can still send an offer (closed ones say none was sent). */
+const OPEN_STATUSES = new Set(["pending", "responded", "accepted"]);
+
 export const metadata: Metadata = { title: "Enquiry" };
 
 // One enquiry, customer side (PRODUCT_PLAN 2.3, P2-4, P2-5): the vendor's
@@ -131,7 +134,10 @@ export default async function MyEnquiryPage({ params }: { params: Promise<{ id: 
                   ? `No offer yet. ${e.vendor.name} usually replies with an itemised offer or a message.`
                   : offers.length
                     ? "There's no open offer right now. Ask the vendor below if you'd like a revised one."
-                    : "No offer was sent for this enquiry."}
+                    : OPEN_STATUSES.has(e.status)
+                      ? // QA-093: the vendor replied with a message only; the enquiry is still open.
+                        `No offer yet. When ${e.vendor.name} sends a priced offer, it appears here.`
+                      : "No offer was sent for this enquiry."}
               </p>
             )}
             {older.length > 0 && (

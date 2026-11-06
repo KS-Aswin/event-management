@@ -23,7 +23,7 @@ function client() {
   return new pg.Client({ connectionString: url });
 }
 
-test.fail("QA4-C1: open enquiry with a message-only vendor reply doesn't say 'No offer was sent'", async ({ page }, testInfo) => {
+test("QA4-C1: open enquiry with a message-only vendor reply doesn't say 'No offer was sent'", async ({ page }, testInfo) => {
   const tag = runTag(testInfo);
   const cust: Creds = { name: "Qa4 Offerless", email: `e2e-qa4-customer-spec-${tag}@example.com`, password: "e2e-pass-12345" };
   await signUp(page, "customer", cust);
