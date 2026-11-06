@@ -83,10 +83,21 @@ export default function OfferingsManager({
 
   async function remove(o: Offering) {
     setNotice(null);
+    const pkgs =
+      o.kind === "package"
+        ? []
+        : items
+            .filter((i) => i.item_id === o.id)
+            .map((i) => offerings.find((p) => p.id === i.package_id))
+            .filter((p): p is Offering => !!p);
+    const pkgNames = pkgs.map((p) => p.title).join(", ");
+    const inPackage = pkgs.length
+      ? ` It is in ${pkgs.length === 1 ? "a package" : `${pkgs.length} packages`} (${pkgNames}): deleting removes it from ${pkgs.length === 1 ? "that package" : "those packages"}, so check the package price afterwards. If it was turned off instead, ${pkgs.length === 1 ? "that package is" : "those packages are"} hidden until you turn it back on.`
+      : "";
     if (
       !(await confirm({
         title: `Delete “${o.title}”?`,
-        description: "This can't be undone. If customers have enquired about it, it is turned off instead.",
+        description: `This can't be undone. If customers have enquired about it, it is turned off instead.${inPackage}`,
         confirmLabel: "Delete",
         danger: true,
       }))
@@ -102,7 +113,9 @@ export default function OfferingsManager({
       text:
         r.data.mode === "deactivated"
           ? `${o.title} has enquiries, so it was turned off instead of deleted.`
-          : `${o.title} was deleted.`,
+          : pkgs.length
+            ? `${o.title} was deleted and removed from ${pkgNames}. Check the package price.`
+            : `${o.title} was deleted.`,
     });
   }
 
@@ -298,8 +311,8 @@ export default function OfferingsManager({
       <div id={`panel-${tab}`} role="tabpanel" aria-labelledby={`tab-${tab}`} tabIndex={0} className="focus-visible:outline-offset-4">
         {tab === "packages" && byKind.packages.some((p) => p.incomplete) && (
           <p className="mb-4 rounded-control bg-[#fdf3d8] text-gold-ink px-3 py-2 text-sm">
-            Packages marked Incomplete include a unit that is off. They are hidden from customers until you turn the
-            unit back on or edit the package.
+            Packages marked Incomplete are hidden from customers: a unit inside them is off, or they have no units
+            left. Turn the unit back on, or open the package to add units and save it.
           </p>
         )}
         {list.length === 0 ? (

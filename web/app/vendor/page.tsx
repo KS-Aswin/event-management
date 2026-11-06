@@ -263,7 +263,7 @@ function NextSteps({ stats, items }: { stats: VendorHomeStats; items: StrengthIt
     steps.push({
       key: "pkg",
       label: `Fix ${stats.offerings.incompletePackages} incomplete package${stats.offerings.incompletePackages === 1 ? "" : "s"}`,
-      detail: "A unit inside it was turned off, so customers can't see it.",
+      detail: "Customers can't see it: a unit inside is off, or it has no units left. Open it to fix it.",
       href: "/vendor/offerings",
     });
   }

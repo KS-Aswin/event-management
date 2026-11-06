@@ -2083,8 +2083,8 @@ export async function updateOffering(
 
 /**
  * Removes an offering: deleted when no enquiry or offer refers to it,
- * otherwise deactivated so leads keep their history. Packages that contained a
- * deleted unit are marked incomplete (an item disappeared).
+ * otherwise deactivated so leads keep their history. A deleted unit is dropped
+ * from its packages; a package left with no units is marked incomplete.
  */
 export async function removeOffering(
   vendorId: number,
@@ -2103,15 +2103,20 @@ export async function removeOffering(
       await client.query("UPDATE services SET active = false, updated_at = now() WHERE id = $1", [offeringId]);
       mode = "deactivated";
     } else {
-      // The package_items rows cascade away (and the trigger recomputes
-      // `incomplete` from the remaining items), so mark the packages after
-      // the delete: a package that lost an item must be reviewed by the vendor.
+      // The package_items rows cascade away and the trigger recomputes
+      // `incomplete` from the remaining items, so a package that still has
+      // its other units (all on) stays visible. Only a package left with no
+      // units at all is marked incomplete (there is nothing left to sell).
       const pk = await client.query<{ package_id: number }>("SELECT package_id FROM package_items WHERE item_id = $1", [
         offeringId,
       ]);
       await client.query("DELETE FROM services WHERE id = $1", [offeringId]);
       if (pk.rowCount) {
-        await client.query("UPDATE services SET incomplete = true WHERE id = ANY($1::int[])", [pk.rows.map((x) => x.package_id)]);
+        await client.query(
+          `UPDATE services p SET incomplete = true
+           WHERE p.id = ANY($1::int[]) AND NOT EXISTS (SELECT 1 FROM package_items pi WHERE pi.package_id = p.id)`,
+          [pk.rows.map((x) => x.package_id)]
+        );
       }
       mode = "deleted";
     }
