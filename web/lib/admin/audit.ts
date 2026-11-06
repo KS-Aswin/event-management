@@ -1,4 +1,5 @@
 import type { TxClient } from "./tx";
+import { clientIp as requestClientIp } from "@/lib/client-ip";
 
 /**
  * Audit action names: "<entity>.<verb>", e.g. vendor.approve,
@@ -17,7 +18,7 @@ export interface AuditEntry {
   before?: unknown;
   after?: unknown;
   reason?: string | null;
-  /** Client IP if known (x-forwarded-for first hop). */
+  /** Client IP if known (see clientIp below). */
   ip?: string | null;
 }
 
@@ -56,9 +57,12 @@ export async function audit(client: TxClient, entry: AuditEntry): Promise<number
   return Number(r.rows[0].id);
 }
 
-/** First x-forwarded-for hop (or x-real-ip) of a request, for AuditEntry.ip. */
+/**
+ * Client IP of a request, for AuditEntry.ip. Same rules as rate limiting
+ * (lib/client-ip.ts, QA-005): a client-typed X-Forwarded-For first hop is not
+ * trusted in production, so the audit log can't be given a forged IP.
+ */
 export function clientIp(req: Request): string | null {
-  const xff = req.headers.get("x-forwarded-for");
-  if (xff) return xff.split(",")[0]?.trim().slice(0, 64) || null;
-  return req.headers.get("x-real-ip")?.slice(0, 64) ?? null;
+  const ip = requestClientIp(req.headers);
+  return ip === "unknown" ? null : ip;
 }
