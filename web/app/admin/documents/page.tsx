@@ -4,6 +4,7 @@ import { AdminPage } from "@/app/admin/_components/admin-page";
 import { listDocumentQueue, type DocumentQueue } from "@/lib/admin/documents";
 import { DOC_TABS, parseDocTab, type DocTab } from "@/app/vendor/documents/doc-meta";
 import DocumentQueueList from "./_components/document-queue";
+import { TabNav } from "@/app/admin/_components/tab-nav";
 
 export const metadata: Metadata = { title: "Documents" };
 
@@ -61,7 +62,7 @@ export default async function Page({
         </div>
       ) : null}
 
-      <nav aria-label="Document queues" className="-mx-4 overflow-x-auto px-4 sm:mx-0 sm:px-0">
+      <TabNav label="Document queues" className="-mx-4 overflow-x-auto px-4 sm:mx-0 sm:px-0">
         <ul className="flex min-w-max gap-1 border-b border-line">
           {DOC_TABS.map((t) => {
             const active = t === tab;
@@ -90,7 +91,7 @@ export default async function Page({
             );
           })}
         </ul>
-      </nav>
+      </TabNav>
       <p className="mt-3 max-w-prose text-body text-ink-soft">{TAB_BLURB[tab]}</p>
 
       <div className="mt-5">

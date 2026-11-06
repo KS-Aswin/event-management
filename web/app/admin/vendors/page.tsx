@@ -3,6 +3,7 @@ import Link from "next/link";
 import { AdminEmptyState, AdminPage } from "@/app/admin/_components/admin-page";
 import { ago, fmtDate, qs, StatusChip } from "@/app/admin/users/_components/ui";
 import { AdminPager } from "@/app/admin/_components/pager";
+import { TabNav } from "@/app/admin/_components/tab-nav";
 import {
   countVendorTabs,
   CREATED_FILTERS,
@@ -95,7 +96,7 @@ export default async function VendorsPage({
 
   return (
     <AdminPage title="Vendors" description="Approve new listings, re-check edited ones and manage every vendor.">
-      <nav aria-label="Vendor queues" className="-mx-4 overflow-x-auto px-4 sm:mx-0 sm:px-0">
+      <TabNav label="Vendor queues" className="-mx-4 overflow-x-auto px-4 sm:mx-0 sm:px-0">
         <ul className="flex min-w-max gap-1 border-b border-line" data-testid="vendor-tabs">
           {VENDOR_TABS.map((t) => {
             const active = t.key === tab;
@@ -124,7 +125,7 @@ export default async function VendorsPage({
             );
           })}
         </ul>
-      </nav>
+      </TabNav>
       {TAB_BLURB[tab] && <p className="mt-3 text-body text-ink-soft max-w-prose">{TAB_BLURB[tab]}</p>}
 
       <form

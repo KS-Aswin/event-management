@@ -3,6 +3,7 @@ import Link from "next/link";
 import { AdminPage } from "@/app/admin/_components/admin-page";
 import { CUSTOM_STATUSES, listCategories, listCustomGroups, listTemplates, type CustomStatus } from "@/lib/admin/taxonomy";
 import { CustomQueue } from "./custom-queue";
+import { TabNav } from "@/app/admin/_components/tab-nav";
 
 export const metadata: Metadata = { title: "Custom offerings" };
 export const dynamic = "force-dynamic";
@@ -30,7 +31,7 @@ export default async function Page({ searchParams }: { searchParams: Promise<{ s
         </Link>
       }
     >
-      <nav aria-label="Filter by status" className="-mx-4 flex gap-1 overflow-x-auto border-b border-line px-4 sm:mx-0 sm:px-0">
+      <TabNav label="Filter by status" className="-mx-4 flex gap-1 overflow-x-auto border-b border-line px-4 sm:mx-0 sm:px-0">
         {CUSTOM_STATUSES.map((s) => (
           <Link
             key={s}
@@ -43,7 +44,7 @@ export default async function Page({ searchParams }: { searchParams: Promise<{ s
             {STATUS_LABELS[s]}
           </Link>
         ))}
-      </nav>
+      </TabNav>
       <div className="mt-5">
         <CustomQueue
           key={status}

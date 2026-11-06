@@ -3,6 +3,7 @@ import Link from "next/link";
 import { AdminPage } from "@/app/admin/_components/admin-page";
 import { listMediaQueue, parseMediaTab, type MediaQueue, type MediaTab } from "@/lib/admin/moderation";
 import MediaQueueGrid from "./_components/media-queue";
+import { TabNav } from "@/app/admin/_components/tab-nav";
 
 export const metadata: Metadata = { title: "Media" };
 
@@ -44,7 +45,7 @@ export default async function Page({ searchParams }: { searchParams: Promise<{ t
 
   return (
     <AdminPage title="Media" description="Check what vendors upload before and after it goes public.">
-      <nav aria-label="Media queues" className="-mx-4 overflow-x-auto px-4 sm:mx-0 sm:px-0">
+      <TabNav label="Media queues" className="-mx-4 overflow-x-auto px-4 sm:mx-0 sm:px-0">
         <ul className="flex min-w-max gap-1 border-b border-line">
           {TABS.map((t) => {
             const active = t.id === tab;
@@ -73,7 +74,7 @@ export default async function Page({ searchParams }: { searchParams: Promise<{ t
             );
           })}
         </ul>
-      </nav>
+      </TabNav>
       <p className="mt-3 max-w-prose text-body text-ink-soft">{current.blurb}</p>
 
       <div className="mt-5">
