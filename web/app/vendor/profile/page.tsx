@@ -27,6 +27,8 @@ export default async function VendorProfilePage() {
     .map((c) => ({ id: c.id, name: c.display_name || c.name }));
   const districts = taxonomy.districts.map((d) => ({ id: d.id, name: d.name }));
   const home = districts.find((d) => d.id === vendor.district_id)?.name ?? null;
+  // The home district is stored as a service area too; "also travel to" means the others.
+  const others = areas.filter((a) => a.district_id !== vendor.district_id);
 
   return (
     <main className="page py-6 sm:py-8">
@@ -50,19 +52,19 @@ export default async function VendorProfilePage() {
             </h2>
             <p className="text-body text-ink-soft mt-1">
               {home ? <>Home district: <span className="text-foreground font-medium">{home}</span>.</> : "Set your home district in Location."}{" "}
-              {areas.length === 0
+              {others.length === 0
                 ? "You haven't added other districts yet."
-                : `You also travel to ${areas.length} district${areas.length === 1 ? "" : "s"}.`}
+                : `You also travel to ${others.length} district${others.length === 1 ? "" : "s"}.`}
             </p>
-            {areas.length > 0 && (
+            {others.length > 0 && (
               <ul className="mt-2 text-caption">
-                {areas.slice(0, 6).map((a) => (
+                {others.slice(0, 6).map((a) => (
                   <li key={a.district_id} className="flex justify-between gap-2 py-1 border-b border-line last:border-b-0">
                     <span>{a.district_name}</span>
                     <span className="text-ink-soft">{travelLabel(a.travel_fee, a.travel_note)}</span>
                   </li>
                 ))}
-                {areas.length > 6 && <li className="py-1 text-ink-soft">and {areas.length - 6} more</li>}
+                {others.length > 6 && <li className="py-1 text-ink-soft">and {others.length - 6} more</li>}
               </ul>
             )}
             <Link href="/vendor/areas" className="btn btn-secondary btn-sm mt-3">

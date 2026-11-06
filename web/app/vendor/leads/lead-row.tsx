@@ -83,6 +83,7 @@ const OFFER_STATE: Record<string, string> = {
   declined: "declined",
   superseded: "replaced",
   expired: "expired",
+  closed: "closed",
 };
 
 export function LeadRow({
@@ -117,7 +118,7 @@ export function LeadRow({
         <div className="min-w-0 pt-1">
           <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
             <h3 id={`lead-${l.id}-name`} className="font-semibold text-[15px]">
-              <Link href={`/vendor/leads/${l.id}`} className="hover:underline underline-offset-2">
+              <Link href={`/vendor/leads/${l.id}`} className="inline-flex items-center min-h-11 -my-2 hover:underline underline-offset-2">
                 {l.name}
               </Link>
             </h3>

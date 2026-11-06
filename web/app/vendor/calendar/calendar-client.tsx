@@ -424,7 +424,7 @@ function DayPanel({
       </ul>
       <p className="hint">
         Full day covers the whole date. Your usual limit is {defaultCapacity} event{defaultCapacity === 1 ? "" : "s"} a day (change it in{" "}
-        <Link href="/vendor/profile" className="text-accent underline-offset-2 hover:underline">
+        <Link href="/vendor/profile" className="text-accent underline underline-offset-2 hover:text-accent-hover">
           Profile
         </Link>
         ).

@@ -547,9 +547,9 @@ export default function MediaUploader({
         }}
         className={`flex flex-col items-center justify-center gap-2 rounded-card border-2 border-dashed px-4 py-6 text-center transition-colors ${
           dragOver ? "border-accent bg-accent-tint" : "border-line-strong bg-surface-muted"
-        } ${blocked ? "opacity-70" : ""}`}
+        }`}
       >
-        <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" className="text-accent" aria-hidden="true">
+        <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" className={`text-accent ${blocked ? "opacity-50" : ""}`} aria-hidden="true">
           <rect x="3" y="4" width="18" height="16" rx="2.5" />
           <circle cx="9" cy="10" r="1.8" />
           <path d="m21 16-5-5-8 8" />
