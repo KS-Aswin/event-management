@@ -21,7 +21,7 @@ function when(iso: string) {
 
 function Stars({ rating }: { rating: number }) {
   return (
-    <span className="inline-flex items-center gap-1" aria-label={`${rating} out of 5 stars`}>
+    <span role="img" className="inline-flex items-center gap-1" aria-label={`${rating} out of 5 stars`}>
       <span aria-hidden="true" className="tracking-tight text-gold">
         {"★".repeat(rating)}
         <span className="text-line-strong">{"★".repeat(5 - rating)}</span>

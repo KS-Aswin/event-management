@@ -169,10 +169,11 @@ export default async function VendorDetailPage({ params }: { params: Promise<{ i
         {detail.duplicates.length > 0 && (
           <div className="card border-danger/30" role="note" data-testid="duplicate-hints">
             <p className="font-medium">Possible duplicates</p>
-            <ul className="mt-1 space-y-1">
+            <ul className="mt-1">
               {detail.duplicates.map((d) => (
                 <li key={d.id} className="text-body">
-                  <Link href={`/admin/vendors/${d.id}`} className="underline underline-offset-2 font-medium">
+                  {/* QA-110: a 44px-tall tap target at 390. */}
+                  <Link href={`/admin/vendors/${d.id}`} className="inline-flex min-h-11 items-center underline underline-offset-2 font-medium break-words">
                     {d.name}
                   </Link>{" "}
                   <span className="text-ink-soft">

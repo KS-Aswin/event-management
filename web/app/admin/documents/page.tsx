@@ -52,7 +52,7 @@ export default async function Page({
         <div className="mb-4 flex flex-wrap items-center gap-2 rounded-control border border-line bg-surface-muted px-3 py-2 text-body">
           <span className="min-w-0">
             Showing documents for{" "}
-            <Link href={`/admin/vendors/${vendorId}`} className="font-medium underline underline-offset-2">
+            <Link href={`/admin/vendors/${vendorId}`} className="inline-flex min-h-11 items-center font-medium underline underline-offset-2">
               {queue?.vendor?.name ?? `vendor #${vendorId}`}
             </Link>
           </span>

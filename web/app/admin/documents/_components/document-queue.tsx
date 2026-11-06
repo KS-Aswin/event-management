@@ -66,9 +66,10 @@ export default function DocumentQueueList({ tab, items: initial }: { tab: DocTab
                   <p className="font-medium">{d.typeLabel}</p>
                   <Link
                     href={`/admin/vendors/${d.vendor.id}`}
-                    className="mt-0.5 block truncate text-body text-ink-soft hover:text-foreground hover:underline"
+                    // QA-110: a 44px-tall tap target at 390.
+                    className="flex min-h-11 min-w-0 items-center text-body text-ink-soft hover:text-foreground hover:underline"
                   >
-                    {d.vendor.name}
+                    <span className="truncate">{d.vendor.name}</span>
                   </Link>
                 </div>
                 <span className={`shrink-0 rounded-full px-2.5 text-xs font-medium leading-6 ${DOC_STATUS_CLASS[d.status]}`}>
@@ -225,7 +226,7 @@ function ReviewBody({
           {doc.typeLabel}
         </h2>
         <p className="mt-0.5 text-body text-ink-soft">
-          <Link href={`/admin/vendors/${doc.vendor.id}`} className="underline underline-offset-2">
+          <Link href={`/admin/vendors/${doc.vendor.id}`} className="inline-flex min-h-11 items-center underline underline-offset-2">
             {doc.vendor.name}
           </Link>
           {doc.vendor.district ? ` · ${doc.vendor.district}` : ""}
