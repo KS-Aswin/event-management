@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { getSession } from "@/lib/session";
+import { getLiveSession } from "@/app/api/_lib/auth";
 
 export const metadata: Metadata = {
   title: "List your business",
@@ -17,7 +17,7 @@ const BENEFITS = [
 ];
 
 export default async function ForVendorsPage() {
-  const session = await getSession();
+  const session = await getLiveSession();
 
   return (
     <main className="page-narrow sm:max-w-[920px] py-10 sm:py-16">

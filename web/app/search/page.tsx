@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { findFavoriteVendorIds, pool, type VendorRecord } from "@/lib/db";
-import { getSession } from "@/lib/session";
+import { getLiveSession } from "@/app/api/_lib/auth";
 import { categoryLabeller, getTaxonomy, resolveCategoryName } from "@/lib/taxonomy";
 import {
   nearbyDistrictCounts,
@@ -76,7 +76,7 @@ async function vendorRows(ids: number[]): Promise<VendorRecord[]> {
 
 export default async function SearchPage({ searchParams }: { searchParams: Promise<Params> }) {
   const sp = toSearchParams(await searchParams);
-  const session = await getSession();
+  const session = await getLiveSession();
 
   const [taxonomy, favoriteIds] = await Promise.all([
     getTaxonomy(),

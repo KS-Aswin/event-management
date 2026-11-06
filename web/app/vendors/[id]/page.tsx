@@ -13,7 +13,8 @@ import {
   type VendorRecord,
 } from "@/lib/db";
 import { formatE164, toE164, whatsappLink } from "@/lib/phone";
-import { getSession, type SessionPayload } from "@/lib/session";
+import { type SessionPayload } from "@/lib/session";
+import { getLiveSession } from "@/app/api/_lib/auth";
 import { VendorTile } from "@/lib/vendorVisuals";
 import FavoriteButton from "@/lib/favorite-button";
 import QuoteButton from "./quote-button";
@@ -121,7 +122,7 @@ export default async function VendorProfilePage({
   if (!vendor) notFound();
   const vendorId = vendor.id;
 
-  const session = await getSession();
+  const session = await getLiveSession();
   if (!canView(vendor, session)) notFound();
 
   const isOwnListing = session ? vendor.owner_id === session.userId : false;

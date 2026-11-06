@@ -6,7 +6,7 @@ import { categoryLabeller, getTaxonomy } from "@/lib/taxonomy";
 import { VendorTile } from "@/lib/vendorVisuals";
 import HomeSearch from "./home-search";
 import { reviewCountLabel } from "@/lib/vendor-display";
-import { getSession } from "@/lib/session";
+import { getLiveSession } from "@/app/api/_lib/auth";
 
 export const metadata: Metadata = {
   title: { absolute: "Vela: Wedding & event vendors in Kerala" },
@@ -42,7 +42,7 @@ function countBy(keys: string[]) {
 }
 
 export default async function Home() {
-  const [vendors, taxonomy, session] = await Promise.all([loadVendors(), loadTaxonomy(), getSession()]);
+  const [vendors, taxonomy, session] = await Promise.all([loadVendors(), loadTaxonomy(), getLiveSession()]);
   const taxonomyNames = taxonomy?.categories.filter((c) => c.active).map((c) => c.name) ?? [];
   const districtNames = taxonomy?.districts.map((d) => d.name) ?? [];
   const eventTypes = taxonomy?.eventTypes.filter((e) => e.slug !== "other") ?? [];
