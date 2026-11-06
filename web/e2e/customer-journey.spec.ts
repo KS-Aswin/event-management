@@ -107,7 +107,10 @@ test("journey: guest enquiry -> sign up -> /my -> offer -> booked -> review -> v
   await page.getByLabel("Email").fill(customer.email);
   await page.getByLabel("Password", { exact: true }).fill(customer.password);
   await page.getByRole("button", { name: "Create account" }).click();
-  await page.waitForURL("**/my/enquiries");
+  // QA-003: the tracking token (not the email) adds the enquiry; sign-up then
+  // opens that enquiry in the account.
+  await page.waitForURL(/\/my\/enquiries(\/\d+)?$/);
+  await page.goto("/my/enquiries");
   await expect(page.getByRole("link", { name: vendorName })).toBeVisible();
   await noStaffTools(page);
   await checkScreen(page, diag, testInfo, "journey-customer-enquiries");

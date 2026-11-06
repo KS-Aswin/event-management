@@ -36,11 +36,16 @@ test.describe("qa1 vendor fixes", () => {
 
     // QA-013
     await page.goto("/vendor/calendar");
+    // Let the client component hydrate first: a value typed into a controlled
+    // input before hydration is reset by React.
+    await page.waitForLoadState("networkidle");
     const range = page.locator("section", { has: page.getByRole("heading", { name: "Block a range" }) });
-    await range.getByLabel("From").fill(istDay(30));
-    await range.getByLabel("To").fill(istDay(20));
-    await range.getByRole("button", { name: "Block dates" }).click();
-    await expect(range.getByRole("alert")).toHaveText("The end date must be on or after the start date.");
+    await expect(async () => {
+      await range.getByLabel("From").fill(istDay(30));
+      await range.getByLabel("To").fill(istDay(20));
+      await range.getByRole("button", { name: "Block dates", exact: true }).click();
+      await expect(range.getByRole("alert")).toHaveText("The end date must be on or after the start date.", { timeout: 2_000 });
+    }).toPass({ timeout: 30_000 });
     await expect(range.getByLabel("To")).toHaveAttribute("aria-invalid", "true");
     // Fixing the date clears the error.
     await range.getByLabel("To").fill(istDay(31));
@@ -48,7 +53,8 @@ test.describe("qa1 vendor fixes", () => {
 
     // QA-032
     await page.goto("/vendor/profile");
-    const about = page.getByLabel("About your business");
+    await page.waitForLoadState("networkidle");
+    const about = page.getByRole("textbox", { name: "About your business" });
     await about.fill("too short");
     await page.locator("form#about").getByRole("button", { name: "Save" }).click();
     await expect(page.locator("#pf-about-err")).toContainText("at least 30 characters");

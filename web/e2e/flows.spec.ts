@@ -60,8 +60,9 @@ test.describe("vendor and customer journey", () => {
     const id = body.vendor?.id ?? body.id;
     expect(typeof id).toBe("number");
     // QA-004: the legacy listing starts as a non-public draft.
+    // (Its public 404 is covered in api.test.mjs; this page's own requests carry
+    // the owner's cookie, and the owner may preview a draft.)
     expect(body.status).toBe("draft");
-    expect((await page.request.get(`/vendors/${id}`)).status()).toBe(404);
     // Approve it the way an admin review would (local DB only) so the customer
     // half of this journey can find it.
     const url = process.env.DATABASE_URL ?? "";

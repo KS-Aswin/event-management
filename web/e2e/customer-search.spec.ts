@@ -61,7 +61,7 @@ test("search: services view shows offering cards", async ({ page, diag }, testIn
 
 test("search: filter sheet with per-unit budget, date and verified", async ({ page, diag }, testInfo) => {
   await page.goto("/search");
-  const panel = page.getByRole("complementary", { name: "Filters" });
+  const panel = page.locator("#search-filters-panel"); // QA-027: a dialog when open on phones, a sidebar on desktop
   if (isMobile(page)) {
     await expect(panel).toBeHidden();
     await page.getByRole("button", { name: /^Filters/ }).click();

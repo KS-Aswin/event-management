@@ -107,15 +107,16 @@ test.describe("customer enquiry", () => {
     await expect(page.getByRole("link", { name: "Sign in to see the phone number" }).filter({ visible: true }).first()).toBeVisible();
 
     if (isMobile(page)) {
-      const bar = page.locator("div.fixed.bottom-0").filter({ has: page.getByRole("button", { name: "Get quote" }) });
+      // QA-009: the bar is sticky (last child of <main>), not fixed, so it sits
+      // at the bottom of the screen while scrolling and stops above the footer
+      // instead of covering content (qa1-public.spec.ts checks the footer).
+      const bar = page.getByTestId("vendor-mobile-cta");
       await expect(bar).toBeVisible();
+      await expect(bar.getByRole("button", { name: "Get quote" })).toBeVisible();
       await expect(bar.getByRole("link", { name: /WhatsApp/ })).toBeVisible();
-      // The page's bottom padding is at least the bar's height.
-      const [barH, pad] = await Promise.all([
-        bar.evaluate((el) => el.getBoundingClientRect().height),
-        page.locator("main").first().evaluate((el) => parseFloat(getComputedStyle(el).paddingBottom)),
-      ]);
-      expect(pad).toBeGreaterThanOrEqual(barH);
+      expect(await bar.evaluate((el) => getComputedStyle(el).position)).toBe("sticky");
+      const box = (await bar.boundingBox())!;
+      expect(Math.round(box.y + box.height)).toBeLessThanOrEqual(page.viewportSize()!.height + 1);
     }
     await checkScreen(page, diag, testInfo, "profile-contact");
 

@@ -41,7 +41,7 @@ test("search results page", async ({ page, diag }, testInfo) => {
 test("search filters: category, location, rating, clear", async ({ page, diag }, testInfo) => {
   await page.goto("/search");
   if (isMobile(page)) await page.getByRole("button", { name: /^Filters/ }).click();
-  const panel = page.getByRole("complementary", { name: "Filters" });
+  const panel = page.locator("#search-filters-panel"); // QA-027: a dialog when open on phones, a sidebar on desktop
   await expect(panel).toBeVisible();
   await panel.locator("label", { hasText: "Photography" }).click();
   await page.waitForURL(/category=/);

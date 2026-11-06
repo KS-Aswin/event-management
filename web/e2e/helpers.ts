@@ -80,7 +80,9 @@ export async function checkScreen(
   const width = page.viewportSize()?.width ?? 0;
   fs.mkdirSync(SHOT_DIR, { recursive: true });
   const file = `${width}-${name}.png`;
-  await page.screenshot({ path: path.join(SHOT_DIR, file), fullPage: true, animations: "disabled" });
+  // caret "initial": the default "hide" writes inline styles on inputs, which a
+  // page still hydrating on a cold dev server reports as a hydration mismatch.
+  await page.screenshot({ path: path.join(SHOT_DIR, file), fullPage: true, animations: "disabled", caret: "initial" });
 
   const probe: Probe = await page.evaluate((mobile) => {
     const W = window.innerWidth;
