@@ -136,8 +136,9 @@ export function parseOfferBody(raw: unknown, today: string = todayIST()): OfferP
     }
     const label = text(l.label, OFFER_LIMITS.label);
     if (!label || label.length < 2) return fail(`${at}.label`, `Line ${i + 1}: describe the item (2 to ${OFFER_LIMITS.label} characters).`);
-    const unit = text(l.unit, OFFER_LIMITS.unit);
-    if (!unit) return fail(`${at}.unit`, `Line ${i + 1}: give a unit (for example plate, event or hour).`);
+    // The unit is optional (QA-104): "2 × ₹4,500" reads fine for an item.
+    const unit = l.unit === undefined || l.unit === null ? "" : text(l.unit, OFFER_LIMITS.unit);
+    if (unit === null) return fail(`${at}.unit`, `Line ${i + 1}: the unit can be up to ${OFFER_LIMITS.unit} characters.`);
     const q = qtyHundredths(l.qty);
     if (q === null) return fail(`${at}.qty`, `Line ${i + 1}: quantity must be more than 0 (up to 2 decimals).`);
     const unitPricePaise = rupeesToPaise(l.unitPrice);

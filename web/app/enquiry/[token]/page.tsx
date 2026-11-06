@@ -12,6 +12,7 @@ import {
   formatQty,
   formatReceived,
 } from "@/app/vendor/leads/format";
+import { offerLineQty } from "@/app/_components/enquiry-thread/offer-line-qty";
 import { PRICE_UNIT_LABELS, type PriceUnit } from "@/lib/offering-validation";
 
 // /enquiry/[token]: public, read-only tracking page for an enquiry sent
@@ -109,7 +110,7 @@ function OfferCard({ offer }: { offer: TrackedOffer }) {
               <span className="min-w-0">
                 <span className="block font-medium break-words">{l.label}</span>
                 <span className="block text-caption text-ink-soft">
-                  {formatQty(l.qty)} {l.unit} × {rupees(l.unitPricePaise)}
+                  {offerLineQty(l.qty, l.unit)} × {rupees(l.unitPricePaise)}
                 </span>
               </span>
               <span className="shrink-0 tabular-nums">{rupees(l.amountPaise)}</span>
@@ -193,7 +194,7 @@ export default async function EnquiryTrackingPage({ params }: { params: Promise<
       <h1 className="font-display text-display sm:text-[30px] font-semibold leading-tight mt-1.5 break-words">
         Your enquiry to{" "}
         {e.vendor.available ? (
-          <Link href={`/vendors/${e.vendor.id}`} className="text-accent hover:underline underline-offset-4">
+          <Link href={`/vendors/${e.vendor.id}`} className="text-accent underline decoration-1 underline-offset-4 hover:text-accent-hover">
             {e.vendor.name}
           </Link>
         ) : (

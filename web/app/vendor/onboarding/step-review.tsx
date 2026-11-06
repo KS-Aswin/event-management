@@ -93,10 +93,15 @@ export default function StepReview({ tax, data, setData, back }: StepProps) {
           Your listing is live. Changes you make are saved straight away.
         </p>
       )}
-      {status === "changes_requested" && l.statusReason && (
-        <div className="rounded-control bg-[#fdf3d8] text-gold-ink px-4 py-3 text-sm" role="status">
-          <p className="font-medium">Our team asked for changes</p>
+      {(status === "changes_requested" || status === "rejected") && l.statusReason && (
+        <div className="rounded-control bg-[#fdf3d8] text-gold-ink px-4 py-3 text-sm break-words" role="status">
+          <p className="font-medium">
+            {status === "rejected" ? "Our team didn't approve your listing" : "Our team asked for changes"}
+          </p>
           <p className="mt-1">{l.statusReason}</p>
+          {status === "rejected" && (
+            <p className="mt-1">Fix what the note mentions, then resubmit for review below.</p>
+          )}
         </div>
       )}
 

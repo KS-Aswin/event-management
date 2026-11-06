@@ -94,10 +94,15 @@ export default function OfferingsManager({
     const inPackage = pkgs.length
       ? ` It is in ${pkgs.length === 1 ? "a package" : `${pkgs.length} packages`} (${pkgNames}): deleting removes it from ${pkgs.length === 1 ? "that package" : "those packages"}, so check the package price afterwards. If it was turned off instead, ${pkgs.length === 1 ? "that package is" : "those packages are"} hidden until you turn it back on.`
       : "";
+    // QA-103: a package whose only unit this is would be left empty, and so not bookable.
+    const emptied = pkgs.filter((p) => items.filter((i) => i.package_id === p.id).length === 1).map((p) => `“${p.title}”`);
+    const emptyNote = emptied.length
+      ? ` ${emptied.join(", ")} would be left with no units, so customers couldn't book ${emptied.length === 1 ? "it" : "them"} until you add one.`
+      : "";
     if (
       !(await confirm({
         title: `Delete “${o.title}”?`,
-        description: `This can't be undone. If customers have enquired about it, it is turned off instead.${inPackage}`,
+        description: `This can't be undone. If customers have enquired about it, it is turned off instead.${inPackage}${emptyNote}`,
         confirmLabel: "Delete",
         danger: true,
       }))

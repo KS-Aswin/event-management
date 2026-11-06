@@ -75,10 +75,10 @@ function initialLines(units: BuilderUnit[], guestCount: number | null, previous:
     serviceId: u.serviceId,
     label: u.title,
     qty: String(u.qty ?? (u.priceUnit && PER_HEAD.has(u.priceUnit) && guestCount ? guestCount : 1)),
-    unit: u.unitLabel || u.priceUnit || "event",
+    unit: u.unitLabel || u.priceUnit || "",
     unitPrice: u.priceFrom ? String(u.priceFrom) : "",
   }));
-  return fromUnits.length ? fromUnits : [{ key: nextKey(), serviceId: null, label: "", qty: "1", unit: "event", unitPrice: "" }];
+  return fromUnits.length ? fromUnits : [{ key: nextKey(), serviceId: null, label: "", qty: "1", unit: "", unitPrice: "" }];
 }
 
 export default function OfferBuilder({
@@ -133,9 +133,9 @@ export default function OfferBuilder({
   async function submit(e: React.FormEvent) {
     e.preventDefault();
     setError(null);
-    const bad = lines.findIndex((l, i) => l.label.trim().length < 2 || !l.unit.trim() || amounts[i] === null);
+    const bad = lines.findIndex((l, i) => l.label.trim().length < 2 || amounts[i] === null);
     if (bad !== -1) {
-      setError(`Line ${bad + 1}: fill in the item, a quantity above 0, a unit and a price.`);
+      setError(`Line ${bad + 1}: fill in the item, a quantity above 0 and a price.`);
       return;
     }
     if (travelP === null || discountP === null || gstP === null) {
@@ -215,7 +215,7 @@ export default function OfferBuilder({
               <label htmlFor={`${uid}-unit-${l.key}`} className="label">
                 Unit
               </label>
-              <input id={`${uid}-unit-${l.key}`} className="field" maxLength={30} value={l.unit} onChange={(e) => update(l.key, { unit: e.target.value })} placeholder="e.g. day" />
+              <input id={`${uid}-unit-${l.key}`} className="field" maxLength={30} value={l.unit} onChange={(e) => update(l.key, { unit: e.target.value })} placeholder="Optional, e.g. day" />
             </div>
             <div className="col-span-2 sm:col-span-1">
               <label htmlFor={`${uid}-price-${l.key}`} className="label">
@@ -247,7 +247,7 @@ export default function OfferBuilder({
             type="button"
             className="btn btn-secondary btn-sm"
             disabled={lines.length >= 40}
-            onClick={() => setLines((ls) => [...ls, { key: nextKey(), serviceId: null, label: "", qty: "1", unit: "event", unitPrice: "" }])}
+            onClick={() => setLines((ls) => [...ls, { key: nextKey(), serviceId: null, label: "", qty: "1", unit: "", unitPrice: "" }])}
           >
             + Add a line
           </button>
@@ -259,7 +259,7 @@ export default function OfferBuilder({
               onClick={() =>
                 setLines((ls) => [
                   ...ls,
-                  { key: nextKey(), serviceId: u.serviceId, label: u.title, qty: String(u.qty ?? 1), unit: u.unitLabel || u.priceUnit || "event", unitPrice: u.priceFrom ? String(u.priceFrom) : "" },
+                  { key: nextKey(), serviceId: u.serviceId, label: u.title, qty: String(u.qty ?? 1), unit: u.unitLabel || u.priceUnit || "", unitPrice: u.priceFrom ? String(u.priceFrom) : "" },
                 ])
               }
             >

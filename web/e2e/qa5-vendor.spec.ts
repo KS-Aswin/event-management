@@ -1,7 +1,7 @@
 import { test, expect, runTag, signUp, type Creds } from "./helpers";
 
 // QA round 5, vendor group: repro specs for issues found in qa5 (not run by the
-// tester; marked test.fail until fixed).
+// tester; they were test.fail until the fix5 round fixed them).
 //
 //   QA5-V1 Live listing, a package whose only other units are gone: deleting the
 //          last unit inside the package. The confirm says "deleting removes it
@@ -57,7 +57,7 @@ async function onboardOneUnitWithPackage(page: import("@playwright/test").Page, 
 }
 
 test.describe("qa5 vendor findings", () => {
-  test.fail("QA-103 (QA5-V1): deleting the last unit of a live package explains the package, not a missing offering", async ({ page }, testInfo) => {
+  test("QA-103 (QA5-V1): deleting the last unit of a live package explains the package, not a missing offering", async ({ page }, testInfo) => {
     await onboardOneUnitWithPackage(page, runTag(testInfo));
     await page.goto("/vendor/offerings");
     // Delete Engagement shoot (allowed: Candid + package remain).
@@ -69,12 +69,15 @@ test.describe("qa5 vendor findings", () => {
     const candid = page.locator("main li").filter({ has: page.getByRole("link", { name: "Candid photography", exact: true }) });
     await candid.getByRole("button", { name: "Delete" }).click();
     const dialog = page.locator("dialog[open], [role=alertdialog]").last();
+    // The confirm already says the package would be left with no units.
+    await expect(dialog).toContainText(/qa5 Full day.*would be left with no units/);
     await dialog.getByRole("button", { name: "Delete" }).click();
-    // Expected: the refusal (or the confirm) names the package that would be left empty.
-    await expect(page.locator("main [role=alert]").filter({ hasText: /qa5 Full day|package would be empty|last unit/ })).toBeVisible();
+    // The refusal names the package that would be left empty, and nothing is deleted.
+    await expect(page.locator("main [role=alert]").filter({ hasText: /qa5 Full day.*would be left with no units/ })).toBeVisible();
+    await expect(candid).toBeVisible();
   });
 
-  test.fail("QA-104 (QA5-V2): an extra offer line doesn't read '2 event ×' to the customer", async ({ page, browser }, testInfo) => {
+  test("QA-104 (QA5-V2): an extra offer line doesn't read '2 event ×' to the customer", async ({ page, browser }, testInfo) => {
     const { vendorId } = await onboardOneUnitWithPackage(page, `${runTag(testInfo)}o`);
     const guest = await browser.newContext();
     const g = await guest.newPage();
@@ -99,14 +102,17 @@ test.describe("qa5 vendor findings", () => {
     await g.goto(tracking);
     await expect(g.getByText(/Album 40 pages/)).toBeVisible();
     await expect(g.getByText(/\b2 event ×/)).toHaveCount(0);
+    // No unit typed: just the quantity.
+    await expect(g.getByText("2 × ₹4,500", { exact: true })).toBeVisible();
     await guest.close();
   });
 
-  test.fail("QA-105 (QA5-V3): a rejected listing's resubmit step shows the reject reason", async ({ page }, testInfo) => {
+  test("QA-105 (QA5-V3): a rejected listing's resubmit step shows the reject reason", async ({ page }, testInfo) => {
     const { vendorId } = await onboardOneUnitWithPackage(page, `${runTag(testInfo)}r`);
     const c = await db();
     try {
-      await c.query("UPDATE vendors SET status = 'rejected', published = false, status_reason = 'qa5: duplicate of another listing' WHERE id = $1", [vendorId]);
+      // A rejected listing went through review, so all six steps were reached.
+      await c.query("UPDATE vendors SET status = 'rejected', published = false, status_reason = 'qa5: duplicate of another listing', onboarding_step = 6, onboarding_completed_at = now(), submitted_at = now() WHERE id = $1", [vendorId]);
     } finally {
       await c.end();
     }

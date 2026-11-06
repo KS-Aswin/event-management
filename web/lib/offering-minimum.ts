@@ -10,6 +10,7 @@ type Mode = "on_request" | "from" | "fixed" | "range" | string;
 
 interface Row {
   id: number;
+  title: string;
   kind: "unit" | "addon" | "package";
   active: boolean;
   incomplete: boolean;
@@ -40,6 +41,35 @@ const qualifies = (r: Row) =>
   r.sale_mode === "separate" &&
   (r.price_mode === "on_request" || r.price_from > 0);
 
+const quoteList = (names: string[]) =>
+  names.length === 1
+    ? `“${names[0]}”`
+    : `${names.slice(0, -1).map((n) => `“${n}”`).join(", ")} and “${names[names.length - 1]}”`;
+
+/**
+ * QA-103: when the change only "removes" the last bookable offering because
+ * it breaks a package (its last unit goes, or one of its units is switched
+ * off), say so and name the package, instead of the generic message, which
+ * reads as wrong while the priced package is still on the page.
+ */
+export function packageMinimumMessage(empty: string[], broken: string[]): string {
+  const parts: string[] = [];
+  if (empty.length) {
+    parts.push(
+      `${quoteList(empty)} would be left with no units, so customers couldn't book ${empty.length === 1 ? "it" : "them"}.`
+    );
+  }
+  if (broken.length) {
+    parts.push(
+      `${quoteList(broken)} would include a unit that is off, so ${broken.length === 1 ? "it" : "they"} would be hidden from customers.`
+    );
+  }
+  return (
+    `${parts.join(" ")} Your listing is live, so it needs at least one priced offering or package customers can book. ` +
+    `Add another unit to the package (or add another priced offering) first, then delete or change this one.`
+  );
+}
+
 export const OFFERING_MINIMUM_MESSAGE =
   "Your listing is live, so customers need at least one priced offering or package they can book on its own. " +
   "Add or turn on another one first, then change this one.";
@@ -56,7 +86,7 @@ export async function checkOfferingMinimum(
   if (vendor.status !== "approved") return null;
   const [svc, items] = await Promise.all([
     pool.query<Row>(
-      `SELECT id, kind, active, incomplete, hidden_reason IS NOT NULL AS hidden, sale_mode,
+      `SELECT id, title, kind, active, incomplete, hidden_reason IS NOT NULL AS hidden, sale_mode,
               price_mode, price_from::float8 AS price_from
          FROM services WHERE vendor_id = $1`,
       [vendor.id]
@@ -126,5 +156,17 @@ export async function checkOfferingMinimum(
       p.incomplete = pkgItems.some((pi) => pi.package_id === pid && byId.get(pi.item_id)?.active === false);
     }
   }
-  return [...byId.values()].some(qualifies) ? null : OFFERING_MINIMUM_MESSAGE;
+  const after = [...byId.values()];
+  if (after.some(qualifies)) return null;
+  // Name the packages this change makes unbookable (QA-103).
+  const empty: string[] = [];
+  const broken: string[] = [];
+  for (const r of before) {
+    if (r.kind !== "package" || !qualifies(r)) continue;
+    const now = byId.get(r.id);
+    if (!now || !now.incomplete) continue;
+    if (pkgItems.some((pi) => pi.package_id === r.id)) broken.push(r.title);
+    else empty.push(r.title);
+  }
+  return empty.length || broken.length ? packageMinimumMessage(empty, broken) : OFFERING_MINIMUM_MESSAGE;
 }

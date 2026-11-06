@@ -1,7 +1,8 @@
 import type { ReactNode } from "react";
 import type { Offer } from "@/lib/enquiry-thread";
 import { formatPaise } from "@/lib/offer-math";
-import { formatDate, formatQty } from "@/app/vendor/leads/format";
+import { formatDate } from "@/app/vendor/leads/format";
+import { offerLineQty } from "./offer-line-qty";
 
 // One itemised offer version (PRODUCT_PLAN P2-4), shared by the customer's
 // enquiry page and the vendor's lead page. Server component: no hooks, so
@@ -66,7 +67,7 @@ export function OfferCard({
               <td className="py-2 pr-3">
                 <div className="font-medium break-words">{l.label}</div>
                 <div className="text-caption text-ink-soft tabular-nums">
-                  {formatQty(l.qty)} {l.unit} × {formatPaise(l.unitPricePaise)}
+                  {offerLineQty(l.qty, l.unit)} × {formatPaise(l.unitPricePaise)}
                 </div>
               </td>
               <td className="py-2 text-right tabular-nums whitespace-nowrap">{formatPaise(l.amountPaise)}</td>
