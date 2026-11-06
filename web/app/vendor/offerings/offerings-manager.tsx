@@ -163,7 +163,7 @@ export default function OfferingsManager({
     return (
       <li key={o.id} className={`flex flex-col gap-3 p-4 sm:flex-row sm:items-center ${!o.active ? "bg-surface-muted/60" : ""}`}>
         <div className="flex-1 min-w-0">
-          <Link href={editHref} className="font-medium hover:text-accent hover:underline underline-offset-2">
+          <Link href={editHref} className="inline-flex min-h-11 items-center font-medium hover:text-accent hover:underline underline-offset-2">
             {o.title}
           </Link>
           <p className="text-body text-ink-soft">
