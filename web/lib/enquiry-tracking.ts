@@ -1,6 +1,6 @@
 // Guest enquiry tracking (P2-3): the read-only view behind /enquiry/[token]
-// and GET /api/enquiries/track/[token], plus linking guest enquiries to an
-// account on signup / login (matching contact email).
+// and GET /api/enquiries/track/[token], plus linking a guest enquiry to an
+// account on signup / login when the guest brings its private token.
 //
 // The token is the only key: nothing here is reachable by id. Vendor-private
 // fields (vendor_notes, follow_up_at) are never selected.
@@ -176,23 +176,37 @@ export async function findEnquiryByToken(token: string): Promise<TrackedEnquiry 
 }
 
 /**
- * Links guest enquiries (no account yet) whose contact email matches this
- * customer's email to the account (P2-3; phone matching waits for OTP).
- * Only customer accounts; returns how many were linked. Never throws:
- * signing in must not fail because of this.
+ * Links ONE guest enquiry to a customer account by its private tracking
+ * token (P2-3, QA-003). The token is the guest's proof of ownership: it is
+ * only given to whoever sent the enquiry (the enquiry response and the
+ * /enquiry/<token> link). A matching contact email is NOT enough, because
+ * nobody has verified that the account holder owns that email.
+ * Only customer accounts, only enquiries not yet in an account. Returns the
+ * linked enquiry id, or null. Never throws: signing in must not fail
+ * because of this.
  */
-export async function linkGuestEnquiries(user: { id: number; email: string; role: string }): Promise<number> {
-  if (user.role !== "customer" || !user.email) return 0;
+export async function linkGuestEnquiryByToken(
+  user: { id: number; role: string },
+  token: unknown
+): Promise<number | null> {
+  if (user.role !== "customer" || !isGuestToken(token)) return null;
   try {
-    const r = await pool.query(
+    const r = await pool.query<{ id: number }>(
       `UPDATE quote_requests SET customer_id = $1
-        WHERE customer_id IS NULL AND guest_token IS NOT NULL AND contact_email IS NOT NULL
-          AND lower(contact_email) = lower($2)`,
-      [user.id, user.email.trim()]
+        WHERE guest_token = $2::uuid AND customer_id IS NULL
+        RETURNING id`,
+      [user.id, token.toLowerCase()]
     );
-    return r.rowCount ?? 0;
+    return r.rows[0]?.id ?? null;
   } catch (err) {
-    console.error("linkGuestEnquiries failed", err);
-    return 0;
+    console.error("linkGuestEnquiryByToken failed", err);
+    return null;
   }
+}
+
+/** The guest token in an `/enquiry/<token>` path (e.g. a ?next= value), or null. */
+export function guestTokenFromPath(path: unknown): string | null {
+  if (typeof path !== "string") return null;
+  const m = /^\/enquiry\/([^/?#]+)\/?(?:[?#].*)?$/.exec(path);
+  return m && isGuestToken(m[1]) ? m[1] : null;
 }

@@ -7,6 +7,7 @@ import { parseId } from "@/app/api/_lib/validation";
 import { getUserDetail } from "@/lib/admin/ops";
 import { ago, fmtDate, fmtDateTime, StatusChip } from "../_components/ui";
 import UserActions from "../_components/user-actions";
+import ResetLink from "../_components/reset-link";
 
 export const metadata: Metadata = { title: "User" };
 
@@ -105,6 +106,9 @@ export default async function UserDetailPage({ params }: { params: Promise<{ id:
               isSelf={session.userId === user.id}
               hasListing={Boolean(user.listing_id)}
             />
+            {user.role !== "admin" && user.status !== "deleted" && session.userId !== user.id && (
+              <ResetLink userId={user.id} name={user.name} />
+            )}
           </section>
 
           <section className="card" aria-labelledby="history-h">

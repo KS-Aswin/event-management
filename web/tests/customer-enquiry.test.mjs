@@ -327,16 +327,27 @@ test("tracking: unknown or malformed token is 404 (API and page); the page rende
   assert.doesNotMatch(missing.text, /Custtest Caterer/);
 });
 
-test("signing up with the enquiry's email links the guest enquiry to the new account", async () => {
-  const acct = await register("customer", ctx.guestEmail, "Fathima Guest");
-  const { rows } = await db().query("SELECT customer_id FROM quote_requests WHERE id = $1", [ctx.guestEnquiryId]);
-  assert.equal(rows[0].customer_id, acct.userId);
+// QA-003: a matching (unverified) email alone never links a guest enquiry;
+// the guest's private tracking token does. Full coverage: tests/qa1-auth.test.mjs.
+test("signing up with the enquiry's email alone does NOT link it; signing up with its token does", async () => {
+  const squatter = await register("customer", ctx.guestEmail, "Fathima Guest");
+  let { rows } = await db().query("SELECT customer_id FROM quote_requests WHERE id = $1", [ctx.guestEnquiryId]);
+  assert.equal(rows[0].customer_id, null);
+
+  const r0 = await req("/api/auth/register", {
+    method: "POST",
+    body: { name: "Fathima Real", email: email(), password: TEST_PASSWORD, role: "customer", enquiryToken: ctx.guestToken },
+  });
+  assert.equal(r0.status, 201, JSON.stringify(r0.data));
+  ({ rows } = await db().query("SELECT customer_id FROM quote_requests WHERE id = $1", [ctx.guestEnquiryId]));
+  assert.equal(rows[0].customer_id, r0.data.user.id);
+  assert.notEqual(rows[0].customer_id, squatter.userId);
   // The token still works and now says the enquiry is in an account.
   const r = await req(`/api/enquiries/track/${ctx.guestToken}`);
   assert.equal(r.data.enquiry.linkedToAccount, true);
 });
 
-test("logging in links guest enquiries sent with the account's email; vendor accounts are never linked", async () => {
+test("logging in never links guest enquiries by email; vendor accounts are never linked", async () => {
   const r = await req(`/api/vendors/${ctx.vendorId}/quotes`, {
     method: "POST",
     body: { ...base(), contactEmail: ctx.customer.email, message: `${TAG} login link` },
@@ -345,14 +356,17 @@ test("logging in links guest enquiries sent with the account's email; vendor acc
   const login = await req("/api/auth/login", { method: "POST", body: { email: ctx.customer.email, password: TEST_PASSWORD } });
   assert.equal(login.status, 200);
   let { rows } = await db().query("SELECT customer_id FROM quote_requests WHERE id = $1", [r.data.enquiry.id]);
-  assert.equal(rows[0].customer_id, ctx.customer.userId);
+  assert.equal(rows[0].customer_id, null);
 
   const v = await req(`/api/vendors/${ctx.seeded[0]}/quotes`, {
     method: "POST",
     body: { ...base(), contactEmail: ctx.owner2.email, message: `${TAG} vendor no link` },
   });
   assert.equal(v.status, 201);
-  await req("/api/auth/login", { method: "POST", body: { email: ctx.owner2.email, password: TEST_PASSWORD } });
+  await req("/api/auth/login", {
+    method: "POST",
+    body: { email: ctx.owner2.email, password: TEST_PASSWORD, enquiryToken: v.data.enquiry.guestToken },
+  });
   ({ rows } = await db().query("SELECT customer_id FROM quote_requests WHERE id = $1", [v.data.enquiry.id]));
   assert.equal(rows[0].customer_id, null);
 });

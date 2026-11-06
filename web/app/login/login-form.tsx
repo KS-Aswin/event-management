@@ -10,10 +10,13 @@ export default function LoginForm({
   next,
   initialEmail,
   notice = null,
+  enquiryToken = "",
 }: {
   next: string;
   initialEmail: string;
   notice?: string | null;
+  /** Guest enquiry token (QA-003): signing in adds that enquiry to the account. */
+  enquiryToken?: string;
 }) {
   const router = useRouter();
   const [email, setEmail] = useState(initialEmail);
@@ -34,7 +37,7 @@ export default function LoginForm({
       const res = await fetch("/api/auth/login", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email, password, next: next || undefined }),
+        body: JSON.stringify({ email, password, next: next || undefined, enquiryToken: enquiryToken || undefined }),
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) {
@@ -64,6 +67,12 @@ export default function LoginForm({
         <p className="text-[15px] leading-relaxed text-ink-soft mt-2 mb-6">
           Sign in to manage your events or your vendor profile
         </p>
+
+        {enquiryToken && !notice && !error && (
+          <div role="status" className="rounded-control bg-accent-tint px-3.5 py-2.5 text-sm text-foreground mb-4">
+            Sign in to add your enquiry to your account.
+          </div>
+        )}
 
         {notice && !error && (
           <div role="status" className="alert-error mb-4">
@@ -97,6 +106,14 @@ export default function LoginForm({
             onChange={setPassword}
             autoComplete="current-password"
           />
+          <div className="flex justify-end !mt-1">
+            <Link
+              href="/forgot-password"
+              className="inline-flex items-center min-h-11 text-sm text-accent font-medium hover:underline underline-offset-2"
+            >
+              Forgot password?
+            </Link>
+          </div>
 
           <button
             type="submit"
@@ -110,7 +127,7 @@ export default function LoginForm({
         <p className="text-center text-sm text-ink-soft mt-6 pt-5 border-t border-line">
           Don&apos;t have an account?{" "}
           <Link
-            href={withNext("/signup", next)}
+            href={withNext("/signup", next, enquiryToken ? { enquiry: enquiryToken } : undefined)}
             className="inline-flex items-center min-h-11 sm:min-h-0 text-accent font-medium hover:underline underline-offset-2"
           >
             Sign up

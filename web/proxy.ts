@@ -1,6 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { jwtVerify } from "jose";
 import { pool } from "@/lib/db";
+import { suspensionMessage } from "@/lib/suspension";
 import {
   legacyDashboardTarget,
   roleRedirect,
@@ -15,6 +16,8 @@ import {
 // admin area a plain 404 for everyone else.
 
 const COOKIE_NAME = "vela_session";
+/** Request header proxy.ts sets for /login when the cookie user is suspended. */
+const SUSPENSION_HEADER = "x-vela-suspension";
 
 interface CookieSession {
   role: Role;
@@ -150,6 +153,79 @@ async function publicRecordExists(pathname: string): Promise<boolean> {
   }
 }
 
+/**
+ * /vendors/<id> (QA-001): unknown, malformed and non-public (draft, pending,
+ * suspended, unpublished) listings are a real 404 instead of a 200 with the
+ * not-found UI. The owner and a live admin still get the preview (the page
+ * checks again). A DB error falls through to the page.
+ */
+async function vendorPageVisible(pathname: string, cookie: CookieSession | null): Promise<boolean> {
+  const m = /^\/vendors\/([^/]+)\/?$/.exec(pathname);
+  if (!m) return true;
+  if (!/^[1-9]\d{0,9}$/.test(m[1]) || Number(m[1]) > 2147483647) return false;
+  try {
+    const { rows } = await pool.query<{ status: string; published: boolean | null; owner_id: number | null }>(
+      "SELECT status, published, owner_id FROM vendors WHERE id = $1",
+      [Number(m[1])]
+    );
+    const v = rows[0];
+    if (!v) return false;
+    if (v.status === "approved" && v.published !== false) return true;
+    if (!cookie) return false;
+    if (v.owner_id !== null && v.owner_id === cookie.userId) return true;
+    return cookie.role === "admin" && (await adminStillLive(cookie));
+  } catch {
+    return true;
+  }
+}
+
+/**
+ * /login and /signup (QA-018, QA-031): a cookie whose user is suspended,
+ * deleted, gone or force-logged-out is removed here, both from the browser
+ * and from this request, so the root layout's header doesn't show a
+ * signed-in user next to "This account is suspended". (Server components
+ * can't delete cookies, so the guards that redirect here can't.) For a
+ * suspended user the reason travels to the page in x-vela-suspension; the
+ * cookie's signature proves it is the account holder.
+ */
+async function authPageResponse(request: NextRequest, cookie: CookieSession | null): Promise<NextResponse> {
+  const requestHeaders = new Headers(request.headers);
+  requestHeaders.delete(SUSPENSION_HEADER); // never trust a client-sent copy
+  let clear = false;
+  if (cookie) {
+    try {
+      const { rows } = await pool.query<{ status: string | null; session_version: number | null; suspended_reason: string | null }>(
+        "SELECT status, session_version, suspended_reason FROM users WHERE id = $1",
+        [cookie.userId]
+      );
+      const u = rows[0];
+      if (!u || (u.status && u.status !== "active")) {
+        clear = true;
+        if (u?.status === "suspended") requestHeaders.set(SUSPENSION_HEADER, encodeURIComponent(suspensionMessage(u.suspended_reason)));
+      } else if (typeof u.session_version === "number" && u.session_version !== cookie.sessionVersion) {
+        clear = true;
+      }
+    } catch {
+      // DB down: leave the cookie; the page's live check still shows the form.
+    }
+  } else if (request.cookies.has(COOKIE_NAME)) {
+    clear = true; // expired or tampered token
+  }
+  if (clear) {
+    const rest = request.cookies
+      .getAll()
+      .filter((c) => c.name !== COOKIE_NAME)
+      .map((c) => `${c.name}=${c.value}`)
+      .join("; ");
+    if (rest) requestHeaders.set("cookie", rest);
+    else requestHeaders.delete("cookie");
+  }
+  const response = NextResponse.next({ request: { headers: requestHeaders } });
+  if (clear) response.cookies.delete(COOKIE_NAME);
+  response.headers.set("Cache-Control", "private, no-store");
+  return response;
+}
+
 function notFoundPage(request: NextRequest) {
   // A path with no route renders app/not-found.tsx with a real 404 status.
   return NextResponse.rewrite(new URL("/_vela/not-found", request.url));
@@ -166,8 +242,25 @@ export async function proxy(request: NextRequest) {
     return response;
   }
 
+  // One-time password reset links carry a secret: never cached, never sent
+  // on as a Referer.
+  if (pathname === "/reset-password" || pathname.startsWith("/reset-password/")) {
+    const response = NextResponse.next();
+    response.headers.set("Cache-Control", "private, no-store");
+    response.headers.set("Referrer-Policy", "no-referrer");
+    response.headers.set("X-Robots-Tag", "noindex");
+    return response;
+  }
+
   const cookie = await cookieSession(request);
   const role = cookie?.role ?? null;
+
+  if (pathname === "/login" || pathname === "/signup") return authPageResponse(request, cookie);
+
+  if (pathname.startsWith("/vendors/")) {
+    if (!(await vendorPageVisible(pathname, cookie))) return notFoundPage(request);
+    return NextResponse.next();
+  }
 
   if (pathname === "/api/admin" || pathname.startsWith("/api/admin/")) {
     // Fast answers by cookie; the handler's requireAdmin() is the real check
@@ -225,5 +318,9 @@ export const config = {
     "/e/:path*",
     "/c/:path*",
     "/enquiry/:path*",
+    "/vendors/:path*",
+    "/login",
+    "/signup",
+    "/reset-password",
   ],
 };

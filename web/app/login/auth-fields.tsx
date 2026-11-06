@@ -19,6 +19,7 @@ export function Field({
   autoComplete,
   hint,
   inputMode,
+  maxLength,
 }: {
   label: string;
   name: string;
@@ -29,6 +30,7 @@ export function Field({
   autoComplete?: string;
   hint?: string;
   inputMode?: React.HTMLAttributes<HTMLInputElement>["inputMode"];
+  maxLength?: number;
 }) {
   const id = useId();
   const hintId = `${id}-hint`;
@@ -46,6 +48,7 @@ export function Field({
         onChange={(e) => onChange(e.target.value)}
         required={required}
         autoComplete={autoComplete}
+        maxLength={maxLength}
         inputMode={inputMode ?? (isEmail ? "email" : undefined)}
         autoCapitalize={isEmail ? "none" : undefined}
         spellCheck={isEmail ? false : undefined}

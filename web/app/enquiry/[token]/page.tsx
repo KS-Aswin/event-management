@@ -301,14 +301,13 @@ export default async function EnquiryTrackingPage({ params }: { params: Promise<
               Reply, accept offers and keep everything in one place
             </h2>
             <p className="text-sm text-ink-soft mt-1 max-w-[60ch]">
-              Create a free account with the email you gave in this enquiry and it&apos;s added to your account
-              automatically.
+              Create a free account (any email) or sign in, and this enquiry is added to it.
             </p>
             <div className="mt-3.5 flex flex-col sm:flex-row gap-2.5">
-              <Link href={`/signup?next=${next}`} className="btn btn-primary">
+              <Link href={`/signup?next=${next}&enquiry=${encodeURIComponent(token)}`} className="btn btn-primary">
                 Create free account
               </Link>
-              <Link href={`/login?next=${next}`} className="btn btn-secondary">
+              <Link href={`/login?next=${next}&enquiry=${encodeURIComponent(token)}`} className="btn btn-secondary">
                 I have an account
               </Link>
             </div>

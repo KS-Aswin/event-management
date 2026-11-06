@@ -23,6 +23,8 @@ const ROLES: { value: Role; title: string; description: string }[] = [
 
 // bcrypt only looks at the first 72 bytes of a password.
 const MAX_PASSWORD_BYTES = 72;
+// Same limit as Settings and the server (QA-006).
+const MAX_NAME = 80;
 
 function passwordProblem(password: string): string | null {
   if (password.trim().length < 8)
@@ -35,9 +37,12 @@ function passwordProblem(password: string): string | null {
 export default function SignupForm({
   next,
   initialRole,
+  enquiryToken = "",
 }: {
   next: string;
   initialRole: Role;
+  /** Guest enquiry token (QA-003): the new account gets that enquiry. */
+  enquiryToken?: string;
 }) {
   const router = useRouter();
   const [role, setRole] = useState<Role>(initialRole);
@@ -57,6 +62,15 @@ export default function SignupForm({
     e.preventDefault();
     setError(null);
     setEmailTaken(false);
+    const cleanName = name.trim().replace(/\s+/g, " ");
+    if (cleanName.length < 2) {
+      setError("Please enter your name.");
+      return;
+    }
+    if (cleanName.length > MAX_NAME) {
+      setError(`Your name is too long. Please use ${MAX_NAME} characters or fewer.`);
+      return;
+    }
     const problem = passwordProblem(password);
     if (problem) {
       setError(problem);
@@ -67,7 +81,14 @@ export default function SignupForm({
       const res = await fetch("/api/auth/register", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name, email, password, role, next: next || undefined }),
+        body: JSON.stringify({
+          name: cleanName,
+          email,
+          password,
+          role,
+          next: next || undefined,
+          enquiryToken: enquiryToken || undefined,
+        }),
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) {
@@ -102,6 +123,12 @@ export default function SignupForm({
         <p className="text-[15px] leading-relaxed text-ink-soft mt-2 mb-6">
           Plan an event, or list your business as a vendor
         </p>
+
+        {enquiryToken && !error && (
+          <div role="status" className="rounded-control bg-accent-tint px-3.5 py-2.5 text-sm text-foreground mb-4">
+            Your enquiry will be added to your new account. You can use any email you like.
+          </div>
+        )}
 
         {error && (
           <div
@@ -182,6 +209,7 @@ export default function SignupForm({
             onChange={setName}
             required
             autoComplete="name"
+            maxLength={MAX_NAME}
           />
           <Field
             label="Email"
@@ -223,7 +251,7 @@ export default function SignupForm({
         <p className="text-center text-sm text-ink-soft mt-6 pt-5 border-t border-line">
           Already have an account?{" "}
           <Link
-            href={withNext("/login", next)}
+            href={withNext("/login", next, enquiryToken ? { enquiry: enquiryToken } : undefined)}
             className="inline-flex items-center min-h-11 sm:min-h-0 text-accent font-medium hover:underline underline-offset-2"
           >
             Sign in
