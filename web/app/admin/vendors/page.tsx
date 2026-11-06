@@ -1,7 +1,8 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { AdminEmptyState, AdminPage } from "@/app/admin/_components/admin-page";
-import { ago, fmtDate, Pager, qs, StatusChip } from "@/app/admin/users/_components/ui";
+import { ago, fmtDate, qs, StatusChip } from "@/app/admin/users/_components/ui";
+import { AdminPager } from "@/app/admin/_components/pager";
 import {
   countVendorTabs,
   CREATED_FILTERS,
@@ -50,26 +51,32 @@ export default async function VendorsPage({
   const categoryId = posInt(str(sp.category));
   const created = parseCreatedFilter(str(sp.created));
   const docsPending = str(sp.documents) === "pending";
-  const page = posInt(str(sp.page)) ?? 1;
+  const requestedPage = posInt(str(sp.page)) ?? 1;
 
+  const listPage = (p: number) =>
+    listAdminVendors({
+      tab,
+      q,
+      districtId,
+      categoryId,
+      createdWithinDays: created?.days,
+      docsPending,
+      limit: PAGE_SIZE,
+      offset: (p - 1) * PAGE_SIZE,
+    });
+  let page = requestedPage;
   let data: { rows: AdminVendorRow[]; total: number } | null = null;
   let counts: Record<VendorTab, number> | null = null;
   let options: Awaited<ReturnType<typeof findFilterOptions>> = { districts: [], categories: [] };
   try {
-    [data, counts, options] = await Promise.all([
-      listAdminVendors({
-        tab,
-        q,
-        districtId,
-        categoryId,
-        createdWithinDays: created?.days,
-        docsPending,
-        limit: PAGE_SIZE,
-        offset: (page - 1) * PAGE_SIZE,
-      }),
-      countVendorTabs(),
-      findFilterOptions(),
-    ]);
+    [data, counts, options] = await Promise.all([listPage(page), countVendorTabs(), findFilterOptions()]);
+    // An out-of-range ?page= (old link, the queue shrank) shows the last real
+    // page instead of an empty "Nothing waiting" (QA-019).
+    const last = Math.max(1, Math.ceil(data.total / PAGE_SIZE));
+    if (data.total > 0 && page > last) {
+      page = last;
+      data = await listPage(page);
+    }
   } catch (err) {
     console.error("admin vendors list", err);
   }
@@ -236,7 +243,7 @@ export default async function VendorsPage({
           </>
         )}
         {data && (
-          <Pager path="/admin/vendors" filters={{ ...filters, status: tab }} page={page} pages={pages} total={data.total} noun="vendor" />
+          <AdminPager path="/admin/vendors" filters={{ ...filters, status: tab }} page={page} pages={pages} total={data.total} noun="vendor" />
         )}
       </div>
     </AdminPage>
@@ -251,9 +258,11 @@ function VendorRow({ v, tab }: { v: AdminVendorRow; tab: VendorTab }) {
         href={`/admin/vendors/${v.id}`}
         className="grid gap-x-4 gap-y-1 px-4 py-3 min-h-11 hover:bg-surface-muted focus-visible:bg-surface-muted grid-cols-[minmax(0,1fr)_auto] lg:grid-cols-[minmax(0,2.4fr)_minmax(0,1.3fr)_minmax(0,1fr)_minmax(0,1fr)] lg:items-center"
       >
-        <span className="min-w-0">
+        {/* At phone width the name gets the whole first line; category, status
+            and time go underneath so they never squeeze the name (QA-020). */}
+        <span className="min-w-0 col-span-2 lg:col-span-1">
           <span className="flex items-center gap-2 min-w-0">
-            <span className="font-medium truncate">{v.name}</span>
+            <span className="font-medium truncate" data-testid="vendor-row-name">{v.name}</span>
             {v.verified_at && (
               <span className="chip text-xs bg-accent-tint text-accent-hover shrink-0" title="Verified business">
                 Verified
@@ -290,13 +299,13 @@ function VendorRow({ v, tab }: { v: AdminVendorRow; tab: VendorTab }) {
             </span>
           )}
         </span>
-        <span className="text-caption lg:text-body text-ink-soft min-w-0 truncate justify-self-end lg:justify-self-auto">
+        <span className="text-caption lg:text-body text-ink-soft min-w-0 truncate self-center">
           {[v.category, v.district].filter(Boolean).join(" · ") || "–"}
         </span>
-        <span>
+        <span className="justify-self-end lg:justify-self-auto">
           <StatusChip status={v.status} />
         </span>
-        <span className="text-caption text-ink-soft justify-self-end lg:justify-self-auto" title={fmtDate(when)}>
+        <span className="text-caption text-ink-soft col-span-2 lg:col-span-1" title={fmtDate(when)}>
           {ago(when)}
         </span>
       </Link>

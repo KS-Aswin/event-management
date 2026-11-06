@@ -2,7 +2,8 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { AdminPage, AdminEmptyState } from "@/app/admin/_components/admin-page";
 import { auditFacets, cleanAuditFilters, listAudit, type AuditRow } from "@/lib/admin/ops";
-import { fmtDateTime, Pager } from "@/app/admin/users/_components/ui";
+import { fmtDateTime } from "@/app/admin/users/_components/ui";
+import { AdminPager } from "@/app/admin/_components/pager";
 
 export const metadata: Metadata = { title: "Audit log" };
 
@@ -85,7 +86,7 @@ export default async function AuditPage({
             ))}
           </ol>
         )}
-        <Pager path="/admin/audit" filters={filters} page={data.page} pages={data.pages} total={data.total} noun="entry" />
+        <AdminPager path="/admin/audit" filters={filters} page={data.page} pages={data.pages} total={data.total} noun="entry" nounPlural="entries" />
       </div>
     </AdminPage>
   );
@@ -132,7 +133,12 @@ function AuditItem({ a }: { a: AuditRow }) {
         <p className="min-w-0">
           <span className="chip font-mono font-medium">{a.action}</span>{" "}
           {href ? (
-            <Link href={href} className="text-body hover:underline underline-offset-2">
+            // >=44px tap target on phones (QA-028); compact again on wide screens.
+            <Link
+              href={href}
+              className="text-body text-accent underline underline-offset-2 inline-flex items-center min-h-11 min-w-11 lg:min-h-0 lg:min-w-0 hover:text-accent-hover"
+              data-testid="audit-entity-link"
+            >
               {a.entity_type} #{a.entity_id}
             </Link>
           ) : (

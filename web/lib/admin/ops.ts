@@ -210,8 +210,28 @@ export interface Paged<T> {
   pages: number;
 }
 
-function paged<T>(rows: T[], total: number, page: number): Paged<T> {
-  return { rows, total, page, pageSize: PAGE_SIZE, pages: Math.max(1, Math.ceil(total / PAGE_SIZE)) };
+function pagesFor(total: number): number {
+  return Math.max(1, Math.ceil(total / PAGE_SIZE));
+}
+
+/**
+ * Runs the count and the page query in parallel. When the requested page is
+ * past the end (an old link, or the list shrank) it is clamped to the last
+ * page and that page is fetched instead, so the list never claims
+ * "page 999 of 26" with an empty state (QA-019).
+ */
+async function pagedQuery<T>(
+  page: number,
+  count: () => Promise<number>,
+  rowsAt: (offset: number) => Promise<T[]>
+): Promise<Paged<T>> {
+  const [total, first] = await Promise.all([count(), rowsAt((page - 1) * PAGE_SIZE)]);
+  const pages = pagesFor(total);
+  if (page > pages) {
+    const rows = total > 0 ? await rowsAt((pages - 1) * PAGE_SIZE) : [];
+    return { rows, total, page: pages, pageSize: PAGE_SIZE, pages };
+  }
+  return { rows: first, total, page, pageSize: PAGE_SIZE, pages };
 }
 
 export function cleanUserFilters(sp: Record<string, unknown>): UserListFilters {
@@ -254,17 +274,21 @@ export async function searchUsers(f: UserListFilters): Promise<Paged<UserListRow
   const w = where.length ? `WHERE ${where.join(" AND ")}` : "";
   const from = `FROM users u LEFT JOIN LATERAL (
       SELECT id, name, status, phone FROM vendors WHERE owner_id = u.id ORDER BY id LIMIT 1) v ON true`;
-  const totalP = pool.query<{ n: number }>(`SELECT count(*)::int AS n ${from} ${w}`, vals);
-  const rowsP = pool.query<UserListRow>(
+  return pagedQuery<UserListRow>(
+    page,
+    async () => (await pool.query<{ n: number }>(`SELECT count(*)::int AS n ${from} ${w}`, vals)).rows[0].n,
+    async (offset) =>
+      (
+        await pool.query<UserListRow>(
     `SELECT u.id, u.name, u.email, u.role::text AS role, u.status, u.phone_e164, u.created_at, u.last_login_at,
             v.id AS listing_id, v.name AS listing_name, v.status AS listing_status
      ${from} ${w}
      ORDER BY u.created_at DESC, u.id DESC
-     LIMIT ${PAGE_SIZE} OFFSET ${(page - 1) * PAGE_SIZE}`,
-    vals
+     LIMIT ${PAGE_SIZE} OFFSET ${offset}`,
+          vals
+        )
+      ).rows
   );
-  const [total, rows] = await Promise.all([totalP, rowsP]);
-  return paged(rows.rows, total.rows[0].n, page);
 }
 
 export interface UserDetail extends UserListRow {
@@ -687,8 +711,12 @@ export async function listEnquiries(f: EnquiryFilters): Promise<Paged<EnquiryRow
      LEFT JOIN districts d ON d.id = COALESCE(q.district_id, v.district_id)
      LEFT JOIN users c ON c.id = q.customer_id
      LEFT JOIN spam_phones sp ON sp.phone = q.phone`;
-  const totalP = pool.query<{ n: number }>(`WITH ${SPAM_PHONES_CTE} SELECT count(*)::int AS n ${from} ${w}`, vals);
-  const rowsP = pool.query<EnquiryRow>(
+  return pagedQuery<EnquiryRow>(
+    page,
+    async () => (await pool.query<{ n: number }>(`WITH ${SPAM_PHONES_CTE} SELECT count(*)::int AS n ${from} ${w}`, vals)).rows[0].n,
+    async (offset) =>
+      (
+        await pool.query<EnquiryRow>(
     `WITH ${SPAM_PHONES_CTE}
      SELECT q.id, q.created_at, q.status, q.name, q.phone, q.contact_email, to_char(q.event_date, 'YYYY-MM-DD') AS event_date,
             left(q.message, 160) AS message, v.id AS vendor_id, v.name AS vendor_name, COALESCE(d.name, v.location) AS district,
@@ -698,11 +726,11 @@ export async function listEnquiries(f: EnquiryFilters): Promise<Paged<EnquiryRow
                     WHERE b.value IN (q.phone, lower(COALESCE(q.contact_email, '')), lower(COALESCE(c.email, '')))) AS blocked
      ${from} ${w}
      ORDER BY q.created_at DESC, q.id DESC
-     LIMIT ${PAGE_SIZE} OFFSET ${(page - 1) * PAGE_SIZE}`,
-    vals
+     LIMIT ${PAGE_SIZE} OFFSET ${offset}`,
+          vals
+        )
+      ).rows
   );
-  const [total, rows] = await Promise.all([totalP, rowsP]);
-  return paged(rows.rows, total.rows[0].n, page);
 }
 
 // ---------------------------------------------------------------------------
@@ -764,17 +792,21 @@ export async function listAudit(f: AuditFilters): Promise<Paged<AuditRow>> {
   }
   const w = where.length ? `WHERE ${where.join(" AND ")}` : "";
   const from = "FROM admin_audit_log a LEFT JOIN users u ON u.id = a.actor_id";
-  const totalP = pool.query<{ n: number }>(`SELECT count(*)::int AS n ${from} ${w}`, vals);
-  const rowsP = pool.query<AuditRow>(
+  return pagedQuery<AuditRow>(
+    page,
+    async () => (await pool.query<{ n: number }>(`SELECT count(*)::int AS n ${from} ${w}`, vals)).rows[0].n,
+    async (offset) =>
+      (
+        await pool.query<AuditRow>(
     `SELECT a.id::int AS id, a.created_at, a.actor_id, u.name AS actor_name, u.email AS actor_email,
             a.action, a.entity_type, a.entity_id, a.before, a.after, a.reason, a.ip
      ${from} ${w}
      ORDER BY a.id DESC
-     LIMIT ${PAGE_SIZE} OFFSET ${(page - 1) * PAGE_SIZE}`,
-    vals
+     LIMIT ${PAGE_SIZE} OFFSET ${offset}`,
+          vals
+        )
+      ).rows
   );
-  const [total, rows] = await Promise.all([totalP, rowsP]);
-  return paged(rows.rows, total.rows[0].n, page);
 }
 
 /** Distinct actions and entity types for the filter menus. */

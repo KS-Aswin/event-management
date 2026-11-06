@@ -303,28 +303,29 @@ export interface AdminVendorDetail {
 }
 
 export async function getAdminVendorDetail(id: number): Promise<AdminVendorDetail | null> {
-  const v = await pool.query<AdminVendorDetail["vendor"] & { duplicates: DuplicateHint[] }>(
-    `SELECT v.*, c.name AS category_name, d.name AS district_name,
-            vb.name AS verified_by_name, rb.name AS reviewed_by_name, dup.duplicates
-     FROM vendors v
-     LEFT JOIN categories c ON c.id = v.primary_category_id
-     LEFT JOIN districts d ON d.id = v.district_id
-     LEFT JOIN users vb ON vb.id = v.verified_by
-     LEFT JOIN users rb ON rb.id = v.reviewed_by
-     ${DUPLICATES_LATERAL}
-     WHERE v.id = $1`,
-    [id]
-  );
-  const row = v.rows[0];
-  if (!row) return null;
-  const { duplicates, ...vendor } = row;
-
-  const [owner, cats, areas, offerings, media, docs, events, trail] = await Promise.all([
-    vendor.owner_id
-      ? pool.query("SELECT id, email, name, role, status FROM users WHERE id = $1", [vendor.owner_id])
-      : Promise.resolve({ rows: [] }),
+  // Everything is keyed on the vendor id, so all queries go out at once: one
+  // round trip to the database instead of two (QA-021, admin page speed).
+  const [v, owner, cats, areas, offerings, media, docs, events, trail] = await Promise.all([
+    pool.query<AdminVendorDetail["vendor"] & { duplicates: DuplicateHint[] }>(
+      `SELECT v.*, c.name AS category_name, d.name AS district_name,
+              vb.name AS verified_by_name, rb.name AS reviewed_by_name, dup.duplicates
+       FROM vendors v
+       LEFT JOIN categories c ON c.id = v.primary_category_id
+       LEFT JOIN districts d ON d.id = v.district_id
+       LEFT JOIN users vb ON vb.id = v.verified_by
+       LEFT JOIN users rb ON rb.id = v.reviewed_by
+       ${DUPLICATES_LATERAL}
+       WHERE v.id = $1`,
+      [id]
+    ),
+    pool.query("SELECT u.id, u.email, u.name, u.role, u.status FROM vendors v JOIN users u ON u.id = v.owner_id WHERE v.id = $1", [id]),
     pool.query<{ name: string }>(
-      "SELECT c.name FROM vendor_categories vc JOIN categories c ON c.id = vc.category_id WHERE vc.vendor_id = $1 ORDER BY c.name",
+      // The primary category is shown on its own; vendor_categories also holds it (QA-020).
+      `SELECT c.name FROM vendor_categories vc
+         JOIN categories c ON c.id = vc.category_id
+         JOIN vendors v ON v.id = vc.vendor_id
+        WHERE vc.vendor_id = $1 AND vc.category_id IS DISTINCT FROM v.primary_category_id
+        ORDER BY c.name`,
       [id]
     ),
     pool.query<{ name: string }>(
@@ -370,6 +371,9 @@ export async function getAdminVendorDetail(id: number): Promise<AdminVendorDetai
       [id]
     ),
   ]);
+  const row = v.rows[0];
+  if (!row) return null;
+  const { duplicates, ...vendor } = row;
 
   return {
     vendor,

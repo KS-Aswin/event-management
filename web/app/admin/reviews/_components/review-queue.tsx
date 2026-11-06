@@ -47,7 +47,7 @@ export default function ReviewQueueList({ tab, items: initial }: { tab: ReviewTa
 
   function ratingText(d: Record<string, unknown>) {
     const v = d.vendorRating as { rating?: string; reviewsCount?: number } | undefined;
-    return v ? ` Rating is now ${Number(v.rating).toFixed(1)} from ${v.reviewsCount} reviews.` : "";
+    return v ? ` Rating is now ${Number(v.rating).toFixed(1)} from ${v.reviewsCount} review${v.reviewsCount === 1 ? "" : "s"}.` : "";
   }
 
   function hide(item: ReviewQueueItem) {
@@ -115,7 +115,7 @@ export default function ReviewQueueList({ tab, items: initial }: { tab: ReviewTa
                     <Link href={`/admin/vendors/${item.vendor.id}`} className="font-medium text-foreground hover:underline">
                       {item.vendor.name}
                     </Link>{" "}
-                    · rated {Number(item.vendor.rating).toFixed(1)} from {item.vendor.reviewsCount}
+                    · rated {Number(item.vendor.rating).toFixed(1)} from {item.vendor.reviewsCount} review{item.vendor.reviewsCount === 1 ? "" : "s"}
                   </p>
                   <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1">
                     <Stars rating={item.rating} />

@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { AdminPage } from "@/app/admin/_components/admin-page";
 import { getAnalytics, parseRange, RANGES, SUPPLY_GAP_DAYS, type AnalyticsSummary } from "@/lib/admin/analytics";
+import { plural } from "@/lib/admin/format";
 
 export const metadata: Metadata = { title: "Analytics" };
 
@@ -36,6 +37,16 @@ function fmtMinutes(m: number | null): string {
   const d = Math.floor(m / (60 * 24));
   const h = Math.round((m % (60 * 24)) / 60);
   return h ? `${d} d ${h} h` : `${d} d`;
+}
+
+/**
+ * The parts under the Signups headline. They always add up to the headline:
+ * admin accounts are listed too when any were created in the range (QA-022).
+ */
+function signupBreakdown(t: AnalyticsSummary["signups"]["totals"]): string {
+  const parts = [plural(t.vendor, "vendor"), plural(t.customer, "customer")];
+  if (t.admin > 0) parts.push(plural(t.admin, "admin"));
+  return parts.join(" · ");
 }
 
 function pct(n: number | null) {
@@ -301,7 +312,7 @@ export default async function AnalyticsPage({
       ) : (
         <div className="space-y-5">
           <dl className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-            <Stat label={`Signups, last ${days} days`} value={nf.format(data.signups.totals.all)} sub={`${data.signups.totals.vendor} vendors · ${data.signups.totals.customer} customers`} />
+            <Stat label={`Signups, last ${days} days`} value={nf.format(data.signups.totals.all)} sub={signupBreakdown(data.signups.totals)} />
             <Stat label={`Enquiries, last ${days} days`} value={nf.format(data.response.total)} />
             <Stat label="Response rate" value={pct(data.response.rate)} sub={data.response.total ? `${data.response.responded} of ${data.response.total} answered` : undefined} />
             <Stat label="Median first response" value={fmtMinutes(data.response.medianMinutes)} />

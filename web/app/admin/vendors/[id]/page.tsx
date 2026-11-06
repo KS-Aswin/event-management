@@ -94,13 +94,13 @@ export default async function VendorDetailPage({ params }: { params: Promise<{ i
   };
 
   const facts: [string, React.ReactNode][] = [
-    ["Category", [v.category_name ?? v.category, ...detail.additionalCategories].filter(Boolean).join(", ") || "–"],
+    ["Category", Array.from(new Set([v.category_name ?? v.category, ...detail.additionalCategories].filter(Boolean))).join(", ") || "–"],
     ["District", Array.from(new Set([v.district_name, v.location].filter(Boolean))).join(" · ") || "–"],
     ["Serves", detail.serviceAreas.length ? detail.serviceAreas.join(", ") : "Home district only"],
     ["Type", <span key="t" className="capitalize">{v.vendor_type}</span>],
     ["Phone", v.phone ?? "Not given"],
     ["WhatsApp", v.whatsapp ?? "Not given"],
-    ["Experience", v.years_experience != null ? `${v.years_experience} years` : v.experience || "–"],
+    ["Experience", v.years_experience != null ? `${v.years_experience} year${v.years_experience === 1 ? "" : "s"}` : v.experience || "–"],
     ["Languages", v.languages?.length ? v.languages.join(", ") : "–"],
     ["Registered name", v.legal_name ?? "–"],
     ["GSTIN / FSSAI", [v.gstin, v.fssai_no].filter(Boolean).join(" · ") || "–"],

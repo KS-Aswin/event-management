@@ -9,7 +9,8 @@ import {
   listSpamSignals,
   SPAM_VENDORS,
 } from "@/lib/admin/ops";
-import { ago, fmtDate, fmtDateTime, Pager, qs, StatusChip } from "@/app/admin/users/_components/ui";
+import { ago, fmtDate, fmtDateTime, qs, StatusChip } from "@/app/admin/users/_components/ui";
+import { AdminPager } from "@/app/admin/_components/pager";
 import { BlockButton, BlockForm, UnblockButton } from "./_components/contact-actions";
 
 export const metadata: Metadata = { title: "Enquiries" };
@@ -176,7 +177,7 @@ export default async function EnquiriesPage({
               ))}
             </ul>
           )}
-          <Pager path="/admin/enquiries" filters={filters} page={list.page} pages={list.pages} total={list.total} noun="enquiry" />
+          <AdminPager path="/admin/enquiries" filters={filters} page={list.page} pages={list.pages} total={list.total} noun="enquiry" nounPlural="enquiries" />
         </div>
       </section>
 
