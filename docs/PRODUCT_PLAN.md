@@ -1111,76 +1111,76 @@ AC:
 - A suspended user's existing cookie is rejected on the next request.
 - `force_logout` invalidates the cookie.
 
-**P1-2 Audit log.** (Helper done in the foundation: `lib/admin/audit.ts` `audit(client, {...})` + `lib/admin/tx.ts` `withTransaction`; viewer pending.) `lib/audit.ts` `audit(actor, action, entity, before, after, reason)` called inside the same transaction as each admin mutation, plus the `/admin/audit` viewer with filters.
+[x] **P1-2 Audit log.** (Helper done in the foundation: `lib/admin/audit.ts` `audit(client, {...})` + `lib/admin/tx.ts` `withTransaction`; viewer pending.) `lib/audit.ts` `audit(actor, action, entity, before, after, reason)` called inside the same transaction as each admin mutation, plus the `/admin/audit` viewer with filters. _Status: DB trigger blocks update/delete/truncate; each admin mutation writes exactly one audit row in its transaction (asserted in tests/admin-*); /admin/audit viewer with filters._
 AC:
 - Every `/api/admin/*` mutation test asserts exactly one audit row.
 - Audit rows cannot be updated or deleted (DB trigger).
 
-**P1-3 Vendor approval queue and detail.** `/admin/vendors` and `[id]`: approve / request changes / reject / suspend / unsuspend with reason, verified badge, duplicate hints, re-review list, vendor status events, notification to the vendor (in-app).
+[x] **P1-3 Vendor approval queue and detail.** `/admin/vendors` and `[id]`: approve / request changes / reject / suspend / unsuspend with reason, verified badge, duplicate hints, re-review list, vendor status events, notification to the vendor (in-app). _Status: /admin/vendors status tabs, filters, Today-tile links, duplicate hints; /admin/vendors/[id] with reason dialogs, 409 on concurrent decisions, media review, status + audit history; vendor home shows the note and can resubmit. tests/admin-vendors + e2e/admin-vendors._
 AC:
 - Approving a pending vendor makes it public and approves its pending media in the same transaction.
 - Request-changes shows the note on the vendor home, and resubmission returns the listing to pending.
 - Two concurrent approvals give one success and one 409.
 - Suspending hides the listing at once and blocks the vendor's login.
 
-**P1-4 Today inbox** (`/admin`). Counts and oldest item for each queue (vendors pending, re-review, review reports, media, custom offerings, documents).
+[x] **P1-4 Today inbox** (`/admin`). Counts and oldest item for each queue (vendors pending, re-review, review reports, media, custom offerings, documents). _Status: Tiles carry counts and the oldest item and link to the filtered queue (vendors by tab, /admin/documents?tab=pending)._
 AC:
 - Counts match the fixture data.
 - Each tile links to its filtered queue.
 - The page loads in under 300 ms on the seed DB.
 
-**P1-5 Review moderation.** Reports queue; hide / unhide / dismiss; rating and count recomputed on top of `seed_rating` / `seed_reviews_count`.
+[x] **P1-5 Review moderation.** Reports queue; hide / unhide / dismiss; rating and count recomputed on top of `seed_rating` / `seed_reviews_count`. _Status: Public "Report review" button feeds the queue; hide/unhide/dismiss recompute rating on top of seed values; hidden reviews absent from public pages/APIs._
 AC:
 - Hiding a 1★ review raises the displayed rating correctly (fixture maths).
 - Hidden reviews are absent from public pages and APIs.
 - Reports move to `actioned` or `dismissed`.
 
-**P1-6 Media moderation.** `/admin/media` with tabs Pre-moderation / Recently uploaded / Reported; approve or reject with reason; the vendor sees the reason.
+[x] **P1-6 Media moderation.** `/admin/media` with tabs Pre-moderation / Recently uploaded / Reported; approve or reject with reason; the vendor sees the reason. _Status: Pre-moderation / recent / reported tabs; 2 reports move an asset to pending_review; vendors see the rejection reason in their media manager._
 AC:
 - A rejected asset disappears from public pages.
 - 2 reports move an approved asset to `pending_review`.
 - Actions are audited.
 
-**P1-7 Taxonomy manager.** CRUD for categories, templates (schema builder) and event types/bundles.
+[x] **P1-7 Taxonomy manager.** CRUD for categories, templates (schema builder) and event types/bundles. _Status: Category/template/event-type CRUD; taxonomy cache invalidation so changes reach the wizard and filters without a deploy; in-use key rename and in-use category deactivation give 409._
 AC:
 - A new template appears in the wizard and filters without a deploy.
 - Changing the key of an attribute in use is blocked.
 - Deactivating a category with active offerings gets 409.
 
-**P1-8 Custom offering queue.** Grouped by normalised name; promote / merge / keep private / reject in one transaction.
+[x] **P1-8 Custom offering queue.** Grouped by normalised name; promote / merge / keep private / reject in one transaction. _Status: Promote/merge/keep private/reject in one transaction, vendor notified (vendor home notifications list); migration 007 keeps promoted templates if the requester is deleted. Promoted-template search chips follow in P2-7._
 AC:
 - Promoting "kolkali" re-points all 3 fixture vendors' offerings to the new template and makes it a filter chip.
 - Rejecting hides the offering and notifies the vendor.
 
-**P1-9 User management.** Search by email or phone, view role and linked listing, suspend / unsuspend / force logout.
+[x] **P1-9 User management.** Search by email or phone, view role and linked listing, suspend / unsuspend / force logout. _Status: Search, detail, suspend/unsuspend/force logout; self and last-admin suspension blocked; suspended vendor's listing hidden; audited._
 AC:
 - An admin cannot suspend themselves or the last active admin.
 - A suspended vendor's listing is hidden.
 - Actions are audited.
 
-**P1-10 Vendor documents and verification.** Vendor upload page (`/vendor/documents`, private storage), admin viewer that streams through an admin-only route, verify / reject with expiry, "Verified business" badge rule (≥1 verified doc plus an admin verify action).
+[x] **P1-10 Vendor documents and verification.** Vendor upload page (`/vendor/documents`, private storage), admin viewer that streams through an admin-only route, verify / reject with expiry, "Verified business" badge rule (≥1 verified doc plus an admin verify action). _Status: /vendor/documents upload (PDF/JPEG/PNG ≤10 MB, magic-byte check) to private storage; /admin/documents queue + admin-only file route (401/403, /media 404); verify/reject with expiry, audited and notified; "Licence expired" shown without unpublishing; Verified badge needs ≥1 valid verified doc. tests/admin-documents. Vendors cannot re-open their own files yet._
 AC:
 - A document URL is never reachable without an admin session (404 via `/media`, 403 via the API for non-admins).
 - An expired FSSAI shows "Licence expired" to the vendor but does not unpublish.
 
-**P1-11 Admin vendor edit and claim.** Edit any vendor field on the vendor's behalf (audited). Assign a seeded `owner_id NULL` listing to a vendor user who has no listing.
+[x] **P1-11 Admin vendor edit and claim.** Edit any vendor field on the vendor's behalf (audited). Assign a seeded `owner_id NULL` listing to a vendor user who has no listing. _Status: Edit form (before/after in audit), owner search limited to vendor accounts with no listing, 409 if the user already owns one, claimed vendor lands on /vendor._
 AC:
 - The edit shows before and after in the audit log.
 - Assigning to a user who already owns a listing gets 409 (one listing per account).
 - After the claim, the vendor lands on `/vendor` with that listing.
 
-**P1-12 Analytics and event capture.** `vendor_events` beacons (profile view, WhatsApp click). `/admin/analytics`: signups by role/day, listings by status, enquiries by district × category × event type, response rate, median time to first response, supply-gap table (enquiries ÷ approved vendors per district × category).
+[x] **P1-12 Analytics and event capture.** `vendor_events` beacons (profile view, WhatsApp click). `/admin/analytics`: signups by role/day, listings by status, enquiries by district × category × event type, response rate, median time to first response, supply-gap table (enquiries ÷ approved vendors per district × category). _Status: /api/events beacon (profile view once per session via migration 006, taps); /admin/analytics with signups, listings by status, enquiries by district×category×event type, response rate, median first response, supply gaps; renders empty. Tap counts start once the profile shows WhatsApp/phone links._
 AC:
 - Numbers match fixture expectations.
 - A profile view is counted at most once per session per vendor.
 - The page renders with empty data.
 
-**P1-13 Enquiry monitor and blocked contacts.** List of recent enquiries with spam flags (same phone sending to more than 10 vendors in 1 h), block a phone or email.
+[x] **P1-13 Enquiry monitor and blocked contacts.** List of recent enquiries with spam flags (same phone sending to more than 10 vendors in 1 h), block a phone or email. _Status: Enquiry list with spam flags (>10 vendors/1 h), block/unblock phone or email; blocked contacts get a generic 403._
 AC:
 - An enquiry from a blocked phone gets 403 with a generic message.
 - Flags appear for the fixture spam burst.
 
-**P1-14 Terms and content policy page** (`/terms`). Covers the content policy (no communal or caste discrimination, no contact details in reviews) and media consent.
+[x] **P1-14 Terms and content policy page** (`/terms`). Covers the content policy (no communal or caste discrimination, no contact details in reviews) and media consent. _Status: /terms with content policy, #media consent, document privacy; linked from footer, signup, sitemap and both upload consent checkboxes. e2e/terms._
 AC: linked from signup, the upload consent checkbox and the footer.
 
 ### P2: Customer journey
