@@ -276,13 +276,13 @@ function VendorRow({ v, tab }: { v: AdminVendorRow; tab: VendorTab }) {
           {(v.duplicates.length > 0 || v.pending_media > 0 || v.pending_documents > 0 || (v.rereview_required && v.status === "approved")) && (
             <span className="mt-1 flex flex-wrap gap-1.5">
               {v.duplicates.length > 0 && (
-                <span className="chip text-xs bg-danger-tint text-danger">
+                <span className="chip text-xs bg-danger-tint text-danger max-w-full whitespace-normal break-words rounded-control" data-testid="duplicate-chip">
                   Possible duplicate: {v.duplicates.slice(0, 2).map((d) => d.name).join(", ")}
                   {v.duplicates.length > 2 ? ` +${v.duplicates.length - 2}` : ""}
                 </span>
               )}
               {v.rereview_required && v.status === "approved" && (
-                <span className="chip text-xs bg-[#fdf6e0] text-gold-ink">
+                <span className="chip text-xs bg-[#fdf6e0] text-gold-ink max-w-full whitespace-normal break-words rounded-control">
                   Re-review{v.rereview_fields.length ? `: ${v.rereview_fields.join(", ").replace(/_/g, " ")}` : ""}
                 </span>
               )}

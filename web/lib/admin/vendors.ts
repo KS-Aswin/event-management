@@ -189,7 +189,7 @@ export async function listAdminVendors(f: VendorListFilters): Promise<{ rows: Ad
     LEFT JOIN districts d ON d.id = v.district_id`;
   const [rows, count] = await Promise.all([
     pool.query<AdminVendorRow>(
-      `SELECT v.id, v.name, v.status, COALESCE(c.name, v.category) AS category,
+      `SELECT v.id, v.name, v.status, COALESCE(COALESCE(NULLIF(btrim(c.display_name), ''), c.name), v.category) AS category,
               COALESCE(d.name, v.location) AS district, v.district_id, v.phone, v.whatsapp,
               v.owner_id, u.email AS owner_email, u.name AS owner_name,
               v.submitted_at, v.created_at, v.updated_at, v.verified_at, v.rereview_required, v.rereview_fields,
@@ -227,7 +227,10 @@ export async function countVendorTabs(): Promise<Record<VendorTab, number>> {
 export async function findFilterOptions() {
   const [districts, categories] = await Promise.all([
     pool.query<{ id: number; name: string }>("SELECT id, name FROM districts WHERE state = 'Kerala' ORDER BY name"),
-    pool.query<{ id: number; name: string }>("SELECT id, name FROM categories ORDER BY name"),
+    // Admin pages show the same category names as /admin/taxonomy and the public site (QA-072).
+    pool.query<{ id: number; name: string }>(
+      "SELECT id, COALESCE(NULLIF(btrim(c.display_name), ''), c.name) AS name FROM categories c ORDER BY active DESC, 2"
+    ),
   ]);
   return { districts: districts.rows, categories: categories.rows };
 }
@@ -307,7 +310,7 @@ export async function getAdminVendorDetail(id: number): Promise<AdminVendorDetai
   // round trip to the database instead of two (QA-021, admin page speed).
   const [v, owner, cats, areas, offerings, media, docs, events, trail] = await Promise.all([
     pool.query<AdminVendorDetail["vendor"] & { duplicates: DuplicateHint[] }>(
-      `SELECT v.*, c.name AS category_name, d.name AS district_name,
+      `SELECT v.*, COALESCE(NULLIF(btrim(c.display_name), ''), c.name) AS category_name, d.name AS district_name,
               vb.name AS verified_by_name, rb.name AS reviewed_by_name, dup.duplicates
        FROM vendors v
        LEFT JOIN categories c ON c.id = v.primary_category_id
@@ -321,11 +324,11 @@ export async function getAdminVendorDetail(id: number): Promise<AdminVendorDetai
     pool.query("SELECT u.id, u.email, u.name, u.role, u.status FROM vendors v JOIN users u ON u.id = v.owner_id WHERE v.id = $1", [id]),
     pool.query<{ name: string }>(
       // The primary category is shown on its own; vendor_categories also holds it (QA-020).
-      `SELECT c.name FROM vendor_categories vc
+      `SELECT COALESCE(NULLIF(btrim(c.display_name), ''), c.name) AS name FROM vendor_categories vc
          JOIN categories c ON c.id = vc.category_id
          JOIN vendors v ON v.id = vc.vendor_id
         WHERE vc.vendor_id = $1 AND vc.category_id IS DISTINCT FROM v.primary_category_id
-        ORDER BY c.name`,
+        ORDER BY 1`,
       [id]
     ),
     pool.query<{ name: string }>(
@@ -333,7 +336,7 @@ export async function getAdminVendorDetail(id: number): Promise<AdminVendorDetai
       [id]
     ),
     pool.query<AdminVendorDetail["offerings"][number]>(
-      `SELECT s.id, s.title, s.kind, c.name AS category, t.name AS template_name, s.custom_name,
+      `SELECT s.id, s.title, s.kind, COALESCE(NULLIF(btrim(c.display_name), ''), c.name) AS category, t.name AS template_name, s.custom_name,
               (SELECT r.status FROM custom_offering_requests r WHERE r.service_id = s.id ORDER BY r.id DESC LIMIT 1) AS custom_status,
               s.active, s.hidden_reason, s.price_mode, s.price_from, s.price_to, s.price_unit
        FROM services s
