@@ -215,7 +215,7 @@ export default function OfferBuilder({
               <label htmlFor={`${uid}-unit-${l.key}`} className="label">
                 Unit
               </label>
-              <input id={`${uid}-unit-${l.key}`} className="field" maxLength={30} value={l.unit} onChange={(e) => update(l.key, { unit: e.target.value })} placeholder="plate" />
+              <input id={`${uid}-unit-${l.key}`} className="field" maxLength={30} value={l.unit} onChange={(e) => update(l.key, { unit: e.target.value })} placeholder="e.g. day" />
             </div>
             <div className="col-span-2 sm:col-span-1">
               <label htmlFor={`${uid}-price-${l.key}`} className="label">

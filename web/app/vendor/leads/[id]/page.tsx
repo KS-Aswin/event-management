@@ -119,7 +119,11 @@ export default async function VendorLeadPage({ params }: { params: Promise<{ id:
         </div>
         <div className="flex items-center gap-2">
           <span className="text-caption text-ink-soft hidden sm:inline">Status</span>
-          <LeadStatusControl leadId={l.id} status={l.status} leadName={l.name} hasEventDate={!!l.event_date} quoted={isQuoted(l.status, latestOffer?.status)} />
+          {/* The control keeps its own optimistic status. Sending a message or an offer moves the
+              lead (e.g. New -> Replied) on the server, so remount it when the thread grows to pick
+              up the new status (QA-094). A change made in the control itself adds no message, so
+              its undo stays. */}
+          <LeadStatusControl key={`${thread.messages.length}-${thread.offers.length}`} leadId={l.id} status={l.status} leadName={l.name} hasEventDate={!!l.event_date} quoted={isQuoted(l.status, latestOffer?.status)} />
         </div>
       </header>
 
@@ -281,7 +285,7 @@ export default async function VendorLeadPage({ params }: { params: Promise<{ id:
               <Composer
                 endpoint={`/api/vendor/leads/${l.id}/messages`}
                 label={`Reply to ${firstName}`}
-                placeholder="e.g. Thanks! The date is free. Shall I send an offer for 300 plates?"
+                placeholder="e.g. Thanks! The date is free. Shall I send you an offer?"
                 closedReason={closed}
               />
             </div>

@@ -163,7 +163,7 @@ export default function OfferingPackageForm({
                           className="field"
                           maxLength={200}
                           value={row.note}
-                          placeholder="e.g. 300 plates, 4 hours"
+                          placeholder="e.g. 4 hours"
                           onChange={(e) => update(u.id, { note: e.target.value })}
                         />
                       </div>

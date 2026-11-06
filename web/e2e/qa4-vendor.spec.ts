@@ -1,8 +1,6 @@
 import { test, expect, runTag, signUp, type Creds } from "./helpers";
 
-// QA round 4, vendor group: reproductions of new issues. Marked test.fail until
-// fixed. Not run during qa4 (the Playwright webServer/teardown would disturb the
-// parallel testers).
+// QA round 4, vendor group: regression tests for issues fixed in fix round 4.
 //
 //   QA4-V1 Lead page: after "Send message" the header badge flips to "Replied"
 //          but the Status <select> keeps showing "New" until a reload.
@@ -10,8 +8,6 @@ import { test, expect, runTag, signUp, type Creds } from "./helpers";
 //          not warn, the package silently becomes "Incomplete" (hidden from
 //          customers), and the copy says "one of its units is off" although no
 //          unit is off. Saving the package unchanged clears it.
-//   QA4-V3 "Updates from Vela": unread count includes notifications that can't
-//          be opened anywhere (home shows 6, bell shows 15, no full list).
 
 async function approvedVendorWithLead(page: import("@playwright/test").Page, tag: string) {
   const vendor: Creds = { name: `qa4 Vani ${tag}`, email: `e2e-qa4-vendor-spec-${tag}@example.com`, password: "e2e-pass-12345" };
@@ -32,7 +28,6 @@ async function approvedVendorWithLead(page: import("@playwright/test").Page, tag
 
 test.describe("qa4 vendor findings", () => {
   test("QA4-V1: lead Status select follows the Replied badge after sending a message", async ({ page, browser }, testInfo) => {
-    test.fail(true, "QA4-V1 open");
     const tag = runTag(testInfo);
     const { vendorId } = await approvedVendorWithLead(page, tag);
     // A guest enquiry from a separate context.
@@ -57,7 +52,6 @@ test.describe("qa4 vendor findings", () => {
   });
 
   test("QA4-V2: deleting an offering inside a package warns and does not blame an 'off' unit", async ({ page }, testInfo) => {
-    test.fail(true, "QA4-V2 open");
     const tag = runTag(testInfo);
     // Precondition (as in the qa4 run): a vendor with two priced units, Candid
     // photography and Wedding photography (traditional), and one package that
@@ -94,13 +88,10 @@ test.describe("qa4 vendor findings", () => {
     await expect(dialog).toContainText(/qa4 Wedding day full cover|package/);
     await dialog.getByRole("button", { name: "Delete" }).click();
     await page.getByRole("tab", { name: /Packages/ }).click();
-    // Observed: "Packages marked Incomplete include a unit that is off" though no unit is off.
+    // The package keeps its remaining (on) unit, so it is not Incomplete and no
+    // message blames a unit that is off.
     await expect(page.getByText(/include a unit that is off/)).toHaveCount(0);
-  });
-
-  test.skip("QA4-V3: every unread notification can be opened somewhere", async () => {
-    // Manual repro (local): give a vendor more than 15 notifications (e.g. 3 rounds of admin
-    // suspend/unsuspend plus enquiries). /vendor 'Updates from Vela' says '18 unread' but lists
-    // 6, the bell lists 15, and there is no 'See all' page; the oldest are unreachable.
+    await expect(page.getByText("Incomplete package")).toHaveCount(0);
+    await expect(page.getByText("qa4 Wedding day full cover").first()).toBeVisible();
   });
 });
