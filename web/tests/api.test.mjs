@@ -690,7 +690,7 @@ async function main() {
 
   const settingsEmailConflict = await request("/api/account", {
     method: "PATCH",
-    body: { email: vendorEmail }, // already taken by the vendor test account
+    body: { email: vendorEmail, currentPassword: "password123" }, // already taken by the vendor test account; the password is checked first (QA-092)
     cookie: customerCookie,
   });
   check("settings: email conflict with another account rejected (409)", settingsEmailConflict.status, 409);
