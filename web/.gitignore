@@ -56,3 +56,6 @@ next-env.d.ts
 
 # per-worker dev build dirs
 /.next-build*/
+
+.vercel
+.env*
