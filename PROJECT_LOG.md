@@ -160,6 +160,18 @@ Both `npm run build` and `npm run test:api` should pass with zero failures befor
 
 ## 6. Session Log
 
+### 2026-10-31 to 2026-11-07: Sessions 12 to 14 (maintenance, full product build, deploy, QA)
+> Sections 2 to 4 above describe the state before these sessions and are out of date. The current state is in `docs/MAINTENANCE_STATUS.md`, `docs/PRODUCT_PLAN.md` and `web/README.md`.
+- **31 Oct, maintenance run:** a site audit with 154 findings, 130 of them fixed (security, search, data integrity, accessibility, mobile), Next upgraded to 16.4.3, and a UI polish pass.
+- **31 Oct to 6 Nov, product build:** all of P0 (vendor workspace), P1 (admin panel) and P2 (customer journey), plus P3-1 (storage drivers: local, Supabase, S3/R2), built with orchestrated Claude workers.
+- **6 Nov, deploy:** live at https://vela-drab-psi.vercel.app (Vercel Hobby, Supabase project `sfxtotgrrhamubczrdys` in ap-northeast-2, bucket `vela-media`). Commands: `npm run deploy` and `npm run db:migrate:deploy` (see `docs/DEPLOY.md`).
+- **6 to 7 Nov, QA:** 5 rounds of real-user testing (customer, vendor, admin, UI at 390/768/1440, security, a11y), each followed by a fix round. 112 issues logged in the tracker, all handled with tests. The fix5 changes have not been retested yet.
+- **7 Nov:**
+  - `aswinks1231@gmail.com` made the production admin.
+  - QA test accounts, listings and enquiries deleted from production. The 12 demo vendors are kept until launch.
+  - `ui-fixes-aswin` merged into `main` (PR #2).
+- **Owner to-dos:** a support inbox, an email provider (Resend/Brevo), rotating the Supabase password and secret key, and removing the demo vendors before launch.
+
 ### 2026-10-29 — Session 11 (Kerala-first plan, Phase 1 data model)
 - **Product direction set** in `EVENT_PLATFORM_MASTER_CONTEXT.md` (new, repo root — read it first): LinkedIn-style marketplace for event services, Kerala first, then India. Vendors are companies or individuals; a customer can ask a company for only some of its services; customers can mix vendors. Stack stays Next.js + `pg` (not the first draft's Vite/Express/Prisma); hosting plan is Vercel + Supabase (Postgres + Storage).
 - **Migrations:** replaced the single `schema.sql` with numbered files in `web/db/migrations/` and a runner that records applied files in `schema_migrations`. `001_baseline.sql` is the old schema (idempotent, so existing local databases are fine). `002_profiles_services_portfolio.sql` adds: `admin` role, `vendor_type`, `vendor_status`, `media_type` enums; `districts` (14 Kerala districts, with a `state` column for later expansion); `categories` (12); vendor profile columns (type, district, phone, whatsapp, logo, cover, status); `services`; `portfolio_items`; `quote_request_services`. It also back-fills a district and one service for every existing vendor.

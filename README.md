@@ -4,11 +4,20 @@
 
 This repo has two parts:
 
-## `/web` — the real app (in progress)
+## `/web`: the real app (live)
 
-A real Next.js + PostgreSQL application. This is what's actively being built now. See [`web/README.md`](./web/README.md) for setup instructions, and [`PROJECT_LOG.md`](./PROJECT_LOG.md) for the full history of decisions and progress — **read that file first if you're picking this project up in a new session.**
+A Next.js 16 + PostgreSQL application, **live at <https://vela-drab-psi.vercel.app>**. It runs on Vercel Hobby, with a Supabase free project for Postgres and file storage.
+- Setup: [`web/README.md`](./web/README.md)
+- Deployment: [`docs/DEPLOY.md`](./docs/DEPLOY.md)
+- Latest status and what's pending: [`docs/MAINTENANCE_STATUS.md`](./docs/MAINTENANCE_STATUS.md)
+- Product spec: [`docs/PRODUCT_PLAN.md`](./docs/PRODUCT_PLAN.md)
 
-Currently working (clean setup from `web/README.md` checked on 2026-10-31: migrate, seed, build, 119 API checks and 50 Playwright e2e checks pass): signup/login (hashed passwords, session cookies), vendor search with filters and typeahead, vendor profiles with services and reviews, quote requests and lead management, vendor listing create/edit, vendor services, favourites, review reporting, settings, and role-specific dashboards, all on Postgres (schema in `web/db/migrations/`). Not yet built: Google OAuth, password reset, payments/monetization, email/SMS notifications, image uploads, and an admin moderation UI. See `web/README.md` for the full list, including the **"What a human still has to do"** section (credentials, production database, external services, deployment).
+Status as of 2026-11-07: every item in phases P0 to P2 of the plan is built, plus P3-1 (production storage). It went through 5 QA test-and-fix rounds (112 issues logged and handled, each with tests). There are three roles, one per account:
+- **Customer:** search by offering, district, budget, date and event type; event-type pages; shortlist and compare; enquiries to up to 5 vendors (guests can send them too, and track them by link); messages; quotes; reviews; notifications; the `/my` area.
+- **Vendor:** a 6-step onboarding wizard, offerings and packages, a photo/video media manager, service areas, documents, leads with replies and itemised quotes, an availability calendar, insights.
+- **Admin:** created with `npm run admin:create` (or `admin:create:deploy` for production). Vendor approval and verification, review and media moderation, taxonomy, users, enquiries, analytics, and an audit log.
+
+Not built yet (phase P3, planned for after income): payments and billing, email/SMS delivery (it needs an email provider account), and the other P3 items in the plan.
 
 ## `/demo` — the original front-end mockup
 
@@ -16,6 +25,6 @@ A single-file, no-backend HTML/CSS/JS prototype used to design and validate the 
 
 ## Where to start
 
-- **Continuing development?** Read [`PROJECT_LOG.md`](./PROJECT_LOG.md) — it's written specifically so a new chat session (or a new contributor) can pick up with full context.
+- **Continuing development?** Read [`docs/MAINTENANCE_STATUS.md`](./docs/MAINTENANCE_STATUS.md) for the latest state, then [`PROJECT_LOG.md`](./PROJECT_LOG.md) for the history.
 - **Just want to see the UI design?** Open `demo/index.html`.
 - **Setting up the real app locally?** See [`web/README.md`](./web/README.md).

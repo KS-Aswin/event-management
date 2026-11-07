@@ -10,6 +10,16 @@
 - **Customer:** search by offering, district, budget, date and event type. Browse the event-type and category pages. Shortlist vendors, compare 2–4 of them, and send one enquiry to up to 5. Track a guest enquiry by link, and it moves to the account after sign-up. In `/my`: message vendors, accept or withdraw offers, mark an enquiry booked, leave a verified review. Also notifications, settings and password change. WhatsApp click-to-chat works on the mobile bar.
 - **Admin:** the Today inbox. Vendor approval queue (approve, request changes, reject, suspend, verify, edit, claim). Review and media moderation. Taxonomy manager. Custom-offering queue. Users (suspend, force logout, one-time reset link). Documents, enquiry monitor with blocked contacts, analytics, and the audit log.
 
+## Update 7 Nov 2026
+- `aswinks1231@gmail.com` is the production admin (promoted with `admin:create:deploy`).
+- Test data deleted from production: the temporary admin `admin@vela-admin.local`, 11 `qa…@example.com` accounts, 4 QA draft listings and 3 QA enquiries.
+- Kept in production: the owner's test accounts, the tester's gmail accounts with the AKS-PHOTOGRAPHY listing, and the 12 demo vendors (`is_demo`). Remove the demo vendors before launch.
+- `ui-fixes-aswin` was merged into `main` (PR #2).
+- Still for the owner:
+  - set up a support inbox and SUPPORT_EMAIL
+  - set up an email provider (Resend/Brevo)
+  - rotate the Supabase DB password and secret key, because both were shared in chat
+
 ## Deployment
 - **Live:** https://vela-drab-psi.vercel.app (Vercel, region icn1). The database is Supabase sfxtotgrrhamubczrdys and media is in the `vela-media` bucket.
 - On 6 Nov at 23:05 the orchestrator applied migrations 014, 016, 017 and 019 to production and deployed HEAD 8f9badf (fix4).
