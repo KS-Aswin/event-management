@@ -1,20 +1,39 @@
 import { NextResponse } from "next/server";
-import { getSession } from "@/lib/session";
-import { createVendorReview } from "@/lib/db";
+import { findVendorById } from "@/lib/db";
+import { createReviewV2 } from "@/lib/vendor-reviews";
+import { rateLimitHit } from "@/lib/rate-limit";
+import { getLiveSession } from "../../../_lib/auth";
+import { LIMITS, parseId } from "../../../_lib/validation";
 
 export async function POST(
   request: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
-  const session = await getSession();
+  const session = await getLiveSession();
   if (!session) {
     return NextResponse.json({ error: "Please sign in to leave a review." }, { status: 401 });
   }
 
   const { id } = await params;
-  const vendorId = parseInt(id, 10);
-  if (Number.isNaN(vendorId)) {
+  const vendorId = parseId(id);
+  if (vendorId === null) {
     return NextResponse.json({ error: "Invalid vendor id." }, { status: 400 });
+  }
+
+  // Reviews come from customers; vendor accounts can't review (competitors).
+  if (session.role !== "customer") {
+    return NextResponse.json(
+      { error: "Only customer accounts can leave reviews." },
+      { status: 403 }
+    );
+  }
+
+  const limit = await rateLimitHit(`review:u:${session.userId}`, 5, 10 * 60_000);
+  if (!limit.ok) {
+    return NextResponse.json(
+      { error: "Too many requests. Please wait a few minutes and try again.", code: "RATE_LIMIT" },
+      { status: 429, headers: { "Retry-After": String(limit.retryAfter) } }
+    );
   }
 
   let body: unknown;
@@ -24,9 +43,9 @@ export async function POST(
     return NextResponse.json({ error: "Invalid request body." }, { status: 400 });
   }
 
-  const { rating, body: reviewBody } = (body ?? {}) as Record<string, unknown>;
+  const { rating, body: reviewBody, enquiryId } = (body ?? {}) as Record<string, unknown>;
 
-  const ratingNum = typeof rating === "number" ? rating : parseInt(String(rating), 10);
+  const ratingNum = typeof rating === "number" ? rating : Number(String(rating));
   if (!Number.isInteger(ratingNum) || ratingNum < 1 || ratingNum > 5) {
     return NextResponse.json({ error: "Rating must be a whole number from 1 to 5." }, { status: 400 });
   }
@@ -36,13 +55,39 @@ export async function POST(
       { status: 400 }
     );
   }
+  if (reviewBody.trim().length > LIMITS.reviewBody) {
+    return NextResponse.json(
+      { error: `Reviews can be up to ${LIMITS.reviewBody} characters.` },
+      { status: 400 }
+    );
+  }
 
-  const result = await createVendorReview({
+  // Optional: the enquiry this review is about (else the best match is used).
+  let enquiryIdNum: number | null = null;
+  if (enquiryId !== undefined && enquiryId !== null && enquiryId !== "") {
+    const n = typeof enquiryId === "number" ? enquiryId : Number(String(enquiryId));
+    if (!Number.isInteger(n) || n <= 0 || n > 2_147_483_647) {
+      return NextResponse.json({ error: "Invalid enquiry id.", code: "VALIDATION", field: "enquiryId" }, { status: 400 });
+    }
+    enquiryIdNum = n;
+  }
+
+  // Only publicly listed vendors can be reviewed.
+  const vendor = await findVendorById(vendorId, { publicOnly: true });
+  if (!vendor) {
+    return NextResponse.json({ error: "Vendor not found." }, { status: 404 });
+  }
+
+  // Reviews v2 (P2-11, QA-038): needs a finished dealing with this vendor
+  // through Vela: an enquiry whose event date has passed and that the vendor
+  // replied to or that was booked. Verified when it was accepted/booked.
+  const result = await createReviewV2({
     vendorId,
     customerId: session.userId,
     reviewerName: session.name,
     rating: ratingNum,
     body: reviewBody.trim(),
+    enquiryId: enquiryIdNum,
   });
 
   if (!result.ok) {
@@ -53,6 +98,28 @@ export async function POST(
       return NextResponse.json(
         { error: "You can't review your own listing." },
         { status: 403 }
+      );
+    }
+    if (result.reason === "no_enquiry") {
+      return NextResponse.json(
+        { error: "You can review a vendor after an event you booked with them through Vela.", code: "NO_ENQUIRY" },
+        { status: 403 }
+      );
+    }
+    if (result.reason === "not_eligible") {
+      return NextResponse.json(
+        {
+          error:
+            "You can review this vendor after your event date, once they have replied to your enquiry or you have booked them through Vela.",
+          code: "NOT_ELIGIBLE",
+        },
+        { status: 403 }
+      );
+    }
+    if (result.reason === "enquiry_not_found") {
+      return NextResponse.json(
+        { error: "That enquiry wasn't sent to this vendor from your account.", code: "VALIDATION", field: "enquiryId" },
+        { status: 400 }
       );
     }
     // already_reviewed

@@ -1,7 +1,17 @@
-const { JSDOM } = require('jsdom');
+// Run from the repo root: node demo/tests_click-through.js
+// Needs jsdom, which no package.json declares (the demo has no build step).
+// Install it once without saving: npm install --no-save jsdom
+let JSDOM;
+try {
+  ({ JSDOM } = require('jsdom'));
+} catch {
+  console.error('This test needs jsdom. Install it first: npm install --no-save jsdom');
+  process.exit(1);
+}
 const fs = require('fs');
+const path = require('path');
 
-const html = fs.readFileSync('/home/claude/vela.html', 'utf8');
+const html = fs.readFileSync(path.join(__dirname, 'index.html'), 'utf8');
 const errors = [];
 const logs = [];
 

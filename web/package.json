@@ -7,19 +7,33 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
-    "db:migrate": "node db/migrate.mjs",
-    "db:seed": "node db/seed.mjs",
-    "test:api": "node tests/api.test.mjs"
+    "typecheck": "tsc --noEmit",
+    "db:migrate": "node --env-file-if-exists=.env.local --disable-warning=MODULE_TYPELESS_PACKAGE_JSON db/migrate.mjs",
+    "db:seed": "node --env-file-if-exists=.env.local --disable-warning=MODULE_TYPELESS_PACKAGE_JSON db/seed.mjs",
+    "admin:create": "node --env-file-if-exists=.env.local --disable-warning=MODULE_TYPELESS_PACKAGE_JSON scripts/admin-create.mjs",
+    "test:api": "node --env-file-if-exists=.env.local tests/api.test.mjs && node --env-file-if-exists=.env.local --test --test-concurrency=1 tests/qa1-*.test.mjs tests/qa2-*.test.mjs tests/qa3-*.test.mjs tests/qa4-*.test.mjs tests/qa5-*.test.mjs",
+    "test:admin": "node --env-file-if-exists=.env.local --test --test-concurrency=1 tests/admin-*.test.mjs",
+    "test:e2e": "playwright test",
+    "test:unit": "node --test tests/offering-validation.test.mjs tests/profile-validation.test.mjs",
+    "test:storage": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON tests/storage.test.mjs && node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON tests/storage-drivers.test.mjs",
+    "test:customer": "node --env-file-if-exists=.env.local --test --test-concurrency=1 tests/customer-*.test.mjs",
+    "db:seed:demo": "node --env-file-if-exists=.env.local --disable-warning=MODULE_TYPELESS_PACKAGE_JSON db/seed.mjs --demo",
+    "db:migrate:deploy": "node --env-file=.env.deploy.local --disable-warning=MODULE_TYPELESS_PACKAGE_JSON db/migrate.mjs",
+    "db:seed:demo:deploy": "node --env-file=.env.deploy.local --disable-warning=MODULE_TYPELESS_PACKAGE_JSON db/seed.mjs --demo",
+    "admin:create:deploy": "node --env-file=.env.deploy.local --disable-warning=MODULE_TYPELESS_PACKAGE_JSON scripts/admin-create.mjs --allow-remote",
+    "deploy": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON scripts/deploy.mjs"
   },
   "dependencies": {
     "bcryptjs": "^3.0.3",
     "jose": "^6.2.4",
-    "next": "16.2.12",
+    "next": "16.4.3",
     "pg": "^8.22.0",
     "react": "19.2.4",
-    "react-dom": "19.2.4"
+    "react-dom": "19.2.4",
+    "sharp": "^0.35.5"
   },
   "devDependencies": {
+    "@playwright/test": "^1.64.1",
     "@tailwindcss/postcss": "^4",
     "@types/bcryptjs": "^2.4.6",
     "@types/node": "^20",
@@ -27,8 +41,11 @@
     "@types/react": "^19",
     "@types/react-dom": "^19",
     "eslint": "^9",
-    "eslint-config-next": "16.2.12",
+    "eslint-config-next": "16.4.3",
     "tailwindcss": "^4",
     "typescript": "^5"
+  },
+  "engines": {
+    "node": ">=20.19.0"
   }
 }

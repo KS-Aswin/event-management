@@ -1,0 +1,23 @@
+# Files the Vercel CLI must not upload (npm run deploy). Secrets stay local;
+# Vercel installs dependencies and builds itself.
+#
+# Patterns follow .gitignore rules: a name WITHOUT a leading slash matches at
+# any depth. Anchor every project-root folder with "/" so a route folder with
+# the same name is still deployed (QA-002: an unanchored `uploads` dropped
+# app/api/vendor/media/uploads/, so photo uploads 405'd on live).
+# tests/qa1-vendor.test.mjs checks that no pattern here excludes a source file.
+.env*
+!.env.example
+!.env.deploy.example
+node_modules
+/uploads
+/.next
+/.next-*
+/test-results*
+/playwright-report
+/tests
+/e2e
+/skills-lock.json
+/.claude
+/.agents
+*.tsbuildinfo

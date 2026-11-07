@@ -1,6 +1,6 @@
 // Applies the numbered SQL files in db/migrations/ to DATABASE_URL, in order.
 // Each file runs once and is recorded in the schema_migrations table, so it is
-// safe to re-run. Run with: node db/migrate.mjs  (or: npm run db:migrate)
+// safe to re-run. Run with: npm run db:migrate  (loads DATABASE_URL from .env.local)
 //
 // (We're not using Prisma Migrate: its engine binaries aren't reachable from
 // the dev sandbox network. Plain SQL files + this runner is the simpler
@@ -10,13 +10,22 @@ import { readdirSync, readFileSync } from "fs";
 import { fileURLToPath } from "url";
 import { dirname, join } from "path";
 import pg from "pg";
+import { pgSettings } from "../lib/pg-config.ts";
+// SSL for remote databases, sslmode/pgbouncer URL params handled (lib/pg-config.ts).
+const clientSettings = (url) => {
+  const { connectionString, ssl, connectionTimeoutMillis } = pgSettings(url, { serverless: false });
+  return { connectionString, ssl, connectionTimeoutMillis };
+};
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const migrationsDir = join(__dirname, "migrations");
 
-const connectionString = process.env.DATABASE_URL;
+// The session-mode URL is preferred when set (Supabase: port 5432), since
+// migrations are long-lived DDL transactions; the transaction pooler (6543)
+// works too.
+const connectionString = process.env.DATABASE_URL_SESSION || process.env.DATABASE_URL;
 if (!connectionString) {
-  console.error("DATABASE_URL is not set. Copy .env.example to .env.local and fill it in.");
+  console.error("DATABASE_URL not found in the environment or .env.local. Copy .env.example to .env.local and fill it in.");
   process.exit(1);
 }
 
@@ -24,7 +33,7 @@ const files = readdirSync(migrationsDir)
   .filter((f) => /^\d+_.+\.sql$/.test(f))
   .sort();
 
-const client = new pg.Client({ connectionString });
+const client = new pg.Client(clientSettings(connectionString));
 
 try {
   await client.connect();

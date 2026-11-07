@@ -1,0 +1,172 @@
+import { test, expect, checkScreen, runTag, signUp, signIn, signOut, type Creds } from "./helpers";
+
+// End-to-end account flows. Each project (width) creates its own unique
+// vendor and customer; global-setup.ts deletes them again after the run.
+
+// Ordered but not serial: a failed screen check in one step must not skip the
+// rest. State that later steps need is re-derived when a worker restarts.
+test.describe("vendor and customer journey", () => {
+  let tag = "";
+  let vendor: Creds;
+  let customer: Creds;
+  let vendorPath = "";
+  const business = () => `E2E Studio ${tag}`;
+
+  async function listingPath(page: import("@playwright/test").Page) {
+    if (vendorPath) return vendorPath;
+    await page.goto(`/search?q=${encodeURIComponent(business())}`);
+    vendorPath = (await page.locator('main a[href^="/vendors/"]').first().getAttribute("href")) ?? "";
+    return vendorPath;
+  }
+
+  test.beforeAll(({}, testInfo) => {
+    tag = runTag(testInfo);
+    vendor = { name: `Vera Vendor ${tag}`, email: `e2e-vendor-${tag}@example.com`, password: "e2e-pass-12345" };
+    customer = { name: `Cara Customer ${tag}`, email: `e2e-customer-${tag}@example.com`, password: "e2e-pass-12345" };
+  });
+
+  // Vendors land in the /vendor workspace. This journey creates the listing
+  // through the legacy one-form API (a draft since QA-004, approved here in the
+  // local DB) so the customer half can find it; the onboarding wizard itself is covered in
+  // vendor-workspace.spec.ts.
+  test("vendor signs up and lands in the workspace", async ({ page }) => {
+    await signUp(page, "vendor", vendor);
+    await expect(page).toHaveURL(/\/vendor\/onboarding/);
+    // Let the wizard finish loading (it may update its URL) before navigating on.
+    await page.waitForLoadState("networkidle");
+    await page.goto("/dashboard");
+    await expect(page).toHaveURL(/\/vendor(\/|\?|$)/);
+    await page.waitForLoadState("networkidle");
+    // The customer area is off-limits for vendors.
+    await page.goto("/my");
+    await expect(page).toHaveURL(/\/vendor(\/|\?|$)/);
+  });
+
+  test("vendor creates a listing", async ({ page }) => {
+    await signIn(page, vendor);
+    const res = await page.request.post("/api/vendors", {
+      data: {
+        name: business(),
+        category: "Photography",
+        location: "Kochi",
+        phone: "9876543210",
+        price: 25000,
+        experience: "5 yrs",
+        about: "Automated e2e listing for testing the Vela flows.",
+      },
+    });
+    expect(res.status()).toBe(201);
+    const body = await res.json();
+    const id = body.vendor?.id ?? body.id;
+    expect(typeof id).toBe("number");
+    // QA-004: the legacy listing starts as a non-public draft.
+    // (Its public 404 is covered in api.test.mjs; this page's own requests carry
+    // the owner's cookie, and the owner may preview a draft.)
+    expect(body.status).toBe("draft");
+    // Approve it the way an admin review would (local DB only) so the customer
+    // half of this journey can find it.
+    const url = process.env.DATABASE_URL ?? "";
+    const host = (() => {
+      try {
+        return new URL(url).hostname;
+      } catch {
+        return "";
+      }
+    })();
+    if (!["localhost", "127.0.0.1", "::1", "[::1]"].includes(host)) throw new Error("needs a localhost DATABASE_URL");
+    const { default: pg } = await import("pg");
+    const client = new pg.Client({ connectionString: url });
+    await client.connect();
+    try {
+      await client.query(
+        "UPDATE vendors SET status = 'approved', submitted_at = now(), onboarding_completed_at = now() WHERE id = $1",
+        [id]
+      );
+    } finally {
+      await client.end();
+    }
+    vendorPath = `/vendors/${id}`;
+  });
+
+  test("vendor workspace pages render", async ({ page, diag }, testInfo) => {
+    await signIn(page, vendor);
+    for (const [path, name] of [["/vendor/reviews", "vendor-reviews"], ["/vendor/settings", "vendor-settings"]] as const) {
+      const res = await page.goto(path);
+      expect(res?.status()).toBe(200);
+      await expect(page.locator("h1").first()).toBeVisible();
+      await checkScreen(page, diag, testInfo, name);
+    }
+    // Old dashboard links move permanently to the workspace.
+    await page.goto("/dashboard/services");
+    await expect(page).toHaveURL(/\/vendor\/offerings/);
+  });
+
+  test("vendor signs out", async ({ page }) => {
+    await signIn(page, vendor);
+    await page.goto("/");
+    await signOut(page);
+  });
+
+  test("customer signs up, favourites and requests a quote", async ({ page, diag }, testInfo) => {
+    await signUp(page, "customer", customer);
+    // Customers land on their home (P2-1).
+    await expect(page).toHaveURL(/\/my$/);
+    await checkScreen(page, diag, testInfo, "my-home-empty");
+
+    // The new listing is searchable.
+    await page.goto(`/search?q=${encodeURIComponent(business())}`);
+    await expect(page.getByText(business()).first()).toBeVisible();
+
+    await page.goto(await listingPath(page));
+    await expect(page.locator("h1")).toHaveText(business());
+    await page.getByRole("button", { name: "Save to shortlist" }).first().click();
+    await expect(page.getByRole("button", { name: "Remove from shortlist" }).first()).toBeVisible();
+
+    await page.getByRole("button", { name: "Request quote" }).first().click();
+    const dialog = page.getByRole("dialog");
+    await expect(dialog.getByLabel("Your name")).toHaveValue(customer.name);
+    await dialog.getByLabel("Phone number").fill("9876543210");
+    const d = new Date(Date.now() + 30 * 864e5).toISOString().slice(0, 10);
+    await dialog.getByLabel("Event date").fill(d);
+    await dialog.getByLabel("Budget").selectOption({ label: "Under ₹50,000" });
+    await dialog.getByLabel("Message").fill(`E2E run ${tag}: wedding in Kochi`);
+    await checkScreen(page, diag, testInfo, "quote-dialog-filled");
+    await dialog.getByRole("button", { name: "Send request" }).click();
+    await expect(dialog.getByRole("status")).toContainText("Quote request sent");
+    await checkScreen(page, diag, testInfo, "quote-sent");
+    await dialog.getByRole("button", { name: "Done" }).click();
+
+    await page.goto("/my/enquiries");
+    await expect(page.getByText(business()).first()).toBeVisible();
+    await page.goto("/my/shortlist");
+    await expect(page.getByRole("heading", { name: "Shortlist", level: 1 })).toBeVisible();
+    await expect(page.getByText(business()).first()).toBeVisible();
+    await checkScreen(page, diag, testInfo, "my-shortlist");
+  });
+
+  test("customer updates settings and signs out", async ({ page, diag }, testInfo) => {
+    await signIn(page, customer);
+    await page.goto("/settings");
+    await checkScreen(page, diag, testInfo, "settings");
+    const nameBox = page.getByLabel("Full name");
+    await nameBox.fill(`${customer.name} Updated`);
+    await page.getByRole("button", { name: "Save changes" }).click();
+    await expect(page.getByRole("button", { name: "Save changes" })).toBeDisabled();
+    await expect(page.getByText("Settings saved")).toBeVisible();
+    customer.name = `${customer.name} Updated`;
+    await signOut(page);
+  });
+
+  test("vendor sees the lead and changes its status", async ({ page, diag }, testInfo) => {
+    await signIn(page, vendor);
+    await page.goto("/vendor/leads");
+    const status = page.getByRole("combobox", { name: /Status of enquiry from/ }).first();
+    await expect(status).toBeVisible();
+    await checkScreen(page, diag, testInfo, "vendor-leads");
+    await status.selectOption("responded");
+    // Saved (optimistic update, then the PATCH confirms with an Undo link).
+    await expect(page.getByText(/Changed to /).first()).toBeVisible();
+    await page.reload();
+    await expect(page.getByRole("combobox", { name: /Status of enquiry from/ }).first()).toHaveValue("responded");
+  });
+});

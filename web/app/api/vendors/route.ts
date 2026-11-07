@@ -1,35 +1,67 @@
 import { NextResponse } from "next/server";
-import { findVendors, findVendorByOwner, createVendorListing } from "@/lib/db";
-import { getSession } from "@/lib/session";
-import { CATEGORIES } from "@/lib/vendorVisuals";
+import {
+  findVendorByOwner,
+  createVendorListing,
+  districtExists,
+  findCategories,
+  toPublicVendor,
+} from "@/lib/db";
+import { getLiveSession } from "../_lib/auth";
+import { validateListingFields } from "../_lib/validation";
+import { DEFAULT_PAGE_SIZE, parseSearchParams, searchOfferings, searchVendors } from "@/lib/search";
 
+// Params that opt a request into the v2 default ranking (featured -> boost -> rating -> completeness).
+const V2_PARAMS = [
+  "view", "offering", "eventType", "district", "homeOnly", "date", "budgetMax", "priceUnit", "guests", "verified", "page",
+];
+
+/**
+ * Public search (P2-7). Legacy params (q, category, location, minRating,
+ * maxPrice, sort, limit, offset) keep their meaning; v2 adds view, offering,
+ * eventType, district (id or name; home or served district), homeOnly, date,
+ * budgetMax + priceUnit, guests, verified and page. An invalid value is a 400
+ * naming the field. Without page/limit the vendors view returns every match
+ * (legacy); the offerings view always pages (20 by default).
+ */
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
+  const parsed = await parseSearchParams(searchParams, { strict: true, defaultPageSize: null });
+  if (!parsed.ok) {
+    return NextResponse.json({ field: parsed.field, error: parsed.error }, { status: 400 });
+  }
+  const f = parsed.filters;
+  let { page, pageSize } = parsed;
+  // A legacy request without a sort keeps the old default (highest rated).
+  if (!searchParams.get("sort") && !V2_PARAMS.some((k) => searchParams.has(k))) f.sort = "rating";
 
-  const query = searchParams.get("q") ?? undefined;
-  const categories = searchParams.getAll("category").filter(Boolean);
-  const location = searchParams.get("location") ?? undefined;
-  const minRatingRaw = searchParams.get("minRating");
-  const minRating = minRatingRaw ? parseFloat(minRatingRaw) : undefined;
-  const sortRaw = searchParams.get("sort");
-  const sort =
-    sortRaw === "reviews" || sortRaw === "priceLow" || sortRaw === "priceHigh"
-      ? sortRaw
-      : "rating";
+  if (f.view === "offerings") {
+    if (f.limit === undefined) {
+      pageSize = DEFAULT_PAGE_SIZE;
+      page = 1;
+      f.limit = pageSize;
+      f.offset = 0;
+    }
+    const { offerings, total } = await searchOfferings(f);
+    return NextResponse.json({ view: "offerings", offerings, total, page, pageSize });
+  }
 
-  const vendors = await findVendors({
-    query,
-    categories: categories.length > 0 ? categories : undefined,
-    location,
-    minRating,
-    sort,
+  const { vendors, total } = await searchVendors(f);
+  return NextResponse.json({
+    view: "vendors",
+    vendors: vendors.map((v) => ({ ...toPublicVendor(v), featured: v.featured })),
+    total,
+    page,
+    pageSize,
   });
-
-  return NextResponse.json({ vendors });
 }
 
+/**
+ * Legacy one-form listing create (kept for API clients). Creates a DRAFT
+ * listing with one offering; it goes through the same onboarding ->
+ * submit -> admin review path as the wizard and is never public on create.
+ */
 export async function POST(request: Request) {
-  const session = await getSession();
+  const session = await getLiveSession();
   if (!session) {
     return NextResponse.json({ error: "Not signed in." }, { status: 401 });
   }
@@ -52,49 +84,49 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Invalid request body." }, { status: 400 });
   }
 
-  const { name, category, location, price, experience, tags, about } = (body ?? {}) as Record<
-    string,
-    unknown
-  >;
-
-  if (typeof name !== "string" || name.trim().length < 2) {
-    return NextResponse.json({ error: "Please enter a business name." }, { status: 400 });
+  const parsed = validateListingFields(body, {
+    partial: false,
+    // Valid categories come from the categories table only (P0-8).
+    categories: await findCategories(),
+  });
+  if (!parsed.ok) {
+    return NextResponse.json({ field: parsed.field, error: parsed.error }, { status: 400 });
   }
-  if (typeof category !== "string" || !CATEGORIES.includes(category as (typeof CATEGORIES)[number])) {
-    return NextResponse.json({ error: "Please choose a valid category." }, { status: 400 });
-  }
-  if (typeof location !== "string" || location.trim().length < 2) {
-    return NextResponse.json({ error: "Please enter a location." }, { status: 400 });
-  }
-  const priceNum = typeof price === "number" ? price : parseInt(String(price), 10);
-  if (!priceNum || priceNum <= 0) {
-    return NextResponse.json({ error: "Please enter a valid starting price." }, { status: 400 });
-  }
-  if (typeof experience !== "string" || experience.trim().length < 1) {
-    return NextResponse.json({ error: "Please enter your years of experience." }, { status: 400 });
-  }
-  if (typeof about !== "string" || about.trim().length < 10) {
-    return NextResponse.json(
-      { error: "Please write at least a short description (10+ characters)." },
-      { status: 400 }
-    );
+  const f = parsed.fields;
+  if (f.districtId !== undefined && !(await districtExists(f.districtId))) {
+    return NextResponse.json({ field: "districtId", error: "Please choose a valid district." }, { status: 400 });
   }
 
-  const tagList = Array.isArray(tags)
-    ? tags.filter((t): t is string => typeof t === "string" && t.trim().length > 0)
-    : [];
-
+  const price = f.price as number;
   const vendor = await createVendorListing({
     ownerId: session.userId,
-    name: name.trim(),
-    category,
-    location: location.trim(),
-    price: priceNum,
-    priceLabel: `₹${priceNum.toLocaleString("en-IN")} onwards`,
-    experience: experience.trim(),
-    tags: tagList,
-    about: about.trim(),
+    name: f.name as string,
+    category: f.category as string,
+    location: f.location as string,
+    price,
+    priceLabel: `₹${price.toLocaleString("en-IN")} onwards`,
+    experience: f.experience as string,
+    tags: f.tags ?? [],
+    about: f.about as string,
+    districtId: f.districtId,
+    phone: f.phone,
+    whatsapp: f.whatsapp,
   });
 
-  return NextResponse.json({ vendor }, { status: 201 });
+  // null = a concurrent request created this owner's listing first.
+  if (!vendor) {
+    return NextResponse.json({ error: "You already have a listing." }, { status: 409 });
+  }
+
+  // The listing starts as a draft (QA-004): it is not public until the vendor
+  // completes it in the onboarding wizard, submits it and an admin approves it.
+  return NextResponse.json(
+    {
+      vendor,
+      status: vendor.status,
+      next: "/vendor/onboarding",
+      message: "Listing saved as a draft. Add your photos and submit it for review to go live.",
+    },
+    { status: 201 }
+  );
 }
